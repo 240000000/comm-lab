@@ -1,0 +1,31 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #101822;
+  --line: #1d2a37;
+  --text: #c6d4e3;
+  --dim: #6f8399;
+  --accent: #3ce3c6;
+  --sans: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+
+  color-scheme: dark;
+  font: 16px/1.65 var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background:
+    radial-gradient(900px 520px at 50% -12%, #16283a 0%, transparent 70%),
+    var(--bg);
+}
+
+#root {
+  min-height: 100svh;
+}
