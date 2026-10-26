@@ -1,11 +1,15 @@
+import { useEffect, useState } from 'react'
 import './App.css'
+import { currentRoute, type Route } from './router'
+import QamPage from './labs/QamPage'
 
 const modules = [
   {
     id: 'qam',
     name: 'QAM 星座实验台',
     desc: '阶数切换、AWGN 噪声注入、EVM 与误符号率实时读数',
-    status: '开发中',
+    status: '已接通',
+    href: '#/qam',
   },
   {
     id: 'conv',
@@ -28,6 +32,18 @@ const modules = [
 ]
 
 export default function App() {
+  const [route, setRoute] = useState<Route>(currentRoute)
+
+  useEffect(() => {
+    const onHashChange = () => setRoute(currentRoute())
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  if (route === 'qam') {
+    return <QamPage />
+  }
+
   return (
     <main className="shell">
       <header className="hero">
@@ -38,7 +54,7 @@ export default function App() {
           实时看到星座图、译码结果和频谱怎么变。
         </p>
         <div className="cta">
-          <span className="badge">v0.1 骨架 · 建设中</span>
+          <span className="badge">v0.2 · 路由接通</span>
           <a href="https://github.com/240000000/comm-lab" target="_blank" rel="noreferrer">
             源码仓库
           </a>
@@ -46,15 +62,27 @@ export default function App() {
       </header>
 
       <section className="grid" aria-label="实验模块">
-        {modules.map((m) => (
-          <article key={m.id} className="card">
+        {modules.map((m) => {
+          const head = (
             <div className="card-head">
               <h2>{m.name}</h2>
-              <span className={m.status === '开发中' ? 'dot live' : 'dot'}>{m.status}</span>
+              <span className={m.status === '已接通' ? 'dot live' : 'dot'}>{m.status}</span>
             </div>
-            <p>{m.desc}</p>
-          </article>
-        ))}
+          )
+          const body = <p>{m.desc}</p>
+
+          return m.href ? (
+            <a key={m.id} className="card" href={m.href}>
+              {head}
+              {body}
+            </a>
+          ) : (
+            <article key={m.id} className="card">
+              {head}
+              {body}
+            </article>
+          )
+        })}
       </section>
 
       <footer className="foot">
