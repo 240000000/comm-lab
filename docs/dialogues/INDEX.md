@@ -15,6 +15,7 @@
 | R6 | 2026-10-27 | `R6` | 见 `R6` tag | docs：首页「能调阶数」一句改口、`docs/preview.md`、`docs/video-script.md`、三张图入仓 `docs/images/`、README 补干净目录实测耗时（克隆 4.8 s、`npm ci` 2.6 s、`npm test` 0.6 s） |
 | R7 | 2026-10-27 | `R7` | 见 `R7` tag | docs：preview 第六节「2 dB 差一个数量级」按实测重写为 4 dB 的 203 / 11，判据 ≥18→≥21、翻四位错位数 1→3、20 dB 补 EVM 9.99%，video-script 三处同类改口；并加「本文件对应 tag R7」一行 |
 | R8 | 2026-10-27 | `R8` | 见 `R8` tag | docs：`preview.md` 去模板化改写（加粗 18→0、第五节六条并五段、第六节六条并三段），单次仿真 6 ms→5.1 ms；`video-script.md` 两处旧数字改为 R1–R8 与二十一条。本轮为文档校订，不新增对话存档 |
+| 文案校订 | 2026-10-27 | —（不打 tag） | `079e8bc` | 纯文字校订，不动功能：README 的「四个入口卡」「这一轮…」「十几秒」三处按实际改口、提交约定补纯文字例外条；首页 OFDM 与任务模式两张卡的 `desc` 加「待开始」。此前 `083f18c`（README 删掉还没做的 OFDM 说法）是用户自己改的 |
 
 ## 约定
 
@@ -22,4 +23,5 @@
 - 文件清单从 `git diff --cached --stat` 的真实输出粘贴，与提交后 `git show --stat HEAD` 一致。
 - 命令输出、验收结果留在对话记录里，不进存档。
 - 每轮一个 commit、一个 annotated tag，提交信息带 `[Rn]`；tag 与 commit 一起推：`git push --tags`。
+- 纯文字校订（只改文档措辞、不动功能）例外：单个提交、一句中文、不打 tag、不带 `[Rn]`。
 - 每轮收尾照着 [`../round-checklist.md`](../round-checklist.md) 走一遍；其中「补这张表」是固定项，此前漏过两次。
