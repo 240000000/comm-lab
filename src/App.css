@@ -73,7 +73,8 @@ h1 {
   transition: border-color 160ms ease, transform 160ms ease;
 }
 
-.card:hover {
+/* 只有真能点进去的卡（<a>）才有悬停反馈，未接通的 <article> 保持静止 */
+a.card:hover {
   border-color: #2b4356;
   transform: translateY(-2px);
 }
