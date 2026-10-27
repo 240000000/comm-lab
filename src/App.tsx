@@ -3,6 +3,7 @@ import './App.css'
 import { currentRoute, type Route } from './router'
 import { QamPage } from './labs/QamPage'
 import { ConvPage } from './labs/ConvPage'
+import { OfdmPage } from './labs/OfdmPage'
 
 const modules = [
   {
@@ -22,8 +23,9 @@ const modules = [
   {
     id: 'ofdm',
     name: 'OFDM 时频链路',
-    desc: '待开始：子载波映射、循环前缀、两径信道与均衡',
-    status: '待开始',
+    desc: '两径信道、循环前缀长度可拖，看 CP 之外的延时怎么把子载波上的点推出方框',
+    status: '已接通',
+    href: '#/ofdm',
   },
   {
     id: 'mission',
@@ -50,6 +52,10 @@ export default function App() {
     return <ConvPage />
   }
 
+  if (route === 'ofdm') {
+    return <OfdmPage />
+  }
+
   return (
     <main className="shell">
       <header className="hero">
@@ -57,10 +63,11 @@ export default function App() {
         <h1>把公式拖成能看见的波形</h1>
         <p className="lede">
           不用装 MATLAB，打开浏览器就能把信噪比拖大拖小，看 16QAM 的星座点怎么被噪声推离原位、
-          误码率怎么抬起来；也能把卷积码从编码到译码摊开，一位一位看它纠回了什么、没纠回什么。
+          误码率怎么抬起来；也能把卷积码从编码到译码摊开，一位一位看它纠回了什么、没纠回什么；
+          还能拖循环前缀的长度，看多径的拖尾什么时候被关在 CP 里、什么时候压进数据段。
         </p>
         <div className="cta">
-          <span className="badge">v0.5 · QAM 与卷积码</span>
+          <span className="badge">v0.6 · QAM、卷积码与 OFDM</span>
           <a href="https://github.com/240000000/comm-lab" target="_blank" rel="noreferrer">
             源码仓库
           </a>

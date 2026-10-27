@@ -639,3 +639,25 @@ a.card {
   font-weight: 600;
   color: #c8d8e6;
 }
+
+/* OFDM 页：两张子载波图并排 */
+.spectrum-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.spectrum-title {
+  margin: 0 0 8px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: #9fb3c8;
+}
+
+@media (max-width: 720px) {
+  .spectrum-pair {
+    flex-direction: column;
+  }
+}
