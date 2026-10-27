@@ -2,11 +2,11 @@
 
 > 拖一下滑块，就能看见 QAM 星座、卷积码译码和 OFDM 时频链怎么变——不需要 MATLAB，不需要装环境，打开浏览器就行。
 >
-> 现在到哪一步了：首页能用，QAM 模块页已经能点进去，但里面还是占位；滑块、星座图、误码率读数都还没做，另外三个模块还没开始。
+> 现在到哪一步了：首页能用，QAM 模块页已经能点进去，里面是一张 16QAM 的静态星座图（16 个点、每个点标着它的格雷码标签）；噪声、滑块、误码率读数还没做，另外三个模块还没开始。
 
 **在线 Demo：** https://240000000.github.io/comm-lab/
 
-> 当前版本 `v0.2`：hash 路由已接通，QAM 页只有标题、说明和一块占位，内容随下一轮接入。状态见下面「打开之后点什么」。
+> 当前版本 `v0.3`：QAM 星座映射（纯函数）+ 首批单测 + 一张 16QAM 静态星座图。噪声链路还没接。状态见下面「打开之后点什么」。
 
 ## 这个项目是什么
 
@@ -16,7 +16,7 @@
 
 ## 十分钟跑起来
 
-前置条件：Node.js ≥ 20.19（或 ≥ 22.12）、npm ≥ 10。不需要后端、数据库、账号，也不需要配置任何密钥。
+前置条件：Node.js ≥ 24（本项目在 v24.18.0 上验证；`npm test` 直接跑 `.ts` 测试文件，靠的是 Node 内置的类型擦除）、npm ≥ 10。不需要后端、数据库、账号，也不需要配置任何密钥。
 
 ### 1. 装依赖
 
@@ -26,7 +26,7 @@ cd comm-lab
 npm ci
 ```
 
-`npm ci` 严格按 `package-lock.json` 安装，约 30 秒。没有 lockfile、或报 lockfile 不一致时，删掉 `node_modules` 后改用 `npm install`。
+`npm ci` 严格按 `package-lock.json` 安装。没有 lockfile、或报 lockfile 不一致时，删掉 `node_modules` 后改用 `npm install`。
 
 ### 2. 起服务
 
@@ -42,7 +42,7 @@ npm run dev
 
 | 卡片 | 现在能做什么 |
 | --- | --- |
-| QAM 星座实验台 | 可以点进去，页面目前只有标题、说明和占位 |
+| QAM 星座实验台 | 可以点进去，页面是一张 16QAM 静态星座图：16 个点、坐标轴、每个点旁的 4 位格雷码标签 |
 | 卷积码与 Viterbi | 待开始 |
 | OFDM 时频链路 | 待开始 |
 | 任务模式 | 待开始 |
@@ -66,7 +66,7 @@ GitHub Pages 部署走 `.github/workflows/deploy.yml`：推送到 `main` 后自�
 
 | 现象 | 原因与处理 |
 | --- | --- |
-| 页面空白 | 打开浏览器控制台看报错，通常是 Node 版本低于 20.19 |
+| 页面空白 | 打开浏览器控制台看报错，通常是 Node 版本低于 24 |
 | 只有线上 404 | Pages 站点在 `/comm-lab/` 子路径下，本地开发不受影响 |
 | `npm ci` 失败 | 见第 1 步：删 `node_modules` 改用 `npm install` |
 
@@ -75,7 +75,10 @@ GitHub Pages 部署走 `.github/workflows/deploy.yml`：推送到 `main` 后自�
 本节只列当前真实存在的部分，随实现增长。
 
 ```
-src/             界面与算法实现（React + TypeScript）
+src/             界面（React + TypeScript）
+src/core/        通信算法，纯函数，不碰 DOM：qam.ts 是星座映射
+src/labs/        各实验模块的页面与画布组件
+tests/           Node 内置 test runner 的单测（npm test）
 docs/dialogues/  与 AI 协作的原始 Prompt 存档，按轮次追加
 .github/         GitHub Pages 自动部署
 public/          静态资源
@@ -83,7 +86,7 @@ public/          静态资源
 
 ## 技术栈
 
-Vite + React + TypeScript；绘图用 Canvas 2D 手写，不引图表库；单测用 Node 内置 test runner（`npm test`），随模块实现逐步补齐；代码检查用 `npm run lint`（oxlint）。全部计算在浏览器内完成。
+Vite + React + TypeScript；绘图用 Canvas 2D 手写，不引图表库；单测用 Node 内置 test runner（`npm test`，不加任何测试依赖），当前 21 条用例，覆盖 QAM 星座映射与路由解析；代码检查用 `npm run lint`（oxlint）。全部计算在浏览器内完成。
 
 ## 开发与提交约定
 

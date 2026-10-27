@@ -165,3 +165,53 @@ a.card {
   font-size: 13px;
   color: #4e6072;
 }
+
+/* 星座图（R3 静态版） */
+
+.chart-block {
+  margin-top: clamp(28px, 6vh, 48px);
+}
+
+.constellation-figure {
+  margin: 0;
+}
+
+.constellation-frame {
+  display: inline-block;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0d151d;
+}
+
+.constellation {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.constellation-figure figcaption {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.next-up {
+  margin-top: 28px;
+  padding: 14px 16px;
+  border-left: 2px solid var(--accent);
+  background: rgba(60, 227, 198, 0.04);
+  font-size: 14px;
+  color: var(--dim);
+}
+
+.next-up p {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .constellation-frame {
+    display: block;
+    padding: 8px;
+  }
+}

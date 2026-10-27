@@ -1,9 +1,11 @@
 /**
  * QAM 模块页。
  *
- * 本轮只搭骨架：标题、一句说明、返回入口、一块占位。
- * 星座图、噪声链路、误码率读数从下一轮开始接，这里故意不写任何算法。
+ * R3：接上星座映射（src/core/qam.ts），页面里放一张写死 16 阶的静态星座图。
+ * 噪声、判决、误码率读数留给 R4，这里故意不做滑块。
  */
+import ConstellationChart from './ConstellationChart'
+
 export default function QamPage() {
   return (
     <main className="shell">
@@ -15,13 +17,17 @@ export default function QamPage() {
         <p className="eyebrow">QAM 星座实验台</p>
         <h1>星座点为什么会被噪声推离原位</h1>
         <p className="lede">
-          这里将放星座图、信噪比滑块和误码率读数。当前页面只接通了路由，图和算法还没接。
+          先把星座图摆出来：16 个点各自站在网格上，旁边那四位是它的格雷码标签。
+          噪声一来，点就离开原位——加噪声、看误码率读数，下一轮接。
         </p>
       </header>
 
-      <section className="placeholder" aria-label="内容占位">
-        <p>内容待接入</p>
-        <p className="placeholder-hint">下一轮：QAM 星座映射与静态星座图</p>
+      <section className="chart-block" aria-label="星座图">
+        <ConstellationChart order={16} />
+      </section>
+
+      <section className="next-up">
+        <p>下一步：信噪比滑块、接收端点云、误码率读数。</p>
       </section>
     </main>
   )
