@@ -110,10 +110,6 @@ export function ConstellationChart({ order, received, snrDb }: Props) {
       ctx.closePath()
       ctx.fill()
     }
-    ctx.font = AXIS_FONT
-    ctx.fillStyle = COLOR.axisText
-    ctx.fillText('I', SIZE - PAD * 0.5 + 6, axisY + 4)
-    ctx.fillText('Q', axisX - 4, PAD * 0.5 - 8)
 
     // 第一层：接收点云，半透明，不描边。
     ctx.fillStyle = COLOR.cloud
@@ -152,6 +148,23 @@ export function ConstellationChart({ order, received, snrDb }: Props) {
       ctx.fillStyle = COLOR.label
       ctx.textAlign = flip ? 'right' : 'left'
       ctx.fillText(point.bits, textX, y - 9)
+    }
+
+    // 第四层：I / Q 轴标注。云团会把轴线整个盖住，所以放到最后画，
+    // 并且跟点标签用同一套底色和字号——低信噪比时也读得出来。
+    ctx.font = AXIS_FONT
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const axisMarks: [string, number, number][] = [
+      ['I', SIZE - PAD * 0.5 + 13, axisY],
+      ['Q', axisX, PAD * 0.5 - 14],
+    ]
+    for (const [text, x, y] of axisMarks) {
+      const width = ctx.measureText(text).width
+      ctx.fillStyle = 'rgba(8, 13, 18, 0.86)'
+      ctx.fillRect(x - width / 2 - 4, y - 9, width + 8, 18)
+      ctx.fillStyle = COLOR.axisText
+      ctx.fillText(text, x, y)
     }
   }, [order, received, snrDb])
 

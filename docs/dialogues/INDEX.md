@@ -9,6 +9,8 @@
 | R2 | 2026-10-26 | `R2` | `cab1754` | feat(route)：手写 hash 路由，首页四卡中 QAM 可点，QAM 页只有标题/说明/返回/占位 |
 | R2 补录 | 2026-10-27 | — | `972ec1c` | fix(docs)：R2 节 AI 侧原文由用户落盘后逐字补入，替换「原文缺失」占位 |
 | R3 | 2026-10-27 | `R3` | `bb24983` | feat(qam)：`src/core/qam.ts` 星座映射 + 21 条 node 自带测试 + 静态 16QAM 星座图（8 文件 +591/−14；此前两笔 `972ec1c`/`b5ac90a` 为存档与 hover 修正） |
+| R4 | 2026-10-27 | `R4` | `c27b5c6` | feat(qam)：加噪链路（rng/channel/metrics/ber/curve 五个纯函数模块）、滑块与点云、BER/SER/EVM 读数、0–20 dB 误码率曲线，44 条测试（15 文件 +1427/−144） |
+| R4 补漏 | 2026-10-27 | —（不打 tag） | fix 提交 | fix：补上本表 R4 行、把收尾动作落成 `docs/round-checklist.md`、星座图 I/Q 标注压到云团之上 |
 
 ## 约定
 
@@ -16,3 +18,4 @@
 - 文件清单从 `git diff --cached --stat` 的真实输出粘贴，与提交后 `git show --stat HEAD` 一致。
 - 命令输出、验收结果留在对话记录里，不进存档。
 - 每轮一个 commit、一个 annotated tag，提交信息带 `[Rn]`；tag 与 commit 一起推：`git push --tags`。
+- 每轮收尾照着 [`../round-checklist.md`](../round-checklist.md) 走一遍；其中「补这张表」是固定项，此前漏过两次。
