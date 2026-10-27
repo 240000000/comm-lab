@@ -8,7 +8,7 @@ const modules = [
   {
     id: 'qam',
     name: 'QAM 星座实验台',
-    desc: '阶数切换、AWGN 噪声注入、EVM 与误符号率实时读数',
+    desc: '16QAM 星座与噪声云、EVM 与误符号率实时读数',
     status: '已接通',
     href: '#/qam',
   },
@@ -56,8 +56,8 @@ export default function App() {
         <p className="eyebrow">通信原理 · 交互实验室</p>
         <h1>把公式拖成能看见的波形</h1>
         <p className="lede">
-          不用装 MATLAB，打开浏览器就能调 QAM 阶数、噪声强度，也能把卷积码的编码和译码摊开看，
-          实时看到星座图、比特流和误码率怎么变。
+          不用装 MATLAB，打开浏览器就能把信噪比拖大拖小，看 16QAM 的星座点怎么被噪声推离原位、
+          误码率怎么抬起来；也能把卷积码从编码到译码摊开，一位一位看它纠回了什么、没纠回什么。
         </p>
         <div className="cta">
           <span className="badge">v0.5 · QAM 与卷积码</span>
