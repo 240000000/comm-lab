@@ -4,6 +4,7 @@ import { currentRoute, type Route } from './router'
 import { QamPage } from './labs/QamPage'
 import { ConvPage } from './labs/ConvPage'
 import { OfdmPage } from './labs/OfdmPage'
+import { MissionPage } from './labs/MissionPage'
 
 const modules = [
   {
@@ -30,8 +31,9 @@ const modules = [
   {
     id: 'mission',
     name: '任务模式',
-    desc: '待开始：给定信道条件，调参数把误码率压到阈值以下，自动判分',
-    status: '待开始',
+    desc: '五道小题，答案都落在前三个实验台上：读一个数、看一个现象、数几位错、答概念、选方案',
+    status: '已接通',
+    href: '#/mission',
   },
 ]
 
@@ -56,6 +58,10 @@ export default function App() {
     return <OfdmPage />
   }
 
+  if (route === 'mission') {
+    return <MissionPage />
+  }
+
   return (
     <main className="shell">
       <header className="hero">
@@ -64,10 +70,11 @@ export default function App() {
         <p className="lede">
           不用装 MATLAB，打开浏览器就能把信噪比拖大拖小，看 16QAM 的星座点怎么被噪声推离原位、
           误码率怎么抬起来；也能把卷积码从编码到译码摊开，一位一位看它纠回了什么、没纠回什么；
-          还能拖循环前缀的长度，看多径的拖尾什么时候被关在 CP 里、什么时候压进数据段。
+          还能拖循环前缀的长度，看多径的拖尾什么时候被关在 CP 里、什么时候压进数据段；
+          最后用五道小题把这三页串起来，答案都要回实验台上自己读出来。
         </p>
         <div className="cta">
-          <span className="badge">v0.6 · QAM、卷积码与 OFDM</span>
+          <span className="badge">v0.7 · 三个实验台与任务模式</span>
           <a href="https://github.com/240000000/comm-lab" target="_blank" rel="noreferrer">
             源码仓库
           </a>

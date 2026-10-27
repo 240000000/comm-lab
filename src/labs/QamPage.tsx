@@ -10,6 +10,7 @@ import { BerCurveChart } from './BerCurveChart'
 import { ConstellationChart } from './ConstellationChart'
 import { sweepBer } from '../core/curve'
 import { simulateAwgn } from '../core/metrics'
+import { CommandPanel } from './CommandPanel'
 
 const ORDER = 16
 /** 一次统计用多少个符号：20,000 个符号 × 4 比特 = 80,000 比特。 */
@@ -126,6 +127,16 @@ export function QamPage() {
               {stats.seedUsed.toLocaleString('en-US')}（由种子与信噪比共同派生）。
             </span>
           </div>
+
+          <CommandPanel
+            snrDb={snrDb}
+            onSnrChange={setSnrDb}
+            onRerun={() => setSeed(Math.floor(Math.random() * 1_000_000_000))}
+            onReset={() => {
+              setSnrDb(12)
+              setSeed(20261027)
+            }}
+          />
 
           <dl className="params">
             <div>

@@ -28,3 +28,11 @@ test('带尾部斜杠也认得出 #/conv/', () => {
 test('#/nope 这种没写的路径也回首页', () => {
   assert.equal(parseHash('#/nope'), 'home')
 })
+
+test('#/mission 回 mission', () => {
+  assert.equal(parseHash('#/mission'), 'mission')
+})
+
+test('#/mission/ 带斜杠也认得出', () => {
+  assert.equal(parseHash('#/mission/'), 'mission')
+})
