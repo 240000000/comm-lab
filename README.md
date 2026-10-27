@@ -2,11 +2,11 @@
 
 > 拖一下滑块，就能看见 QAM 星座、卷积码译码和 OFDM 时频链怎么变——不需要 MATLAB，不需要装环境，打开浏览器就行。
 >
-> 现在到哪一步了：首页能用，QAM 页能拖信噪比滑块，看 16QAM 点云怎么糊开，底下给出误码率、误符号率、EVM 三个读数，再往下是 0–20 dB 的误码率曲线和理论对照；卷积码、OFDM、任务模式三个模块还没开始。
+> 现在到哪一步了：首页能用，QAM 页能拖信噪比滑块，看 16QAM 点云怎么糊开，底下给出误码率、误符号率、EVM 三个读数，再往下是 0–20 dB 的误码率曲线和理论对照；卷积码页也接通了，一条 12 比特短序列把「原始 → 编码 → 加噪 → 译码」四行摊开，可以关噪声、手动翻位，下面同样是误码率对照曲线。OFDM 与任务模式还没开始。
 
 **在线 Demo：** https://240000000.github.io/comm-lab/
 
-> 当前版本 `v0.4`：QAM 加噪链路（发—加噪—判决—统计）跑通，滑块、读数、误码率曲线都在页面上。状态见下面「打开之后点什么」。
+> 当前版本 `v0.5`：卷积码接通——编码器、硬判决与软判决两套独立 Viterbi 译码器、三条线的对照曲线，首页两张卡可点。状态见下面「打开之后点什么」。
 
 ## 这个项目是什么
 
@@ -43,11 +43,11 @@ npm run dev
 | 卡片 | 现在能做什么 |
 | --- | --- |
 | QAM 星座实验台 | 拖信噪比滑块（0–20 dB）看点云散开，读误码率/误符号率/EVM（都带分母），下方是 0–20 dB 误码率曲线与理论对照 |
-| 卷积码与 Viterbi | 待开始 |
+| 卷积码与 Viterbi | 12 比特短序列四行对照（原始/编码/加噪/译码），可关噪声、手动翻 1/2/4 位看纠得回还是纠不回；下方是 0–10 dB 三条线：不编码、硬判决、软判决 |
 | OFDM 时频链路 | 待开始 |
 | 任务模式 | 待开始 |
 
-模块逐个接入，接通一个就改这张表里的一行。QAM 页的地址是 `#/qam`，首页是 `#/`，直接敲进地址栏或刷新都停在同一页。
+模块逐个接入，接通一个就改这张表里的一行。QAM 页的地址是 `#/qam`，卷积码页是 `#/conv`，首页是 `#/`，直接敲进地址栏或刷新都停在同一页。
 
 ## 环境变量
 
@@ -83,7 +83,9 @@ src/core/        通信算法，纯函数，不碰 DOM：
                    metrics.ts 一次仿真的统计：BER/SER/EVM、实际种子
                    ber.ts     理论误比特率（erfc/Q 函数，Numerical Recipes 拟合）
                    curve.ts   扫 0–20 dB 的误码率曲线
-src/labs/        各实验模块的页面与画布组件（ConstellationChart、BerCurveChart）
+                   conv.ts    卷积码：网格、编码、硬判决与软判决两套 Viterbi、自由距离搜索
+                   convCurve.ts 扫三条线（不编码 / 硬判决 / 软判决）
+src/labs/        各实验模块的页面与画布组件（QamPage、ConvPage、ConstellationChart、BerCurveChart、ConvCurveChart）
 tests/           Node 内置 test runner 的单测（npm test）
 docs/dialogues/  与 AI 协作的原始 Prompt 存档，按轮次追加
 .github/         GitHub Pages 自动部署
@@ -92,7 +94,7 @@ public/          静态资源
 
 ## 技术栈
 
-Vite + React + TypeScript；绘图用 Canvas 2D 手写，不引图表库；单测用 Node 内置 test runner（`npm test`，不加任何测试依赖），当前 44 条用例，覆盖 QAM 星座映射、路由解析、AWGN 加噪与判决、统计口径与可复现性、理论曲线与扫描；代码检查用 `npm run lint`（oxlint）。全部计算在浏览器内完成。
+Vite + React + TypeScript；绘图用 Canvas 2D 手写，不引图表库；单测用 Node 内置 test runner（`npm test`，不加任何测试依赖），当前 68 条用例，覆盖 QAM 星座映射、路由解析、AWGN 加噪与判决、统计口径与可复现性、理论曲线与扫描、卷积码网格与编码、两套 Viterbi 译码、自由距离与纠错能力；代码检查用 `npm run lint`（oxlint）。全部计算在浏览器内完成。
 
 ## 开发与提交约定
 

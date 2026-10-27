@@ -17,6 +17,14 @@ test('#/qam 回 qam', () => {
   assert.equal(parseHash('#/qam'), 'qam')
 })
 
+test('#/conv 回 conv', () => {
+  assert.equal(parseHash('#/conv'), 'conv')
+})
+
+test('带尾部斜杠也认得出 #/conv/', () => {
+  assert.equal(parseHash('#/conv/'), 'conv')
+})
+
 test('#/nope 这种没写的路径也回首页', () => {
   assert.equal(parseHash('#/nope'), 'home')
 })

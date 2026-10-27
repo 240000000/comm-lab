@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { currentRoute, type Route } from './router'
 import { QamPage } from './labs/QamPage'
+import { ConvPage } from './labs/ConvPage'
 
 const modules = [
   {
@@ -14,8 +15,9 @@ const modules = [
   {
     id: 'conv',
     name: '卷积码与 Viterbi',
-    desc: '编码器配置、网格图、硬判决与软判决译码的误码对比',
-    status: '待开始',
+    desc: '短序列四行对照、硬判决与软判决两套译码器、三条线的误码对比',
+    status: '已接通',
+    href: '#/conv',
   },
   {
     id: 'ofdm',
@@ -44,17 +46,21 @@ export default function App() {
     return <QamPage />
   }
 
+  if (route === 'conv') {
+    return <ConvPage />
+  }
+
   return (
     <main className="shell">
       <header className="hero">
         <p className="eyebrow">通信原理 · 交互实验室</p>
         <h1>把公式拖成能看见的波形</h1>
         <p className="lede">
-          不用装 MATLAB，打开浏览器就能调 QAM 阶数、噪声强度和信道条件，
-          实时看到星座图、译码结果和频谱怎么变。
+          不用装 MATLAB，打开浏览器就能调 QAM 阶数、噪声强度，也能把卷积码的编码和译码摊开看，
+          实时看到星座图、比特流和误码率怎么变。
         </p>
         <div className="cta">
-          <span className="badge">v0.2 · 路由接通</span>
+          <span className="badge">v0.5 · QAM 与卷积码</span>
           <a href="https://github.com/240000000/comm-lab" target="_blank" rel="noreferrer">
             源码仓库
           </a>

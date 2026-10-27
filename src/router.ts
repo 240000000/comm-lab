@@ -8,12 +8,13 @@
  * - 空 hash 与未知路径一律回首页，避免手敲错地址出现空白页。
  */
 
-export type Route = 'home' | 'qam'
+export type Route = 'home' | 'qam' | 'conv'
 
-/** 把 location.hash 解析成路由名。纯函数，不碰 window，便于以后单测。 */
+/** 把 location.hash 解析成路由名。纯函数，不碰 window，便于单测。 */
 export function parseHash(hash: string): Route {
   const path = hash.replace(/^#/, '').replace(/\/+$/, '')
   if (path === '/qam') return 'qam'
+  if (path === '/conv') return 'conv'
   return 'home'
 }
 
