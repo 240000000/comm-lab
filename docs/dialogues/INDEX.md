@@ -13,6 +13,7 @@
 | R4 补漏 | 2026-10-27 | —（不打 tag） | `88bdacf` | fix：补上本表 R4 行、把收尾动作落成 `docs/round-checklist.md`、星座图 I/Q 标注压到云团之上 |
 | R5 | 2026-10-27 | `R5` | `58eb41f` | feat(conv)：卷积码编码器（约束长度 3、7/5、补零）、硬判决与软判决两套 Viterbi、自由距离与纠错能力、12 比特四行短序列页、0–10 dB 三条线对照，68 条测试（12 文件 +1541/−13） |
 | R6 | 2026-10-27 | `R6` | 见 `R6` tag | docs：首页「能调阶数」一句改口、`docs/preview.md`、`docs/video-script.md`、三张图入仓 `docs/images/`、README 补干净目录实测耗时（克隆 4.8 s、`npm ci` 2.6 s、`npm test` 0.6 s） |
+| R7 | 2026-10-27 | `R7` | 见 `R7` tag | docs：preview 第六节「2 dB 差一个数量级」按实测重写为 4 dB 的 203 / 11，判据 ≥18→≥21、翻四位错位数 1→3、20 dB 补 EVM 9.99%，video-script 三处同类改口；并加「本文件对应 tag R7」一行 |
 
 ## 约定
 
