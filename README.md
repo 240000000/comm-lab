@@ -2,11 +2,11 @@
 
 > 拖一下滑块，就能看见 QAM 星座、卷积码译码和 OFDM 时频链怎么变——不需要 MATLAB，不需要装环境，打开浏览器就行。
 >
-> 现在到哪一步了：首页能用，QAM 模块页已经能点进去，里面是一张 16QAM 的静态星座图（16 个点、每个点标着它的格雷码标签）；噪声、滑块、误码率读数还没做，另外三个模块还没开始。
+> 现在到哪一步了：首页能用，QAM 页能拖信噪比滑块，看 16QAM 点云怎么糊开，底下给出误码率、误符号率、EVM 三个读数，再往下是 0–20 dB 的误码率曲线和理论对照；卷积码、OFDM、任务模式三个模块还没开始。
 
 **在线 Demo：** https://240000000.github.io/comm-lab/
 
-> 当前版本 `v0.3`：QAM 星座映射（纯函数）+ 首批单测 + 一张 16QAM 静态星座图。噪声链路还没接。状态见下面「打开之后点什么」。
+> 当前版本 `v0.4`：QAM 加噪链路（发—加噪—判决—统计）跑通，滑块、读数、误码率曲线都在页面上。状态见下面「打开之后点什么」。
 
 ## 这个项目是什么
 
@@ -42,7 +42,7 @@ npm run dev
 
 | 卡片 | 现在能做什么 |
 | --- | --- |
-| QAM 星座实验台 | 可以点进去，页面是一张 16QAM 静态星座图：16 个点、坐标轴、每个点旁的 4 位格雷码标签 |
+| QAM 星座实验台 | 拖信噪比滑块（0–20 dB）看点云散开，读误码率/误符号率/EVM（都带分母），下方是 0–20 dB 误码率曲线与理论对照 |
 | 卷积码与 Viterbi | 待开始 |
 | OFDM 时频链路 | 待开始 |
 | 任务模式 | 待开始 |
@@ -76,8 +76,14 @@ GitHub Pages 部署走 `.github/workflows/deploy.yml`：推送到 `main` 后自�
 
 ```
 src/             界面（React + TypeScript）
-src/core/        通信算法，纯函数，不碰 DOM：qam.ts 是星座映射
-src/labs/        各实验模块的页面与画布组件
+src/core/        通信算法，纯函数，不碰 DOM：
+                   qam.ts     星座映射与格雷码标签
+                   rng.ts     可复现的伪随机数（mulberry32 + Box–Muller）
+                   channel.ts AWGN 加噪与最近距离判决
+                   metrics.ts 一次仿真的统计：BER/SER/EVM、实际种子
+                   ber.ts     理论误比特率（erfc/Q 函数，Numerical Recipes 拟合）
+                   curve.ts   扫 0–20 dB 的误码率曲线
+src/labs/        各实验模块的页面与画布组件（ConstellationChart、BerCurveChart）
 tests/           Node 内置 test runner 的单测（npm test）
 docs/dialogues/  与 AI 协作的原始 Prompt 存档，按轮次追加
 .github/         GitHub Pages 自动部署
@@ -86,7 +92,7 @@ public/          静态资源
 
 ## 技术栈
 
-Vite + React + TypeScript；绘图用 Canvas 2D 手写，不引图表库；单测用 Node 内置 test runner（`npm test`，不加任何测试依赖），当前 21 条用例，覆盖 QAM 星座映射与路由解析；代码检查用 `npm run lint`（oxlint）。全部计算在浏览器内完成。
+Vite + React + TypeScript；绘图用 Canvas 2D 手写，不引图表库；单测用 Node 内置 test runner（`npm test`，不加任何测试依赖），当前 44 条用例，覆盖 QAM 星座映射、路由解析、AWGN 加噪与判决、统计口径与可复现性、理论曲线与扫描；代码检查用 `npm run lint`（oxlint）。全部计算在浏览器内完成。
 
 ## 开发与提交约定
 

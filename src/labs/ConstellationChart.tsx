@@ -1,155 +1,159 @@
 /**
- * 静态星座图。
+ * 星座图：理想点 + 接收点云。
  *
- * 只负责「把点画出来」：坐标轴、网格、星座点、每个点的比特标签。
- * 噪声、判决、误码率都不在这里，那些是 R4 的链路。
+ * 两层画法是有意区分的：
+ * - 理想点：暗青色、实心、半径小，永远待在它该在的位置；
+ * - 接收点：琥珀色、半透明、更小，一个一个散在理想点周围。
+ * 信噪比高时接收点几乎叠在理想点上，肉眼看不见；信噪比一低就散成一片云。
  *
- * 高分屏：canvas 的位图尺寸按 devicePixelRatio 放大，再用 ctx.setTransform
- * 把绘制坐标缩回 CSS 像素。这样 2x 屏上线条和字是真正画出来的，
- * 而不是浏览器把 1x 位图拉伸糊掉。缩放系数只在挂载时读一次——
- * 把窗口拖到另一块不同 dpr 的屏幕上不会自动重画，需要刷新。
+ * 点的标签直接写在网格上会跟云团和网格线抢位置，所以：
+ * 字号缩到 11px，文字先描一圈底色再填字（halo），并且标签只在理想点上画一次，
+ * 不会跟着几百个接收点一起冒出来。
  */
 import { useEffect, useRef } from 'react'
-import { buildConstellation, bitsPerSymbol } from '../core/qam'
-import type { QamPoint } from '../core/qam'
+import { buildConstellation } from '../core/qam'
+import type { Sample } from '../core/metrics'
 
-/** 画面边长（CSS 像素）。 */
 const SIZE = 520
-
-/** 绘图区到画布边缘的留白，留给坐标轴箭头和外侧的比特标签。 */
 const PAD = 64
-
-/** 最外圈的点和边框之间再留一点空隙，免得贴边。 */
+/** 轴线伸到最外圈点之外留一点余量，避免点贴着边框。 */
 const OUTER_GAP = 1.25
 
-/** 颜色跟 index.css 的变量保持一致（canvas 读不到 CSS 变量，只能抄一份）。 */
 const COLOR = {
-  grid: '#17242f',
+  grid: '#131c25',
   axis: '#2b4356',
-  point: '#3ce3c6',
-  pointRing: '#0b0f14',
-  label: '#9fb3c8',
+  ideal: '#3a828c',
+  idealRing: '#0b0f14',
+  cloud: 'rgba(255, 176, 84, 0.22)',
+  label: '#7f93a8',
   axisText: '#6f8399',
-}
+  halo: '#0d151d',
+} as const
 
-const LABEL_FONT = '12px Consolas, "Cascadia Mono", monospace'
-
-function draw(ctx: CanvasRenderingContext2D, points: QamPoint[]): void {
-  const mid = SIZE / 2
-  const reach = mid - PAD
-
-  // 坐标值到画布像素的比例：最外圈的坐标落在 reach 处，再往外留 OUTER_GAP 倍。
-  let maxAbs = 0
-  for (const p of points) {
-    maxAbs = Math.max(maxAbs, Math.abs(p.i), Math.abs(p.q))
-  }
-  const scale = maxAbs === 0 ? 1 : reach / (maxAbs * OUTER_GAP)
-
-  const toX = (i: number): number => mid + i * scale
-  const toY = (q: number): number => mid - q * scale
-
-  ctx.clearRect(0, 0, SIZE, SIZE)
-
-  // 网格：每个星座点所在的横向/纵向位置各画一条虚线。
-  const levels = Array.from(new Set(points.map((p) => p.i))).sort((a, b) => a - b)
-  ctx.save()
-  ctx.strokeStyle = COLOR.grid
-  ctx.lineWidth = 1
-  ctx.setLineDash([3, 5])
-  for (const level of levels) {
-    if (level === 0) continue
-    ctx.beginPath()
-    ctx.moveTo(toX(level), mid - reach)
-    ctx.lineTo(toX(level), mid + reach)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.moveTo(mid - reach, toY(level))
-    ctx.lineTo(mid + reach, toY(level))
-    ctx.stroke()
-  }
-  ctx.restore()
-
-  // 坐标轴。
-  const axisEnd = reach + 16
-  ctx.save()
-  ctx.strokeStyle = COLOR.axis
-  ctx.fillStyle = COLOR.axis
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.moveTo(mid - axisEnd, mid)
-  ctx.lineTo(mid + axisEnd, mid)
-  ctx.moveTo(mid, mid - axisEnd)
-  ctx.lineTo(mid, mid + axisEnd)
-  ctx.stroke()
-
-  // 箭头。
-  const arrow = 6
-  ctx.beginPath()
-  ctx.moveTo(mid + axisEnd, mid)
-  ctx.lineTo(mid + axisEnd - arrow, mid - arrow / 1.6)
-  ctx.lineTo(mid + axisEnd - arrow, mid + arrow / 1.6)
-  ctx.closePath()
-  ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(mid, mid - axisEnd)
-  ctx.lineTo(mid - arrow / 1.6, mid - axisEnd + arrow)
-  ctx.lineTo(mid + arrow / 1.6, mid - axisEnd + arrow)
-  ctx.closePath()
-  ctx.fill()
-
-  ctx.font = '13px Consolas, "Cascadia Mono", monospace'
-  ctx.fillText('I', mid + axisEnd + 4, mid + 12)
-  ctx.fillText('Q', mid + 6, mid - axisEnd - 6)
-  ctx.restore()
-
-  // 星座点 + 比特标签。
-  ctx.save()
-  ctx.font = LABEL_FONT
-  for (const p of points) {
-    const x = toX(p.i)
-    const y = toY(p.q)
-
-    ctx.beginPath()
-    ctx.fillStyle = COLOR.point
-    ctx.arc(x, y, 4.5, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.lineWidth = 1
-    ctx.strokeStyle = COLOR.pointRing
-    ctx.stroke()
-
-    // 标签默认放在点的右上方；靠右边缘的点改放左上方，免得被裁掉。
-    const flip = x + 14 + ctx.measureText(p.bits).width > SIZE - 8
-    ctx.fillStyle = COLOR.label
-    ctx.textAlign = flip ? 'right' : 'left'
-    ctx.fillText(p.bits, flip ? x - 10 : x + 10, y - 9)
-  }
-  ctx.restore()
-}
+const LABEL_FONT = '11px Consolas, "Cascadia Mono", monospace'
+const AXIS_FONT = '12px Consolas, "Cascadia Mono", monospace'
 
 type Props = {
-  /** 阶数，界面这轮写死 16。 */
   order: number
+  /** 接收点；空数组时只画理想星座。 */
+  received: Sample[]
+  /** 当前信噪比，写进 aria-label 与图注。 */
+  snrDb: number
 }
 
-export default function ConstellationChart({ order }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+export function ConstellationChart({ order, received, snrDb }: Props) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (canvas === null) return
+    if (!canvas) return
 
-    const dpr = window.devicePixelRatio || 1
+    const points = buildConstellation(order)
+    const maxLevel = Math.max(...points.map((p) => Math.max(Math.abs(p.i), Math.abs(p.q))))
+    const span = Math.max(maxLevel * OUTER_GAP, 0.5)
+    const dpr = Math.min(window.devicePixelRatio || 1, 3)
+
+    const toX = (i: number) => PAD + ((i + span) / (2 * span)) * (SIZE - 2 * PAD)
+    const toY = (q: number) => SIZE - PAD - ((q + span) / (2 * span)) * (SIZE - 2 * PAD)
+
     canvas.width = Math.round(SIZE * dpr)
     canvas.height = Math.round(SIZE * dpr)
     canvas.style.width = `${SIZE}px`
+    canvas.style.height = `${SIZE}px`
 
     const ctx = canvas.getContext('2d')
-    if (ctx === null) return
-    // 之后所有绘制都用 CSS 像素坐标，缩放交给这一行。
+    if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, SIZE, SIZE)
 
-    draw(ctx, buildConstellation(order))
-  }, [order])
+    // 网格：每个星座电平一条竖线/横线，0 位置留给坐标轴。
+    ctx.save()
+    ctx.setLineDash([3, 6])
+    ctx.strokeStyle = COLOR.grid
+    ctx.lineWidth = 1
+    for (const point of points) {
+      if (point.i !== 0) {
+        ctx.beginPath()
+        ctx.moveTo(toX(point.i), PAD * 0.5)
+        ctx.lineTo(toX(point.i), SIZE - PAD * 0.5)
+        ctx.stroke()
+      }
+      if (point.q !== 0) {
+        ctx.beginPath()
+        ctx.moveTo(PAD * 0.5, toY(point.q))
+        ctx.lineTo(SIZE - PAD * 0.5, toY(point.q))
+        ctx.stroke()
+      }
+    }
+    ctx.restore()
+
+    // 坐标轴。
+    ctx.strokeStyle = COLOR.axis
+    ctx.fillStyle = COLOR.axis
+    ctx.lineWidth = 1
+    const axisX = toX(0)
+    const axisY = toY(0)
+    ctx.beginPath()
+    ctx.moveTo(PAD * 0.5, axisY)
+    ctx.lineTo(SIZE - PAD * 0.5, axisY)
+    ctx.moveTo(axisX, SIZE - PAD * 0.5)
+    ctx.lineTo(axisX, PAD * 0.5)
+    ctx.stroke()
+    for (const [x, y, dx, dy] of [
+      [SIZE - PAD * 0.5, axisY, 1, 0],
+      [axisX, PAD * 0.5, 0, -1],
+    ]) {
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x - dx * 7 - dy * 4, y - dy * 7 + dx * 4)
+      ctx.lineTo(x - dx * 7 + dy * 4, y - dy * 7 - dx * 4)
+      ctx.closePath()
+      ctx.fill()
+    }
+    ctx.font = AXIS_FONT
+    ctx.fillStyle = COLOR.axisText
+    ctx.fillText('I', SIZE - PAD * 0.5 + 6, axisY + 4)
+    ctx.fillText('Q', axisX - 4, PAD * 0.5 - 8)
+
+    // 第一层：接收点云，半透明，不描边。
+    ctx.fillStyle = COLOR.cloud
+    for (const sample of received) {
+      ctx.beginPath()
+      ctx.arc(toX(sample.i), toY(sample.q), 2.2, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // 第二层：理想点，暗色实心小点，压在云团上面。
+    ctx.fillStyle = COLOR.ideal
+    ctx.strokeStyle = COLOR.idealRing
+    ctx.lineWidth = 1
+    for (const point of points) {
+      ctx.beginPath()
+      ctx.arc(toX(point.i), toY(point.q), 3, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+
+    // 第三层：标签。先描底色再填字，避免与网格线糊在一起。
+    ctx.font = LABEL_FONT
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    const rightEdge = SIZE - PAD * 0.5 - 30
+    for (const point of points) {
+      const x = toX(point.i)
+      const y = toY(point.q)
+      const flip = x > rightEdge
+      const textX = flip ? x - 7 : x + 7
+      const width = ctx.measureText(point.bits).width
+      const chipX = flip ? textX - width - 3 : textX - 3
+      // 标签下面垫一块半透明底色：点云再密，字也不会跟琥珀色糊在一起。
+      ctx.fillStyle = 'rgba(8, 13, 18, 0.78)'
+      ctx.fillRect(chipX, y - 17, width + 6, 15)
+      ctx.fillStyle = COLOR.label
+      ctx.textAlign = flip ? 'right' : 'left'
+      ctx.fillText(point.bits, textX, y - 9)
+    }
+  }, [order, received, snrDb])
 
   return (
     <figure className="constellation-figure">
@@ -158,11 +162,12 @@ export default function ConstellationChart({ order }: Props) {
           ref={canvasRef}
           className="constellation"
           role="img"
-          aria-label={`${order}QAM 星座图，共 ${order} 个星座点，每个点标有 ${bitsPerSymbol(order)} 位格雷码标签`}
+          aria-label={`${order}QAM 星座图：${buildConstellation(order).length} 个理想点，每点标出格雷码；当前信噪比 ${snrDb} dB，叠加 ${received.length} 个接收点`}
         />
       </div>
       <figcaption>
-        {order}QAM 星座图 · 格雷码标签 · 平均符号能量已归一化为 1
+        暗青小点：理想星座位置（每点旁是 4 位格雷码标签）。琥珀色云团：
+        当前信噪比下收到的点，越糊说明噪声越大。
       </figcaption>
     </figure>
   )

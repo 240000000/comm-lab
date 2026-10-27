@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { currentRoute, type Route } from './router'
-import QamPage from './labs/QamPage'
+import { QamPage } from './labs/QamPage'
 
 const modules = [
   {

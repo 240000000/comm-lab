@@ -215,3 +215,238 @@ a.card {
     padding: 8px;
   }
 }
+
+/* ---- QAM 实验台 ---- */
+
+.lab {
+  width: min(1080px, 100% - 48px);
+  margin: 0 auto;
+  padding: clamp(32px, 6vh, 64px) 0 72px;
+}
+
+.lab-head {
+  max-width: 760px;
+}
+
+.lab-head h1 {
+  font-size: clamp(28px, 4vw, 42px);
+}
+
+/* 左图右控件：窄屏才上下堆叠。 */
+.lab-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 560px) minmax(260px, 1fr);
+  gap: 28px;
+  align-items: start;
+  margin-bottom: 32px;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0d151d;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.control-label strong {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 15px;
+  color: var(--accent);
+}
+
+.control input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.control input[type='number'] {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0b1219;
+  color: #e6eef6;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 14px;
+}
+
+.seed-row {
+  display: flex;
+  gap: 8px;
+}
+
+.seed-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.seed-row button {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #131f29;
+  color: #cfe2ee;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.seed-row button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.control-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6f8399;
+}
+
+.params {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.params div {
+  display: flex;
+  gap: 10px;
+}
+
+.params dt {
+  flex: 0 0 auto;
+  color: #6f8399;
+}
+
+.params dd {
+  margin: 0;
+  color: #cfe2ee;
+}
+
+/* 三个读数：每个数字后面都跟着它的分母。 */
+.readouts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.readout {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: 10px;
+  background: #0d151d;
+}
+
+.readout h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #6f8399;
+}
+
+.readout-value {
+  margin: 0 0 10px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 19px;
+  line-height: 1.4;
+  color: #e6eef6;
+  word-break: break-word;
+}
+
+.readout-count {
+  margin: 0 0 10px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--accent);
+  word-break: break-word;
+}
+
+.readout-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #6f8399;
+}
+
+.curve-block {
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.section-head {
+  margin-bottom: 16px;
+}
+
+.section-head h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #eef5fb;
+}
+
+.section-head p {
+  margin: 0;
+  max-width: 640px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #6f8399;
+}
+
+.curve-figure {
+  margin: 0;
+}
+
+.curve-frame {
+  display: inline-block;
+  max-width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0b1219;
+}
+
+.curve {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.curve-figure figcaption {
+  margin-top: 10px;
+  max-width: 560px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #6f8399;
+}
+
+@media (max-width: 820px) {
+  .lab-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
