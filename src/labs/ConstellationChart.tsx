@@ -60,8 +60,6 @@ export function ConstellationChart({ order, received, snrDb }: Props) {
 
     canvas.width = Math.round(SIZE * dpr)
     canvas.height = Math.round(SIZE * dpr)
-    canvas.style.width = `${SIZE}px`
-    canvas.style.height = `${SIZE}px`
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return

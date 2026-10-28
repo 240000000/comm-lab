@@ -1254,3 +1254,177 @@ a.card {
     width: 100%;
   }
 }
+
+
+/* ---- QAM 页一屏版式（R16） ---- */
+.lab-qam {
+  padding-top: 16px;
+}
+
+.lab-qam .back {
+  margin-bottom: 10px;
+}
+
+.lab-qam .lab-head h1 {
+  margin-bottom: 8px;
+  font-size: clamp(26px, 3vw, 34px);
+}
+
+.lab-qam .lab-head .lede {
+  max-width: 760px;
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.lab-qam .from-question {
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.lab-qam .lab-layout {
+  grid-template-columns: minmax(0, 500px) minmax(0, 1fr);
+  gap: 22px;
+  margin-bottom: 24px;
+}
+
+.lab-qam .lab-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lab-qam .chart-block {
+  margin-top: 0;
+}
+
+.lab-qam .constellation-frame {
+  display: block;
+  padding: 10px;
+}
+
+.lab-qam .constellation {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.lab-qam .readouts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.lab-qam .readout:last-child {
+  grid-column: 1 / -1;
+}
+
+.lab-qam .readout {
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.lab-qam .readout-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lab-qam .readout h2 {
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+
+.lab-qam .readout-value {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.lab-qam .readout-count {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.lab-qam .readout-more,
+.lab-qam .control-more {
+  margin-top: 4px;
+}
+
+.lab-qam .readout-more summary,
+.lab-qam .control-more summary {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--dim);
+  cursor: pointer;
+}
+
+.lab-qam .readout-more summary:hover,
+.lab-qam .control-more summary:hover {
+  color: var(--accent);
+}
+
+.lab-qam .readout-note,
+.lab-qam .control-more p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8296aa;
+}
+
+.lab-qam .controls {
+  gap: 13px;
+  padding: 16px;
+}
+
+.lab-qam .control {
+  gap: 5px;
+}
+
+.lab-qam .control-label {
+  font-size: 12.5px;
+}
+
+.lab-qam .control-label strong {
+  font-size: 14px;
+}
+
+.lab-qam .control-hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.lab-qam .curve-cue {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+
+.lab-qam .params {
+  gap: 7px;
+  padding-top: 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 820px) {
+  .lab-qam .lab-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lab-qam .readouts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lab-qam .readout:last-child {
+    grid-column: auto;
+  }
+}

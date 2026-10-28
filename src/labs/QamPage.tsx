@@ -75,7 +75,7 @@ export function QamPage() {
   const serReadout = rateReadout(stats.symbolErrors, stats.symbolCount, '符号', stats.ser)
 
   return (
-    <main className="lab">
+    <main className="lab lab-qam">
       <a className="back" href="#/">
         ← 返回首页
       </a>
@@ -85,7 +85,7 @@ export function QamPage() {
         <h1>星座点为什么会被噪声推离原位</h1>
         <p className="lede">
           一个符号发出去，加多少噪声、收端怎么判、错了多少比特——这条链上的每一步都在下面。
-          先挑一档阶数，再拖右边的信噪比，看左边的点怎么糊开，再看底下的读数怎么跟着变。
+          先挑一档阶数，再拖右边的信噪比，看左边的点怎么糊开、两个读数怎么跟着变。
         </p>
       </header>
 
@@ -104,9 +104,60 @@ export function QamPage() {
       )}
 
       <div className="lab-layout">
-        <section className="chart-block" aria-label="星座图与点云">
-          <ConstellationChart order={order} received={stats.received} snrDb={snrDb} />
-        </section>
+        <div className="lab-main">
+          <section className="chart-block" aria-label="星座图与点云">
+            <ConstellationChart order={order} received={stats.received} snrDb={snrDb} />
+          </section>
+
+          <section className="readouts" aria-label="统计读数">
+            <article className="readout">
+              <div className="readout-head">
+                <h2>误码率 BER</h2>
+                <p className="readout-value">{berReadout.value}</p>
+              </div>
+              <p className="readout-count">{berReadout.count}</p>
+              <details className="readout-more">
+                <summary>这项怎么算</summary>
+                <p className="readout-note">
+                  判错的比特数 ÷ 一共比对的比特数。{zeroBitErrors && `这批样本只说明错得比 ${resolution.toExponential(1)} 还少，不等于真的一个都不会错。`}
+                </p>
+              </details>
+            </article>
+
+            <article className="readout">
+              <div className="readout-head">
+                <h2>误符号率 SER</h2>
+                <p className="readout-value">{serReadout.value}</p>
+              </div>
+              <p className="readout-count">{serReadout.count}</p>
+              <details className="readout-more">
+                <summary>这项怎么算</summary>
+                <p className="readout-note">
+                  {bits === 1
+                    ? '每符号只有 1 比特，所以误符号率和误比特率必然是同一个数——这不是巧合，也不是重复显示。'
+                    : `一个符号里 ${bits} 个比特，所以 SER 通常比 BER 大。`}
+                </p>
+              </details>
+            </article>
+
+            <article className="readout">
+              <div className="readout-head">
+                <h2>误差向量幅度 EVM</h2>
+                <p className="readout-value">{stats.evmPercent.toFixed(2)}%</p>
+              </div>
+              <p className="readout-count">
+                {stats.symbolCount.toLocaleString('en-US')} 个符号的均方根误差 / 理想点平均幅度
+              </p>
+              <details className="readout-more">
+                <summary>这项怎么算</summary>
+                <p className="readout-note">
+                  每个接收点离理想点有多远，取均方根，再除以理想点的平均幅度。它不看判决对错，只看「偏了多少」；
+                  噪声功率只看 Es/N0，所以同一信噪比下换阶数，EVM 不变。
+                </p>
+              </details>
+            </article>
+          </section>
+        </div>
 
         <aside className="controls" aria-label="实验参数">
           <div className="control">
@@ -128,16 +179,18 @@ export function QamPage() {
               ))}
             </div>
             <span className="control-hint">
-              换阶数会重算星座、三个读数和整条 0–20 dB 曲线；种子和信噪比保留不动。
+              换阶数会重算星座、三个读数和整条曲线；种子和信噪比保留不动。
             </span>
+            <p className="curve-cue">0–20 dB 曲线在页面最下面，往下翻一屏。</p>
           </div>
 
-          <label className="control">
-            <span className="control-label">
+          <div className="control">
+            <label className="control-label" htmlFor="qam-bits">
               统计样本（比特）
               <strong>{sampleBits.toLocaleString('en-US')} 比特</strong>
-            </span>
+            </label>
             <input
+              id="qam-bits"
               type="number"
               min={1}
               max={MAX_BITS}
@@ -149,10 +202,17 @@ export function QamPage() {
               }}
             />
             <span className="control-hint">
-              按比特填，最多 {MAX_BITS.toLocaleString('en-US')}。实际按 {symbolCount.toLocaleString('en-US')} 个
-              {orderLabel(order)} 符号统计（向上取整），共比对 {stats.bitCount.toLocaleString('en-US')} 个比特。
+              按比特填，最多 {MAX_BITS.toLocaleString('en-US')}；实际按{' '}
+              {symbolCount.toLocaleString('en-US')} 个符号统计。
             </span>
-          </label>
+            <details className="control-more">
+              <summary>取整与分母</summary>
+              <p>
+                按 {sampleBits.toLocaleString('en-US')} 比特向上取整到 {symbolCount.toLocaleString('en-US')} 个
+                {orderLabel(order)} 符号，共比对 {stats.bitCount.toLocaleString('en-US')} 个比特。
+              </p>
+            </details>
+          </div>
 
           <label className="control">
             <span className="control-label">
@@ -173,12 +233,13 @@ export function QamPage() {
           </label>
 
           <div className="control">
-            <span className="control-label">
+            <label className="control-label" htmlFor="qam-seed">
               随机种子
               <strong>{seed}</strong>
-            </span>
+            </label>
             <div className="seed-row">
               <input
+                id="qam-seed"
                 type="number"
                 value={seed}
                 min={0}
@@ -195,10 +256,13 @@ export function QamPage() {
                 换一颗
               </button>
             </div>
-            <span className="control-hint">
-              同一颗种子、同一个信噪比，重跑出来的点和读数逐位相同。本次实际用的种子是{' '}
-              {stats.seedUsed.toLocaleString('en-US')}（由种子与信噪比共同派生）。
-            </span>
+            <span className="control-hint">同种子、同信噪比，重跑出来的点和读数逐位相同。</span>
+            <details className="control-more">
+              <summary>本次实际种子</summary>
+              <p>
+                由种子与信噪比共同派生出 {stats.seedUsed.toLocaleString('en-US')}，这一组读数就是用它跑出来的。
+              </p>
+            </details>
           </div>
 
           <CommandPanel
@@ -237,41 +301,7 @@ export function QamPage() {
         </aside>
       </div>
 
-      <section className="readouts" aria-label="统计读数">
-        <article className="readout">
-          <h2>误码率 BER</h2>
-          <p className="readout-value">{berReadout.value}</p>
-          <p className="readout-count">{berReadout.count}</p>
-          <p className="readout-note">
-            判错的比特数 ÷ 一共比对的比特数。{zeroBitErrors && `这批样本只说明错得比 ${resolution.toExponential(1)} 还少，不等于真的一个都不会错。`}
-          </p>
-        </article>
-
-        <article className="readout">
-          <h2>误符号率 SER</h2>
-          <p className="readout-value">{serReadout.value}</p>
-          <p className="readout-count">{serReadout.count}</p>
-          <p className="readout-note">
-            {bits === 1
-              ? '每符号只有 1 比特，所以误符号率和误比特率必然是同一个数——这不是巧合，也不是重复显示。'
-              : `一个符号里 ${bits} 个比特，所以 SER 通常比 BER 大。`}
-          </p>
-        </article>
-
-        <article className="readout">
-          <h2>误差向量幅度 EVM</h2>
-          <p className="readout-value">{stats.evmPercent.toFixed(2)}%</p>
-          <p className="readout-count">
-            {stats.symbolCount.toLocaleString('en-US')} 个符号的均方根误差 / 理想点平均幅度
-          </p>
-          <p className="readout-note">
-            每个接收点离理想点有多远，取均方根，再除以理想点的平均幅度。它不看判决对错，只看「偏了多少」；
-            噪声功率只看 Es/N0，所以同一信噪比下换阶数，EVM 不变。
-          </p>
-        </article>
-      </section>
-
-      <section className="curve-block" aria-label="误码率曲线">
+      <section className="curve-block" id="curve" aria-label="误码率曲线">
         <header className="section-head">
           <h2>0–20 dB 扫一遍</h2>
           <p>
