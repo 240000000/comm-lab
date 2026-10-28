@@ -157,7 +157,7 @@ export function ConvPage() {
             每 1 个信息比特吐出 2 个码比特，速率砍半；换来的是：接收端即使有些比特被噪声打翻，
             也能顺着编码留下的约束找回去。下面先用一条 12 比特的短序列把四行摊开，再扫一条对照曲线。
           </p>
-          <ShortFilm file="conv-viterbi.mp4" seconds={48} />
+          <ShortFilm file="conv-viterbi.mp4" poster="conv-poster.jpg" seconds={48} />
         </div>
       </header>
 

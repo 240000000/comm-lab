@@ -1522,6 +1522,36 @@ a.card {
   outline: none;
 }
 
+.short-film-stage {
+  position: relative;
+}
+
+.short-film-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border: 3px solid rgba(198, 212, 227, 0.18);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: short-film-spin 0.9s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes short-film-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .short-film-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
 .short-film-error {
   margin: 0;
   padding: 64px 24px;
@@ -2121,4 +2151,15 @@ a.card {
 .home .shell {
   position: relative;
   z-index: 1;
+}
+
+
+/* 原生控件自带的加载转圈与页面转圈重复，隐藏原生那个，保留 CSS 转圈。 */
+video::-webkit-media-controls-loading-panel,
+.short-film-video::-webkit-media-controls-loading-panel {
+  display: none !important;
+}
+
+video::-webkit-media-controls-overlay-play-button {
+  display: none !important;
 }

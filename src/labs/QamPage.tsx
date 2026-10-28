@@ -89,7 +89,7 @@ export function QamPage() {
             一个符号发出去，加多少噪声、收端怎么判、错了多少比特——这条链上的每一步都在下面。
             先挑一档阶数，再拖右边的信噪比，看左边的点怎么糊开、两个读数怎么跟着变。
           </p>
-          <ShortFilm file="qam-16qam.mp4" seconds={42} />
+          <ShortFilm file="qam-16qam.mp4" poster="qam-poster.jpg" seconds={42} />
         </div>
       </header>
 
