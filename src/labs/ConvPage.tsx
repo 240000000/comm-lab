@@ -143,7 +143,7 @@ export function ConvPage() {
   )
 
   return (
-    <main className="lab">
+    <main className="lab lab-conv">
       <a className="back" href="#/">
         ← 返回首页
       </a>
@@ -170,7 +170,7 @@ export function ConvPage() {
         />
       )}
 
-      <div className="lab-layout">
+      <div className="conv-stage">
         <section className="chart-block sequence" aria-label="短序列例子">
           <BitRow
             label="原始比特"
@@ -220,6 +220,8 @@ export function ConvPage() {
             <span className="legend-dot tail" /> 补零比特
           </div>
 
+          <details className="conv-guide">
+            <summary>四行怎么读</summary>
           <p className="read-guide">
             四行是同一条链路上四个位置的样子：<strong>原始</strong>是你要发的 {infoBits} 位信息；
             <strong>编码后</strong>是真正上路的 {2 * (infoBits + 2)} 位码字（末尾两位淡灰是补零）；
@@ -227,9 +229,10 @@ export function ConvPage() {
             <strong>译码后</strong>只留 {infoBits} 位信息，红色格表示没纠回来、页面不会替你圆。
             把噪声关掉再点「翻 2 位」，加噪后会出现两个琥珀，译码后照样全对——这就是纠错在干活。
           </p>
+          </details>
         </section>
 
-        <aside className="controls" aria-label="实验参数">
+        <aside className="controls conv-side" aria-label="实验参数">
           <label className="control">
             <span className="control-label">
               每信息比特信噪比 Eb/N0
@@ -245,27 +248,6 @@ export function ConvPage() {
             />
             <span className="control-hint">
               码率 1/2 的那 3.01 dB 折算已经算进内部，这里填的就是每信息比特的信噪比。
-            </span>
-          </label>
-
-          <label className="control">
-            <span className="control-label">
-              信息比特数
-              <strong>{infoBits} 位</strong>
-            </span>
-            <input
-              type="number"
-              min={1}
-              max={CONV_MAX_INFO_BITS}
-              step={1}
-              value={infoBits}
-              onChange={(event) => {
-                const next = Number(event.target.value)
-                if (Number.isInteger(next) && next >= 1 && next <= CONV_MAX_INFO_BITS) setInfoBits(next)
-              }}
-            />
-            <span className="control-hint">
-              短序列一次只摆 {CONV_MAX_INFO_BITS} 位，所以这里最大 {CONV_MAX_INFO_BITS}；改完四行会按新长度重画。
             </span>
           </label>
 
@@ -327,6 +309,27 @@ export function ConvPage() {
               两套译码器是两份独立代码：一个先切比特再比汉明距离，一个直接拿幅度到 ±1 理想点的平方距离当度量。
             </span>
           </div>
+
+          <label className="control">
+            <span className="control-label">
+              信息比特数
+              <strong>{infoBits} 位</strong>
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={CONV_MAX_INFO_BITS}
+              step={1}
+              value={infoBits}
+              onChange={(event) => {
+                const next = Number(event.target.value)
+                if (Number.isInteger(next) && next >= 1 && next <= CONV_MAX_INFO_BITS) setInfoBits(next)
+              }}
+            />
+            <span className="control-hint">
+              短序列一次只摆 {CONV_MAX_INFO_BITS} 位，所以这里最大 {CONV_MAX_INFO_BITS}；改完四行会按新长度重画。
+            </span>
+          </label>
 
           <div className="control">
             <span className="control-label">
@@ -434,6 +437,9 @@ export function ConvPage() {
             横轴按每信息比特的能量算，编码那两条已经把码率的 3.01 dB 折算进去了，所以是在同一把尺子上比。
           </p>
         </header>
+        <p className="conv-curve-cue">
+          翻位与判决方式变了，曲线不变，曲线只跟信噪比走。
+        </p>
         <ConvCurveChart points={curve} fromDb={FROM_DB} toDb={CURVE_TO_DB} />
         <p className="curve-note">
           看两条编码线的间距：低信噪比处软判决比硬判决低将近一个数量级，高信噪比处两者都掉到样本分辨率以下。

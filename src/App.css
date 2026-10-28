@@ -1805,3 +1805,71 @@ a.card {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- 卷积页：四行与判决控件同屏 ---------- */
+
+.lab-conv .lab-head {
+  max-width: 840px;
+}
+
+.conv-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 560px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  margin-bottom: 28px;
+}
+
+.conv-side {
+  gap: 16px;
+  padding: 18px;
+}
+
+.conv-side .control {
+  gap: 7px;
+}
+
+.conv-side .control-hint {
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.conv-side .segmented {
+  gap: 5px;
+}
+
+.conv-side .segmented button {
+  padding: 6px 8px;
+  font-size: 11.5px;
+}
+
+.conv-guide {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+.conv-guide summary {
+  cursor: pointer;
+  color: #9fb3c8;
+}
+
+.conv-guide .read-guide {
+  margin-top: 8px;
+}
+
+.conv-curve-cue {
+  margin: 14px 0 0;
+  padding: 9px 12px;
+  border-left: 2px solid var(--accent);
+  background: rgba(60, 227, 198, 0.06);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #c8d8e6;
+}
+
+@media (max-width: 980px) {
+  .conv-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
