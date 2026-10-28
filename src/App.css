@@ -1553,6 +1553,13 @@ a.card {
   }
 }
 
+.short-film-caption {
+  margin: 10px 16px 2px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .short-film-error {
   margin: 0;
   padding: 64px 24px;

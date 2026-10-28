@@ -34,3 +34,14 @@ test('按钮文案由秒数拼出', () => {
 test('59 秒原样拼出，不取整成 60', () => {
   assert.equal(shortFilmLabel(59), '先看 59 秒原理短片')
 })
+
+test('三个按钮的秒数与文案一一对应', () => {
+  const cases: [number, string][] = [
+    [42, '先看 42 秒原理短片'],
+    [48, '先看 48 秒原理短片'],
+    [59, '先看 59 秒原理短片'],
+  ]
+  for (const [seconds, expected] of cases) {
+    assert.equal(shortFilmLabel(seconds), expected)
+  }
+})

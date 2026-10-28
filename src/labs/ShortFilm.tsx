@@ -157,6 +157,11 @@ export function ShortFilm({ file, poster, seconds }: Props) {
                   )}
                 </div>
               )}
+              {!failed && (
+                <p className="short-film-caption">
+                  旁白由本机语音合成生成，画面数据取自仓库同一套实现。
+                </p>
+              )}
             </div>
           </div>,
           document.body,
