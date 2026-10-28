@@ -26,7 +26,7 @@ test('文件名带前导斜杠也只出现一个', () => {
 })
 
 test('按钮文案由秒数拼出', () => {
-  assert.equal(shortFilmLabel(40), '先看 40 秒原理短片')
+  assert.equal(shortFilmLabel(42), '先看 42 秒原理短片')
   assert.equal(shortFilmLabel(48), '先看 48 秒原理短片')
   assert.equal(shortFilmLabel(52), '先看 52 秒原理短片')
 })
