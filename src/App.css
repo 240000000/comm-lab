@@ -909,3 +909,247 @@ a.card {
     width: 100%;
   }
 }
+
+/* ---- 任务模式：自己出题 ---- */
+.custom-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 26px;
+  padding: 18px 20px;
+  border: 1px solid #1b2733;
+  border-radius: 12px;
+  background: #0c141b;
+}
+
+.custom-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #e6f0f8;
+}
+
+.custom-lede {
+  max-width: 760px;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: #8296aa;
+}
+
+.custom-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #8296aa;
+}
+
+.custom-field input {
+  width: 150px;
+  padding: 8px 10px;
+  border: 1px solid #22303d;
+  border-radius: 6px;
+  background: #0a1218;
+  color: #dbe7f1;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.custom-field input:focus {
+  outline: 2px solid #3ce3c6;
+  outline-offset: 1px;
+}
+
+.custom-generate {
+  padding: 9px 16px;
+  border: 1px solid #3ce3c6;
+  border-radius: 8px;
+  background: rgba(60, 227, 198, 0.12);
+  color: #3ce3c6;
+  font-size: 13.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.custom-generate:hover {
+  background: rgba(60, 227, 198, 0.2);
+}
+
+.custom-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6f8399;
+}
+
+.custom-error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #ffb054;
+}
+
+.custom-question {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px dashed #22303d;
+}
+
+.custom-tolerance {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #7f93a8;
+}
+
+.custom-answer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.custom-grade {
+  padding: 8px 16px;
+  border: 1px solid #2b4356;
+  border-radius: 6px;
+  background: #132029;
+  color: #dbe7f1;
+  font-size: 13.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.custom-grade:hover {
+  border-color: #3ce3c6;
+}
+
+.custom-save {
+  align-self: flex-start;
+  padding: 8px 14px;
+  border: 1px solid #2b4356;
+  border-radius: 6px;
+  background: #0f1a22;
+  color: #cfe0ee;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.custom-save:hover:not(:disabled) {
+  border-color: #3ce3c6;
+  color: #3ce3c6;
+}
+
+.custom-save:disabled {
+  color: #6f8399;
+  cursor: default;
+}
+
+.saved-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px dashed #22303d;
+}
+
+.saved-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saved-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e6f0f8;
+}
+
+.saved-head span {
+  font-size: 12px;
+  color: #6f8399;
+}
+
+.saved-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid #1b2733;
+  border-radius: 8px;
+  background: #0a1218;
+}
+
+.saved-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.saved-params {
+  font-family: 'Consolas', 'Cascadia Mono', monospace;
+  font-size: 13px;
+  color: #cfe0ee;
+}
+
+.saved-detail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #8296aa;
+}
+
+.saved-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #6f8399;
+}
+
+.saved-delete {
+  padding: 4px 10px;
+  border: 1px solid #2b4356;
+  border-radius: 6px;
+  background: #0b1219;
+  color: #9fb3c8;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.saved-delete:hover {
+  border-color: #ffb054;
+  color: #ffb054;
+}
+
+@media (max-width: 620px) {
+  .custom-controls {
+    align-items: stretch;
+  }
+
+  .custom-field input {
+    width: 100%;
+  }
+}
