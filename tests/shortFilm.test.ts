@@ -30,3 +30,7 @@ test('按钮文案由秒数拼出', () => {
   assert.equal(shortFilmLabel(48), '先看 48 秒原理短片')
   assert.equal(shortFilmLabel(52), '先看 52 秒原理短片')
 })
+
+test('59 秒原样拼出，不取整成 60', () => {
+  assert.equal(shortFilmLabel(59), '先看 59 秒原理短片')
+})

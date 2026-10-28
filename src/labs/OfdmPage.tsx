@@ -11,6 +11,7 @@ import { MAX_CP, MAX_DELAY, SUBCARRIERS, runOfdm } from '../core/ofdm.ts'
 import { OfdmSpectrumChart } from './OfdmSpectrumChart.tsx'
 import { OfdmTimeChart } from './OfdmTimeChart.tsx'
 import { FromQuestionNote } from './FromQuestionNote.tsx'
+import { ShortFilm } from './ShortFilm'
 import { OFDM_MAX_SYMBOLS, readOfdmParams } from '../core/labQuestions.ts'
 
 const DEFAULT_SYMBOLS = 200
@@ -59,11 +60,14 @@ export function OfdmPage() {
 
       <p className="eyebrow">OFDM 时频链路</p>
       <h1>循环前缀到底挡住了什么</h1>
-      <p className="lede">
-        一条主径，加一条延时径。把延时慢慢拉过 CP 的长度：CP 之内，多径的拖尾落在前缀里，数据段是干净的；CP
-        之外，拖尾压进数据段，码间干扰就来了。左边是时域，右边是 64 个子载波上的接收点，
-        两条支路的错号数在下面横栏的右端。
-      </p>
+      <div className="short-film-row">
+        <p className="lede">
+          一条主径，加一条延时径。把延时慢慢拉过 CP 的长度：CP 之内，多径的拖尾落在前缀里，数据段是干净的；CP
+          之外，拖尾压进数据段，码间干扰就来了。左边是时域，右边是 64 个子载波上的接收点，
+          两条支路的错号数在下面横栏的右端。
+        </p>
+        <ShortFilm file="ofdm-cp.mp4" poster="ofdm-poster.jpg" seconds={59} />
+      </div>
 
       {fromQuery && (
         <FromQuestionNote
