@@ -333,6 +333,7 @@ export function MissionPage() {
                 : '还有没答对的：点题面里的链接回实验台，把参数摆一遍再回来。'
               : '填完点右边的「判分」。答错不扣分，可以重来。'}
           </p>
+          <p className="score-hint">单题「判定」只判这一题，不计入总分。</p>
         </div>
         <button
           type="button"

@@ -1,8 +1,8 @@
 /**
  * 原理短片入口与弹层。
  *
- * 三个实验台共用这一个组件，页面只传文件名：
- *   <ShortFilm file="qam-16qam.mp4" />
+ * 三个实验台共用这一个组件，页面只传文件名与片长：
+ *   <ShortFilm file="qam-16qam.mp4" seconds={40} />
  * 视频放 public/shorts/，地址用 BASE_URL 拼，线上不会 404。
  *
  * 弹层只放原生 video 与一个关闭叉；不自动播、不调 play()，
@@ -10,17 +10,18 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { shortFilmUrl } from '../core/shortFilm'
+import { shortFilmLabel, shortFilmUrl } from '../core/shortFilm'
 
-const TRIGGER_TEXT = '先看 40 秒原理短片'
 const MISSING_TEXT = '短片还没放上来，稍后再试'
 
 type Props = {
   /** public/shorts/ 下的文件名，由页面传入。 */
   file: string
+  /** 片长（秒），只用来拼按钮文案，不做播放控制。 */
+  seconds: number
 }
 
-export function ShortFilm({ file }: Props) {
+export function ShortFilm({ file, seconds }: Props) {
   const [open, setOpen] = useState(false)
   const [failed, setFailed] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -77,7 +78,7 @@ export function ShortFilm({ file }: Props) {
           setOpen(true)
         }}
       >
-        {TRIGGER_TEXT}
+        {shortFilmLabel(seconds)}
       </button>
 
       {open &&

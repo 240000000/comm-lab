@@ -22,6 +22,7 @@ import {
 } from '../core/conv'
 import { deriveSeed } from '../core/metrics'
 import { FromQuestionNote } from './FromQuestionNote'
+import { ShortFilm } from './ShortFilm'
 import { CONV_MAX_INFO_BITS, readConvParams } from '../core/labQuestions'
 
 /** 短序列默认信息比特数；上限与页面能摆开的格子数一致。 */
@@ -151,10 +152,13 @@ export function ConvPage() {
       <header className="lab-head">
         <p className="eyebrow">信道编码实验台</p>
         <h1>用一半的速率，换回几次纠错</h1>
-        <p className="lede">
-          每 1 个信息比特吐出 2 个码比特，速率砍半；换来的是：接收端即使有些比特被噪声打翻，
-          也能顺着编码留下的约束找回去。下面先用一条 12 比特的短序列把四行摊开，再扫一条对照曲线。
-        </p>
+        <div className="short-film-row">
+          <p className="lede">
+            每 1 个信息比特吐出 2 个码比特，速率砍半；换来的是：接收端即使有些比特被噪声打翻，
+            也能顺着编码留下的约束找回去。下面先用一条 12 比特的短序列把四行摊开，再扫一条对照曲线。
+          </p>
+          <ShortFilm file="conv-viterbi.mp4" seconds={48} />
+        </div>
       </header>
 
       {fromQuery && (

@@ -10,3 +10,8 @@ export function shortFilmUrl(base: string, file: string): string {
   const name = file.replace(/^\/+/, '')
   return `${dir}shorts/${name}`
 }
+
+/** 按钮文案按片长拼，页面只传秒数，不在组件里写死。 */
+export function shortFilmLabel(seconds: number): string {
+  return `先看 ${seconds} 秒原理短片`
+}

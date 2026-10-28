@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { shortFilmUrl } from '../src/core/shortFilm.ts'
+import { shortFilmLabel, shortFilmUrl } from '../src/core/shortFilm.ts'
 
 test('开发根路径拼出 /shorts/', () => {
   assert.equal(shortFilmUrl('/', 'qam-16qam.mp4'), '/shorts/qam-16qam.mp4')
@@ -23,4 +23,10 @@ test('BASE_URL 不带尾斜杠也不出现双斜杠', () => {
 test('文件名带前导斜杠也只出现一个', () => {
   assert.equal(shortFilmUrl('/comm-lab/', '/conv-viterbi.mp4'), '/comm-lab/shorts/conv-viterbi.mp4')
   assert.equal(shortFilmUrl('/', '/ofdm-cp.mp4'), '/shorts/ofdm-cp.mp4')
+})
+
+test('按钮文案由秒数拼出', () => {
+  assert.equal(shortFilmLabel(40), '先看 40 秒原理短片')
+  assert.equal(shortFilmLabel(48), '先看 48 秒原理短片')
+  assert.equal(shortFilmLabel(52), '先看 52 秒原理短片')
 })
