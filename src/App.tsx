@@ -5,6 +5,7 @@ import { QamPage } from './labs/QamPage'
 import { ConvPage } from './labs/ConvPage'
 import { OfdmPage } from './labs/OfdmPage'
 import { MissionPage } from './labs/MissionPage'
+import { HomeBackdrop } from './labs/HomeBackdrop'
 
 const modules = [
   {
@@ -63,8 +64,10 @@ export default function App() {
   }
 
   return (
-    <main className="shell">
-      <header className="hero">
+    <div className="home">
+      <HomeBackdrop />
+      <main className="shell">
+        <header className="hero">
         <p className="eyebrow">通信原理 · 交互实验室</p>
         <h1>把公式拖成能看见的波形</h1>
         <p className="lede">
@@ -96,9 +99,10 @@ export default function App() {
         })}
       </section>
 
-      <footer className="foot">
-        <p>纯前端实现 · 全部计算在浏览器内完成 · 不依赖后端服务</p>
-      </footer>
-    </main>
+        <footer className="foot">
+          <p>纯前端实现 · 全部计算在浏览器内完成 · 不依赖后端服务</p>
+        </footer>
+      </main>
+    </div>
   )
 }

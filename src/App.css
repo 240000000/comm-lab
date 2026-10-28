@@ -2100,3 +2100,25 @@ a.card {
   font-size: 12.5px;
   line-height: 1.5;
 }
+
+/* 首页动态背景：只挂在首页，canvas 在内容之下、不吃鼠标 */
+.home {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.home-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.home .shell {
+  position: relative;
+  z-index: 1;
+}
