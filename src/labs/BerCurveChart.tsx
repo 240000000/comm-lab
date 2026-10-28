@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef } from 'react'
 import type { CurvePoint } from '../core/curve'
+import { orderLabel } from '../core/qam'
 
 const WIDTH = 560
 const HEIGHT = 260
@@ -31,9 +32,11 @@ type Props = {
   points: CurvePoint[]
   fromDb: number
   toDb: number
+  /** 当前阶数，写进图注与无障碍描述。 */
+  order: number
 }
 
-export function BerCurveChart({ points, fromDb, toDb }: Props) {
+export function BerCurveChart({ points, fromDb, toDb, order }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -111,7 +114,7 @@ export function BerCurveChart({ points, fromDb, toDb }: Props) {
     ctx.beginPath()
     points.forEach((point, index) => {
       const x = toX(point.snrDb)
-      const y = toY(Math.max(point.theory, 1e-7))
+      const y = toY(Math.max(point.theory, 1e-6))
       if (index === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
     })
@@ -177,13 +180,14 @@ export function BerCurveChart({ points, fromDb, toDb }: Props) {
           ref={canvasRef}
           className="curve"
           role="img"
-          aria-label={`BER 曲线：${fromDb} 到 ${toDb} dB 共 ${points.length} 个信噪比点，理论值为虚线，实测为实心点，空心点表示该点样本里没有测到比特错误`}
+          aria-label={`${orderLabel(order)} 的 BER 曲线：${fromDb} 到 ${toDb} dB 共 ${points.length} 个信噪比点，理论值为虚线，实测为实心点，空心点表示该点样本里没有测到比特错误`}
         />
       </div>
       <figcaption>
-        虚线是公式算出来的理论值，实心点是这批样本里实测的误比特率。
+        {orderLabel(order)}：虚线是公式算出来的理论值，实心点是这批样本里实测的误比特率。
         空心点表示在那个信噪比下一个比特都没错——不是真的 0，而是低于这批样本能分辨的
         1/{points[0]?.bitCount.toLocaleString('en-US') ?? '—'}，所以不连线。
+        尾端偶尔会看到 0 错之后又冒出 1 个错，那是样本量不够的统计抖动，不是算错。
       </figcaption>
     </figure>
   )

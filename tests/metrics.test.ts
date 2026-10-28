@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { deriveSeed, simulateAwgn } from '../src/core/metrics.ts'
 import { theoryBer } from '../src/core/ber.ts'
+import { bitsPerSymbol } from '../src/core/qam.ts'
 
 const ORDER = 16
 const SYMBOLS = 20000
@@ -86,4 +87,44 @@ test('非法符号数：0、负数、小数都抛 RangeError', () => {
       RangeError,
     )
   }
+})
+
+// ---------- 四个阶数：EVM 不变、BER 变、BPSK 的 SER=BER ----------
+
+test('同一信噪比下四阶 EVM 完全相等（噪声只看 Es/N0，与阶数无关）', () => {
+  const base = simulateAwgn({ order: 2, snrDb: 12, symbolCount: SYMBOLS, seed: SEED }).evmPercent
+  for (const order of [4, 16, 64]) {
+    const stats = simulateAwgn({ order, snrDb: 12, symbolCount: SYMBOLS, seed: SEED })
+    assert.equal(stats.evmPercent, base, `${order}QAM 的 EVM 跟 BPSK 不一致`)
+  }
+  // 12 dB 时 N0 = 1e-1.2，EVM 应逼近 √N0 = 25.12%，样本均值的误差在 1% 以内。
+  assert.ok(Math.abs(base / (Math.sqrt(Math.pow(10, -12 / 10)) * 100) - 1) < 0.01, `EVM=${base}`)
+})
+
+test('同种子同信噪比，四阶的 BER 互不相同（确实按阶数重算）', () => {
+  const bers = [2, 4, 16, 64].map(
+    (order) => simulateAwgn({ order, snrDb: 8, symbolCount: SYMBOLS, seed: SEED }).ber,
+  )
+  assert.equal(new Set(bers).size, 4, `四阶 BER 出现重复：${bers.join(', ')}`)
+})
+
+test('BPSK 每符号 1 比特：SER 与 BER 严格相等，分母也相等', () => {
+  const stats = simulateAwgn({ order: 2, snrDb: 8, symbolCount: SYMBOLS, seed: SEED })
+  assert.equal(stats.bitCount, stats.symbolCount)
+  assert.equal(stats.symbolErrors, stats.bitErrors)
+  assert.equal(stats.ser, stats.ber)
+  assert.ok(stats.symbolErrors > 0, '这个点应该有错，否则相等没有说服力')
+})
+
+test('每阶的比特分母 = 符号数 × bitsPerSymbol', () => {
+  for (const order of [2, 4, 16, 64]) {
+    const stats = simulateAwgn({ order, snrDb: 10, symbolCount: 2000, seed: SEED })
+    assert.equal(stats.bitCount, 2000 * bitsPerSymbol(order))
+  }
+})
+
+test('16QAM 的既有结果不因换阶数实现而漂移：12 dB 仍是 2331/80000', () => {
+  const stats = simulateAwgn({ order: 16, snrDb: 12, symbolCount: SYMBOLS, seed: SEED })
+  assert.equal(stats.bitErrors, 2331)
+  assert.equal(stats.ber, 2331 / 80000)
 })

@@ -44,6 +44,12 @@ export function qFunction(x: number): number {
  *
  * 参数口径与 src/core/channel.ts 一致：snrDb 是 Es/N0，不是 Eb/N0。
  * 换算：Eb/N0 = Es/N0 / b，即 dB 上减 10·log10(b)。
+ *
+ * **BPSK 单独一支**：M=2 时方阵 M-QAM 的近似式不成立。代进近似式会得到
+ * 1.1716·Q(√(3·Eb/N0))，0 dB 时是 4.88e-2；而 BPSK 的精确式是
+ * Pb = Q(√(2·Eb/N0))，0 dB 时 7.86e-2，与仿真（7.69e-2）对得上。
+ * 两条式子差一个 √1.5 的噪声argument，混用会让虚线整条偏低。
+ * QPSK（M=4）代进近似式后正好化简成 Q(√(2·Eb/N0))，所以不用单开一支。
  */
 export function theoryBer(order: number, snrDb: number): number {
   const bitsPerSymbol = Math.log2(order)
@@ -51,6 +57,9 @@ export function theoryBer(order: number, snrDb: number): number {
     throw new RangeError(`不支持的 QAM 阶数：${order}`)
   }
   const ebn0 = Math.pow(10, (snrDb - 10 * Math.log10(bitsPerSymbol)) / 10)
+  if (order === 2) {
+    return qFunction(Math.sqrt(2 * ebn0))
+  }
   const argument = Math.sqrt(((3 * bitsPerSymbol) / (order - 1)) * ebn0)
   return ((4 / bitsPerSymbol) * (1 - 1 / Math.sqrt(order)) * qFunction(argument))
 }

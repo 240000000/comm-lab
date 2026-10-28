@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildConstellation, bitsPerSymbol } from '../src/core/qam.ts'
+import { QAM_ORDERS, buildConstellation, bitsPerSymbol, orderLabel } from '../src/core/qam.ts'
 import type { QamPoint } from '../src/core/qam.ts'
 
 const ORDERS = [2, 4, 16, 64]
@@ -124,4 +124,18 @@ test('bitsPerSymbol 的对应关系是 2→1、4→2、16→4、64→6', () => {
   assert.equal(bitsPerSymbol(4), 2)
   assert.equal(bitsPerSymbol(16), 4)
   assert.equal(bitsPerSymbol(64), 6)
+})
+
+// ---------- 四档清单与界面写法 ----------
+
+test('四档顺序固定为 2、4、16、64', () => {
+  assert.deepEqual([...QAM_ORDERS], [2, 4, 16, 64])
+})
+
+test('orderLabel：2→BPSK、4→QPSK、16→16QAM、64→64QAM；非法阶数抛错', () => {
+  assert.equal(orderLabel(2), 'BPSK')
+  assert.equal(orderLabel(4), 'QPSK')
+  assert.equal(orderLabel(16), '16QAM')
+  assert.equal(orderLabel(64), '64QAM')
+  assert.throws(() => orderLabel(8), RangeError)
 })

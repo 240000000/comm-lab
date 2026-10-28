@@ -10,7 +10,7 @@ const modules = [
   {
     id: 'qam',
     name: 'QAM 星座实验台',
-    desc: '16QAM 星座与噪声云、EVM 与误符号率实时读数',
+    desc: '四档阶数（BPSK / QPSK / 16QAM / 64QAM）的星座与噪声云、EVM 与误符号率实时读数',
     status: '已接通',
     href: '#/qam',
   },
@@ -68,7 +68,7 @@ export default function App() {
         <p className="eyebrow">通信原理 · 交互实验室</p>
         <h1>把公式拖成能看见的波形</h1>
         <p className="lede">
-          不用装 MATLAB，打开浏览器就能把信噪比拖大拖小，看 16QAM 的星座点怎么被噪声推离原位、
+          不用装 MATLAB，打开浏览器就能在 BPSK、QPSK、16QAM、64QAM 四档之间换着看星座点怎么被噪声推离原位、
           误码率怎么抬起来；也能把卷积码从编码到译码摊开，一位一位看它纠回了什么、没纠回什么；
           还能拖循环前缀的长度，看多径的拖尾什么时候被关在 CP 里、什么时候压进数据段；
           最后用五道小题把这三页串起来，答案都要回实验台上自己读出来。

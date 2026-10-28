@@ -3,27 +3,32 @@
  *
  * 只做一件事：把用户敲的一行中文交给 src/core/commands.ts 解析，然后把那句话回显出来。
  * 面板上没有网络请求、没有模型调用，解析规则全在本地、可读可测。
+ * 「换阶数」和页面上的选择器走同一个 setOrder，两条路不会各说各话。
  */
 import { useState } from 'react'
 import { parseCommand } from '../core/commands'
 
 type Props = {
+  order: number
   snrDb: number
   onSnrChange: (value: number) => void
+  onOrderChange: (value: number) => void
   onRerun: () => void
   onReset: () => void
 }
 
-export function CommandPanel({ snrDb, onSnrChange, onRerun, onReset }: Props) {
+export function CommandPanel({ order, snrDb, onSnrChange, onOrderChange, onRerun, onReset }: Props) {
   const [input, setInput] = useState('')
   const [reply, setReply] = useState<string | null>(null)
 
   const send = () => {
-    const result = parseCommand(input, { snrDb })
+    const result = parseCommand(input, { snrDb, order })
     setReply(result.reply)
 
     if (result.action === 'snr-up' || result.action === 'snr-down') {
       if (typeof result.snrDb === 'number') onSnrChange(result.snrDb)
+    } else if (result.action === 'order') {
+      if (typeof result.order === 'number') onOrderChange(result.order)
     } else if (result.action === 'rerun') {
       onRerun()
     } else if (result.action === 'reset') {
@@ -43,7 +48,7 @@ export function CommandPanel({ snrDb, onSnrChange, onRerun, onReset }: Props) {
         <input
           type="text"
           value={input}
-          placeholder="试试：噪声调大 / 噪声调小 / 重跑 / 重置"
+          placeholder="试试：换成 64QAM / 噪声调大 / 重跑 / 重置"
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') send()
@@ -56,7 +61,8 @@ export function CommandPanel({ snrDb, onSnrChange, onRerun, onReset }: Props) {
       </div>
       {reply && <p className="command-reply">{reply}</p>}
       <p className="control-hint">
-        现在只认四条：噪声调大、噪声调小、重跑、重置。问「换阶数」会被挡回去——这一版阶数写死 16QAM。
+        现在认五条：换阶数（BPSK / QPSK / 16QAM / 64QAM）、噪声调大、噪声调小、重跑、重置。
+        换阶数和上面的选择器是同一个开关。
       </p>
     </div>
   )

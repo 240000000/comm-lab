@@ -40,6 +40,22 @@ export function bitsPerSymbol(order: number): number {
   return bits
 }
 
+/** 页面选择器与指令面板共用的四档阶数，顺序固定：由低到高。 */
+export const QAM_ORDERS = [2, 4, 16, 64] as const
+
+/**
+ * 阶数在界面上的写法：2 → BPSK，4 → QPSK，其余写成 16QAM / 64QAM。
+ *
+ * 先调 bitsPerSymbol 再做判断，非法阶数仍然抛 RangeError，
+ * 不会出现「BPSK / 8QAM」这种半截标签。
+ */
+export function orderLabel(order: number): string {
+  bitsPerSymbol(order)
+  if (order === 2) return 'BPSK'
+  if (order === 4) return 'QPSK'
+  return `${order}QAM`
+}
+
 /** 二进制格雷码：整数 k 的格雷码是 k ^ (k >> 1)，相邻整数只差一位。 */
 function gray(k: number): number {
   return k ^ (k >> 1)

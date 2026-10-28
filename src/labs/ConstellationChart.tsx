@@ -11,7 +11,7 @@
  * 不会跟着几百个接收点一起冒出来。
  */
 import { useEffect, useRef } from 'react'
-import { buildConstellation } from '../core/qam'
+import { bitsPerSymbol, buildConstellation } from '../core/qam'
 import type { Sample } from '../core/metrics'
 
 const SIZE = 520
@@ -31,6 +31,8 @@ const COLOR = {
 } as const
 
 const LABEL_FONT = '11px Consolas, "Cascadia Mono", monospace'
+/** 6 位标签比 4 位宽约一半，字号降一档，配合正上方居中才不碰邻列。 */
+const DENSE_LABEL_FONT = '10px Consolas, "Cascadia Mono", monospace'
 const AXIS_FONT = '12px Consolas, "Cascadia Mono", monospace'
 
 type Props = {
@@ -131,16 +133,26 @@ export function ConstellationChart({ order, received, snrDb }: Props) {
     }
 
     // 第三层：标签。先描底色再填字，避免与网格线糊在一起。
-    ctx.font = LABEL_FONT
-    ctx.textAlign = 'left'
+    // 4 位以内贴着点右侧放；64QAM 的 6 位标签列距只有 44.8px，贴着放会碰到
+    // 右边那一列的点，所以改成点在正上方居中，字号再降一档（11px → 10px）。
+    const dense = bitsPerSymbol(order) >= 6
+    ctx.font = dense ? DENSE_LABEL_FONT : LABEL_FONT
     ctx.textBaseline = 'middle'
     const rightEdge = SIZE - PAD * 0.5 - 30
     for (const point of points) {
       const x = toX(point.i)
       const y = toY(point.q)
+      const width = ctx.measureText(point.bits).width
+      if (dense) {
+        ctx.fillStyle = 'rgba(8, 13, 18, 0.78)'
+        ctx.fillRect(x - width / 2 - 3, y - 17, width + 6, 15)
+        ctx.fillStyle = COLOR.label
+        ctx.textAlign = 'center'
+        ctx.fillText(point.bits, x, y - 9)
+        continue
+      }
       const flip = x > rightEdge
       const textX = flip ? x - 7 : x + 7
-      const width = ctx.measureText(point.bits).width
       const chipX = flip ? textX - width - 3 : textX - 3
       // 标签下面垫一块半透明底色：点云再密，字也不会跟琥珀色糊在一起。
       ctx.fillStyle = 'rgba(8, 13, 18, 0.78)'
@@ -179,8 +191,9 @@ export function ConstellationChart({ order, received, snrDb }: Props) {
         />
       </div>
       <figcaption>
-        暗青小点：理想星座位置（每点旁是 4 位格雷码标签）。琥珀色云团：
+        暗青小点：理想星座位置（每点是 {bitsPerSymbol(order)} 位格雷码标签）。琥珀色云团：
         当前信噪比下收到的点，越糊说明噪声越大。
+        {bitsPerSymbol(order) >= 6 && ' 6 位标签贴着点放会碰到邻列，所以摆在点正上方、字号小一档。'}
       </figcaption>
     </figure>
   )
