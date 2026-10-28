@@ -10,6 +10,7 @@
 import { useMemo, useState } from 'react'
 import {
   MISSIONS,
+  gradeMission,
   gradeMissions,
   scoreMissions,
   type Mission,
@@ -97,6 +98,8 @@ function loadInitialSaved(): InitialSaved {
 export function MissionPage() {
   const [answers, setAnswers] = useState<Record<string, MissionAnswer | null>>({})
   const [grades, setGrades] = useState<MissionGrade[] | null>(null)
+  // 每题自己的「判定」结果，和总分的 grades 分开：点单题不覆盖总分，点「判分」才重算五题。
+  const [cardGrades, setCardGrades] = useState<Record<string, MissionGrade>>({})
 
   const [questionKind, setQuestionKind] = useState<QuestionKind>('qam')
   const [qamDraft, setQamDraft] = useState({
@@ -127,6 +130,12 @@ export function MissionPage() {
 
   const setAnswer = (id: string, value: MissionAnswer | null) => {
     setAnswers((prev) => ({ ...prev, [id]: value }))
+    setCardGrades((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
   }
 
   const gradeById = useMemo(() => {
@@ -134,6 +143,12 @@ export function MissionPage() {
     for (const grade of grades ?? []) map.set(grade.id, grade)
     return map
   }, [grades])
+
+  const gradeFor = (id: string) => cardGrades[id] ?? gradeById.get(id) ?? null
+
+  const judgeOne = (mission: Mission) => {
+    setCardGrades((prev) => ({ ...prev, [mission.id]: gradeMission(mission, answers[mission.id] ?? null) }))
+  }
 
   const toNumber = (raw: string) => (raw.trim() === '' ? Number.NaN : Number(raw))
 
@@ -218,7 +233,7 @@ export function MissionPage() {
   }
 
   return (
-    <main className="lab">
+    <main className="lab lab-mission">
       <a className="back" href="#/">
         ← 返回首页
       </a>
@@ -234,7 +249,7 @@ export function MissionPage() {
 
       <section className="mission-list" aria-label="五道任务">
         {MISSIONS.map((mission, index) => {
-          const grade = gradeById.get(mission.id)
+          const grade = gradeFor(mission.id)
           const link = REPRODUCE_LINK[mission.id]
           const answer = answers[mission.id] ?? null
 
@@ -260,34 +275,44 @@ export function MissionPage() {
                 )}
               </p>
 
-              {mission.options ? (
-                <div className="segmented" role="group" aria-label={`第 ${index + 1} 题选项`}>
-                  {mission.options.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      aria-pressed={answer === option}
-                      onClick={() => setAnswer(mission.id, option)}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <input
-                  className="mission-input"
-                  type="number"
-                  step="any"
-                  inputMode="decimal"
-                  placeholder={mission.id === 'numeric' ? '比如 2.9e-2' : '填一个整数'}
-                  value={answer === null ? '' : String(answer)}
-                  onChange={(event) => {
-                    const raw = event.target.value
-                    setAnswer(mission.id, raw === '' ? null : Number(raw))
-                  }}
-                  aria-label={`第 ${index + 1} 题作答`}
-                />
-              )}
+              <div className="mission-answer-row">
+                {mission.options ? (
+                  <div className="segmented" role="group" aria-label={`第 ${index + 1} 题选项`}>
+                    {mission.options.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={answer === option}
+                        onClick={() => setAnswer(mission.id, option)}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <input
+                    className="mission-input"
+                    type="number"
+                    step="any"
+                    inputMode="decimal"
+                    placeholder={mission.id === 'numeric' ? '比如 2.9e-2' : '填一个整数'}
+                    value={answer === null ? '' : String(answer)}
+                    onChange={(event) => {
+                      const raw = event.target.value
+                      setAnswer(mission.id, raw === '' ? null : Number(raw))
+                    }}
+                    aria-label={`第 ${index + 1} 题作答`}
+                  />
+                )}
+                <button
+                  type="button"
+                  className="mission-judge"
+                  onClick={() => judgeOne(mission)}
+                  aria-label={`第 ${index + 1} 题判定`}
+                >
+                  判定
+                </button>
+              </div>
 
               {grade && <p className={grade.correct ? 'mission-reason ok' : 'mission-reason bad'}>{grade.reason}</p>}
             </article>
@@ -312,7 +337,10 @@ export function MissionPage() {
         <button
           type="button"
           className="score-button"
-          onClick={() => setGrades(gradeMissions(answers))}
+          onClick={() => {
+            setCardGrades({})
+            setGrades(gradeMissions(answers))
+          }}
         >
           判分
         </button>
@@ -320,11 +348,15 @@ export function MissionPage() {
 
       <section className="custom-section" aria-label="自己出题">
         <header className="custom-head">
+          <p className="custom-eyebrow">自选参数</p>
           <h2>你自己出题</h2>
-          <p className="custom-lede">
-            挑一个实验台、把参数摆好，点一下生成一道题。题目是你自己出的；标准答案由本地仿真现算；整个过程不联网，
-            没有后端、没有账号。答完可以点「用这组参数去实验台」，那边会把同一组参数原样填回去。
-          </p>
+          <details className="custom-about">
+            <summary>这一区怎么用</summary>
+            <p className="custom-lede">
+              挑一个实验台、把参数摆好，点一下生成一道题。题目是你自己出的；标准答案由本地仿真现算；整个过程不联网，
+              没有后端、没有账号。答完可以点「用这组参数去实验台」，那边会把同一组参数原样填回去。
+            </p>
+          </details>
         </header>
 
         <div className="custom-kinds" role="group" aria-label="题型">
