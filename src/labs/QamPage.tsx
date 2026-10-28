@@ -13,6 +13,7 @@ import { simulateAwgn } from '../core/metrics'
 import { QAM_ORDERS, bitsPerSymbol, orderLabel } from '../core/qam'
 import { CommandPanel } from './CommandPanel'
 import { FromQuestionNote } from './FromQuestionNote'
+import { ShortFilm } from './ShortFilm'
 import { readQamParams } from '../core/labQuestions'
 
 /** 默认档位，与任务模式那道数值题、指令面板的「重置」保持一致。 */
@@ -83,10 +84,13 @@ export function QamPage() {
       <header className="lab-head">
         <p className="eyebrow">QAM 星座实验台</p>
         <h1>星座点为什么会被噪声推离原位</h1>
-        <p className="lede">
-          一个符号发出去，加多少噪声、收端怎么判、错了多少比特——这条链上的每一步都在下面。
-          先挑一档阶数，再拖右边的信噪比，看左边的点怎么糊开、两个读数怎么跟着变。
-        </p>
+        <div className="short-film-row">
+          <p className="lede">
+            一个符号发出去，加多少噪声、收端怎么判、错了多少比特——这条链上的每一步都在下面。
+            先挑一档阶数，再拖右边的信噪比，看左边的点怎么糊开、两个读数怎么跟着变。
+          </p>
+          <ShortFilm file="qam-16qam.mp4" />
+        </div>
       </header>
 
       {fromQuery && (

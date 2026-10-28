@@ -1428,3 +1428,125 @@ a.card {
     grid-column: auto;
   }
 }
+
+/* ---- 原理短片（全站共用） ---- */
+
+.lab-qam .lab-head {
+  max-width: none;
+}
+
+.short-film-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.short-film-row .lede {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.short-film-trigger {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.short-film-trigger:hover,
+.short-film-trigger:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
+.short-film-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 8, 12, 0.88);
+}
+
+.short-film-dialog {
+  position: relative;
+  width: min(960px, 100%);
+  padding: 44px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #0b1219;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.short-film-video {
+  display: block;
+  width: 100%;
+  max-height: 72vh;
+  border-radius: 8px;
+  background: #000;
+}
+
+.short-film-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.short-film-close:hover,
+.short-film-close:focus-visible {
+  color: var(--text);
+  background: rgba(198, 212, 227, 0.08);
+  outline: none;
+}
+
+.short-film-error {
+  margin: 0;
+  padding: 64px 24px;
+  color: var(--dim);
+  font-size: 14px;
+  text-align: center;
+}
+
+@media (max-width: 820px) {
+  .short-film-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .short-film-trigger {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .short-film-overlay {
+    padding: 12px;
+  }
+
+  .short-film-dialog {
+    padding: 42px 8px 8px;
+  }
+}
