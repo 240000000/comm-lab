@@ -36,3 +36,13 @@ test('#/mission 回 mission', () => {
 test('#/mission/ 带斜杠也认得出', () => {
   assert.equal(parseHash('#/mission/'), 'mission')
 })
+
+test('带查询串的三条实验台路径仍认得出（任务模式回填用）', () => {
+  assert.equal(parseHash('#/qam?order=16&snr=12&bits=1000'), 'qam')
+  assert.equal(parseHash('#/conv?ebn0=2&bits=12&noise=1'), 'conv')
+  assert.equal(parseHash('#/ofdm?cp=16&delay=9&symbols=200'), 'ofdm')
+})
+
+test('查询串里出现斜杠也不会把路径判错', () => {
+  assert.equal(parseHash('#/qam?order=16&note=a/b'), 'qam')
+})

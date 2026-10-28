@@ -12,11 +12,15 @@ import { sweepBer } from '../core/curve'
 import { simulateAwgn } from '../core/metrics'
 import { QAM_ORDERS, bitsPerSymbol, orderLabel } from '../core/qam'
 import { CommandPanel } from './CommandPanel'
+import { FromQuestionNote } from './FromQuestionNote'
+import { readQamParams } from '../core/labQuestions'
 
 /** 默认档位，与任务模式那道数值题、指令面板的「重置」保持一致。 */
 const DEFAULT_ORDER = 16
-/** 一次统计用多少个符号：20,000 个符号 × 每符号比特数。 */
-const SYMBOLS = 20000
+const DEFAULT_SNR_DB = 12
+/** 默认样本量按比特算，和任务模式「你自己出题」的单位一致。 */
+const DEFAULT_BITS = 20000
+const MAX_BITS = 200000
 /** 曲线每个信噪比点也用同一规模，保证能用同样的分母读。 */
 const CURVE_SYMBOLS = 20000
 const FROM_DB = 0
@@ -36,15 +40,20 @@ function rateReadout(errors: number, total: number, unit: string, ratio: number)
 }
 
 export function QamPage() {
-  const [order, setOrder] = useState(DEFAULT_ORDER)
-  const [snrDb, setSnrDb] = useState(12)
+  const [initial] = useState(() => readQamParams(window.location.hash))
+  const [order, setOrder] = useState(initial.order)
+  const [snrDb, setSnrDb] = useState(initial.snrDb)
+  const [sampleBits, setSampleBits] = useState(initial.sampleBits)
+  const [fromQuery, setFromQuery] = useState(initial.fromQuery)
   const [seed, setSeed] = useState(20261027)
 
   const bits = bitsPerSymbol(order)
+  // 样本按比特填，跑仿真时向上取整到整符号；分母以实际比对过的比特为准。
+  const symbolCount = Math.max(1, Math.ceil(sampleBits / bits))
 
   const stats = useMemo(
-    () => simulateAwgn({ order, snrDb, symbolCount: SYMBOLS, seed }),
-    [order, snrDb, seed],
+    () => simulateAwgn({ order, snrDb, symbolCount, seed }),
+    [order, snrDb, seed, symbolCount],
   )
 
   const curve = useMemo(
@@ -80,6 +89,20 @@ export function QamPage() {
         </p>
       </header>
 
+      {fromQuery && (
+        <FromQuestionNote
+          text={`这组参数来自任务模式「你自己出题」：${orderLabel(order)} · ${snrDb} dB · ${sampleBits.toLocaleString('en-US')} 比特。已经原样回填；拖动控件后这组参数就归你了。`}
+          onRestore={() => {
+            setOrder(DEFAULT_ORDER)
+            setSnrDb(DEFAULT_SNR_DB)
+            setSampleBits(DEFAULT_BITS)
+            setSeed(20261027)
+            setFromQuery(false)
+            history.replaceState(null, '', '#/qam')
+          }}
+        />
+      )}
+
       <div className="lab-layout">
         <section className="chart-block" aria-label="星座图与点云">
           <ConstellationChart order={order} received={stats.received} snrDb={snrDb} />
@@ -108,6 +131,28 @@ export function QamPage() {
               换阶数会重算星座、三个读数和整条 0–20 dB 曲线；种子和信噪比保留不动。
             </span>
           </div>
+
+          <label className="control">
+            <span className="control-label">
+              统计样本（比特）
+              <strong>{sampleBits.toLocaleString('en-US')} 比特</strong>
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={MAX_BITS}
+              step={1}
+              value={sampleBits}
+              onChange={(event) => {
+                const next = Number(event.target.value)
+                if (Number.isInteger(next) && next >= 1 && next <= MAX_BITS) setSampleBits(next)
+              }}
+            />
+            <span className="control-hint">
+              按比特填，最多 {MAX_BITS.toLocaleString('en-US')}。实际按 {symbolCount.toLocaleString('en-US')} 个
+              {orderLabel(order)} 符号统计（向上取整），共比对 {stats.bitCount.toLocaleString('en-US')} 个比特。
+            </span>
+          </label>
 
           <label className="control">
             <span className="control-label">
@@ -164,7 +209,8 @@ export function QamPage() {
             onRerun={() => setSeed(Math.floor(Math.random() * 1_000_000_000))}
             onReset={() => {
               setOrder(DEFAULT_ORDER)
-              setSnrDb(12)
+              setSnrDb(DEFAULT_SNR_DB)
+              setSampleBits(DEFAULT_BITS)
               setSeed(20261027)
             }}
           />
@@ -179,7 +225,8 @@ export function QamPage() {
             <div>
               <dt>统计样本</dt>
               <dd>
-                {SYMBOLS.toLocaleString('en-US')} 个符号 / {stats.bitCount.toLocaleString('en-US')} 个比特
+                {stats.symbolCount.toLocaleString('en-US')} 个符号 / {stats.bitCount.toLocaleString('en-US')} 个比特
+                （按 {sampleBits.toLocaleString('en-US')} 比特取整）
               </dd>
             </div>
             <div>

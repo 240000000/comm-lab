@@ -937,6 +937,67 @@ a.card {
   color: #8296aa;
 }
 
+.custom-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.custom-kinds button {
+  padding: 7px 13px;
+  border: 1px solid #22303d;
+  border-radius: 7px;
+  background: #0a1218;
+  color: #a9bdcd;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.custom-kinds button:hover {
+  border-color: #355063;
+  color: #dbe7f1;
+}
+
+.custom-kinds button[aria-pressed='true'] {
+  border-color: #3ce3c6;
+  background: rgba(60, 227, 198, 0.1);
+  color: #3ce3c6;
+}
+
+/* 从题目跳过来时的那行小字，和实验台自己的参数控件分开摆。 */
+.from-question {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border: 1px solid #25404a;
+  border-left: 3px solid #3ce3c6;
+  border-radius: 7px;
+  background: rgba(60, 227, 198, 0.06);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #9fb6c6;
+}
+
+.from-question-restore {
+  padding: 5px 10px;
+  border: 1px solid #355063;
+  border-radius: 6px;
+  background: transparent;
+  color: #9fc7ff;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.from-question-restore:hover {
+  border-color: #3ce3c6;
+  color: #3ce3c6;
+}
+
 .custom-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1053,6 +1114,28 @@ a.card {
 .custom-save:disabled {
   color: #6f8399;
   cursor: default;
+}
+
+.custom-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-transfer {
+  padding: 8px 14px;
+  border: 1px solid #2b4356;
+  border-radius: 6px;
+  background: #0f1a22;
+  color: #9fc7ff;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.custom-transfer:hover {
+  border-color: #3ce3c6;
+  color: #3ce3c6;
 }
 
 .saved-block {

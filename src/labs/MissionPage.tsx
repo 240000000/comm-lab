@@ -21,19 +21,27 @@ import {
   CUSTOM_MAX_BITS,
   CUSTOM_MAX_SNR_DB,
   CUSTOM_MIN_SNR_DB,
-  createCustomQuestion,
-  createSavedRecord,
   formatBer,
-  gradeCustomAnswer,
-  loadSavedQuestions,
-  removeSavedQuestion,
-  saveSavedQuestion,
-  type CustomGrade,
-  type CustomQuestion,
-  type SavedQuestion,
   type StorageLike,
 } from '../core/customQuestion'
+import {
+  CONV_MAX_EBN0,
+  CONV_MAX_INFO_BITS,
+  OFDM_MAX_SYMBOLS,
+  createLabQuestion,
+  createSavedLabRecord,
+  gradeLabAnswer,
+  labHref,
+  loadSavedLabQuestions,
+  removeSavedLabQuestion,
+  saveSavedLabQuestion,
+  type LabGrade,
+  type LabQuestion,
+  type QuestionKind,
+  type SavedLabQuestion,
+} from '../core/labQuestions'
 import { QAM_ORDERS, orderLabel } from '../core/qam'
+import { MAX_CP, MAX_DELAY } from '../core/ofdm'
 
 const KIND_LABEL: Record<Mission['kind'], string> = {
   numeric: '数值题',
@@ -74,7 +82,7 @@ function getBrowserStorage(): StorageLike | null {
   }
 }
 
-type InitialSaved = { items: SavedQuestion[]; note: string | null }
+type InitialSaved = { items: SavedLabQuestion[]; note: string | null }
 
 /** 首次渲染时读一次本地存档；读不出来就给提示，不让页面崩。 */
 function loadInitialSaved(): InitialSaved {
@@ -82,7 +90,7 @@ function loadInitialSaved(): InitialSaved {
   if (!storage) {
     return { items: [], note: '浏览器禁用了本地存储，这一区这次不能保存。' }
   }
-  const loaded = loadSavedQuestions(storage)
+  const loaded = loadSavedLabQuestions(storage)
   return { items: loaded.items, note: loaded.error }
 }
 
@@ -90,17 +98,28 @@ export function MissionPage() {
   const [answers, setAnswers] = useState<Record<string, MissionAnswer | null>>({})
   const [grades, setGrades] = useState<MissionGrade[] | null>(null)
 
-  const [draft, setDraft] = useState({
+  const [questionKind, setQuestionKind] = useState<QuestionKind>('qam')
+  const [qamDraft, setQamDraft] = useState({
     order: 16,
     snrDb: '12',
     sampleBits: String(CUSTOM_DEFAULT_BITS),
   })
-  const [customQuestion, setCustomQuestion] = useState<CustomQuestion | null>(null)
+  const [convDraft, setConvDraft] = useState({
+    ebN0: '2',
+    infoBits: '12',
+    noise: true,
+  })
+  const [ofdmDraft, setOfdmDraft] = useState({
+    cpLen: '16',
+    delay: '9',
+    symbolCount: '200',
+  })
+  const [customQuestion, setCustomQuestion] = useState<LabQuestion | null>(null)
   const [customError, setCustomError] = useState<string | null>(null)
   const [customAnswer, setCustomAnswer] = useState('')
-  const [customGrade, setCustomGrade] = useState<CustomGrade | null>(null)
+  const [customGrade, setCustomGrade] = useState<LabGrade | null>(null)
   const [initialSaved] = useState<InitialSaved>(loadInitialSaved)
-  const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>(initialSaved.items)
+  const [savedQuestions, setSavedQuestions] = useState<SavedLabQuestion[]>(initialSaved.items)
   const [storageNote, setStorageNote] = useState<string | null>(initialSaved.note)
   const [savedId, setSavedId] = useState<string | null>(null)
 
@@ -116,14 +135,28 @@ export function MissionPage() {
     return map
   }, [grades])
 
-  const setDraftField = (field: 'order' | 'snrDb' | 'sampleBits', value: string | number) => {
-    setDraft((prev) => ({ ...prev, [field]: value }))
-  }
+  const toNumber = (raw: string) => (raw.trim() === '' ? Number.NaN : Number(raw))
 
   const handleGenerate = () => {
-    const snrDb = draft.snrDb.trim() === '' ? Number.NaN : Number(draft.snrDb)
-    const sampleBits = draft.sampleBits.trim() === '' ? Number.NaN : Number(draft.sampleBits)
-    const result = createCustomQuestion({ order: draft.order, snrDb, sampleBits })
+    const params =
+      questionKind === 'qam'
+        ? {
+            order: qamDraft.order,
+            snrDb: toNumber(qamDraft.snrDb),
+            sampleBits: toNumber(qamDraft.sampleBits),
+          }
+        : questionKind === 'conv'
+          ? {
+              ebN0: toNumber(convDraft.ebN0),
+              infoBits: toNumber(convDraft.infoBits),
+              noise: convDraft.noise,
+            }
+          : {
+              cpLen: toNumber(ofdmDraft.cpLen),
+              delay: toNumber(ofdmDraft.delay),
+              symbolCount: toNumber(ofdmDraft.symbolCount),
+            }
+    const result = createLabQuestion(questionKind, params)
 
     if (!result.ok) {
       // 校验没过就把上一道题清掉：不能让旧题面留着，让人以为这次生成成功了。
@@ -144,7 +177,7 @@ export function MissionPage() {
 
   const handleGrade = () => {
     if (!customQuestion) return
-    setCustomGrade(gradeCustomAnswer(customQuestion, customAnswer))
+    setCustomGrade(gradeLabAnswer(customQuestion, customAnswer))
     setSavedId(null)
   }
 
@@ -160,14 +193,14 @@ export function MissionPage() {
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const record = createSavedRecord(
+    const record = createSavedLabRecord(
       customQuestion,
       customGrade.parsed,
       customGrade.correct,
       new Date().toISOString(),
       id,
     )
-    const result = saveSavedQuestion(storage, record)
+    const result = saveSavedLabQuestion(storage, record)
     setSavedQuestions(result.items)
     setStorageNote(result.error)
     if (result.ok) setSavedId(id)
@@ -179,7 +212,7 @@ export function MissionPage() {
       setStorageNote('浏览器禁用了本地存储，删不了。')
       return
     }
-    const result = removeSavedQuestion(storage, id)
+    const result = removeSavedLabQuestion(storage, id)
     setSavedQuestions(result.items)
     setStorageNote(result.error)
   }
@@ -289,51 +322,154 @@ export function MissionPage() {
         <header className="custom-head">
           <h2>你自己出题</h2>
           <p className="custom-lede">
-            挑阶数、信噪比和样本量，点一下生成一道题。题目是你自己出的；标准答案由本地仿真现算；整个过程不联网，
-            没有后端、没有账号。
+            挑一个实验台、把参数摆好，点一下生成一道题。题目是你自己出的；标准答案由本地仿真现算；整个过程不联网，
+            没有后端、没有账号。答完可以点「用这组参数去实验台」，那边会把同一组参数原样填回去。
           </p>
         </header>
 
+        <div className="custom-kinds" role="group" aria-label="题型">
+          {([
+            ['qam', 'QAM 误码率'],
+            ['conv', '卷积码错比特'],
+            ['ofdm', 'OFDM 错符号'],
+          ] as const).map(([kind, label]) => (
+            <button
+              key={kind}
+              type="button"
+              aria-pressed={questionKind === kind}
+              onClick={() => setQuestionKind(kind)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="custom-controls">
-          <div className="custom-field">
-            <span>星座阶数</span>
-            <div className="segmented" role="group" aria-label="自定义题阶数">
-              {QAM_ORDERS.map((order) => (
-                <button
-                  key={order}
-                  type="button"
-                  aria-pressed={draft.order === order}
-                  onClick={() => setDraftField('order', order)}
-                >
-                  {orderLabel(order)}
-                </button>
-              ))}
-            </div>
-          </div>
+          {questionKind === 'qam' && (
+            <>
+              <div className="custom-field">
+                <span>星座阶数</span>
+                <div className="segmented" role="group" aria-label="自定义题阶数">
+                  {QAM_ORDERS.map((order) => (
+                    <button
+                      key={order}
+                      type="button"
+                      aria-pressed={qamDraft.order === order}
+                      onClick={() => setQamDraft((prev) => ({ ...prev, order }))}
+                    >
+                      {orderLabel(order)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label className="custom-field">
+                <span>信噪比 Es/N0（{CUSTOM_MIN_SNR_DB}–{CUSTOM_MAX_SNR_DB} dB）</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  min={CUSTOM_MIN_SNR_DB}
+                  max={CUSTOM_MAX_SNR_DB}
+                  value={qamDraft.snrDb}
+                  onChange={(event) => setQamDraft((prev) => ({ ...prev, snrDb: event.target.value }))}
+                />
+              </label>
+              <label className="custom-field">
+                <span>样本量（比特，最多 {formatCount(CUSTOM_MAX_BITS)}）</span>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max={CUSTOM_MAX_BITS}
+                  value={qamDraft.sampleBits}
+                  onChange={(event) => setQamDraft((prev) => ({ ...prev, sampleBits: event.target.value }))}
+                />
+              </label>
+            </>
+          )}
 
-          <label className="custom-field">
-            <span>信噪比 Es/N0（0–20 dB）</span>
-            <input
-              type="number"
-              step="0.5"
-              min={CUSTOM_MIN_SNR_DB}
-              max={CUSTOM_MAX_SNR_DB}
-              value={draft.snrDb}
-              onChange={(event) => setDraftField('snrDb', event.target.value)}
-            />
-          </label>
+          {questionKind === 'conv' && (
+            <>
+              <label className="custom-field">
+                <span>每信息比特 Eb/N0（0–{CONV_MAX_EBN0} dB）</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max={CONV_MAX_EBN0}
+                  value={convDraft.ebN0}
+                  onChange={(event) => setConvDraft((prev) => ({ ...prev, ebN0: event.target.value }))}
+                />
+              </label>
+              <label className="custom-field">
+                <span>信息比特数（1–{CONV_MAX_INFO_BITS}）</span>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max={CONV_MAX_INFO_BITS}
+                  value={convDraft.infoBits}
+                  onChange={(event) => setConvDraft((prev) => ({ ...prev, infoBits: event.target.value }))}
+                />
+              </label>
+              <div className="custom-field">
+                <span>噪声</span>
+                <div className="segmented" role="group" aria-label="自定义题噪声">
+                  <button
+                    type="button"
+                    aria-pressed={convDraft.noise}
+                    onClick={() => setConvDraft((prev) => ({ ...prev, noise: true }))}
+                  >
+                    开着
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={!convDraft.noise}
+                    onClick={() => setConvDraft((prev) => ({ ...prev, noise: false }))}
+                  >
+                    关掉
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
-          <label className="custom-field">
-            <span>样本量（比特，最多 {formatCount(CUSTOM_MAX_BITS)}）</span>
-            <input
-              type="number"
-              step="1"
-              min="1"
-              max={CUSTOM_MAX_BITS}
-              value={draft.sampleBits}
-              onChange={(event) => setDraftField('sampleBits', event.target.value)}
-            />
-          </label>
+          {questionKind === 'ofdm' && (
+            <>
+              <label className="custom-field">
+                <span>CP 长度（0–{MAX_CP}）</span>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  max={MAX_CP}
+                  value={ofdmDraft.cpLen}
+                  onChange={(event) => setOfdmDraft((prev) => ({ ...prev, cpLen: event.target.value }))}
+                />
+              </label>
+              <label className="custom-field">
+                <span>延时（0–{MAX_DELAY}）</span>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  max={MAX_DELAY}
+                  value={ofdmDraft.delay}
+                  onChange={(event) => setOfdmDraft((prev) => ({ ...prev, delay: event.target.value }))}
+                />
+              </label>
+              <label className="custom-field">
+                <span>符号数（1–{OFDM_MAX_SYMBOLS}）</span>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max={OFDM_MAX_SYMBOLS}
+                  value={ofdmDraft.symbolCount}
+                  onChange={(event) => setOfdmDraft((prev) => ({ ...prev, symbolCount: event.target.value }))}
+                />
+              </label>
+            </>
+          )}
 
           <button type="button" className="custom-generate" onClick={handleGenerate}>
             生成一道题
@@ -341,7 +477,9 @@ export function MissionPage() {
         </div>
 
         <p className="custom-hint">
-          样本量按比特填，最小 1；样本太小时题目会退化——比如 1 个比特只有 0 和 1 两种答案，建议 20,000 比特以上。
+          {questionKind === 'qam' && `样本量按比特填，最小 1；样本太小时题目会退化——比如 1 个比特只有 0 和 1 两种答案，建议 20,000 比特以上。`}
+          {questionKind === 'conv' && `短序列一次只摆 ${CONV_MAX_INFO_BITS} 位，所以信息比特最多 ${CONV_MAX_INFO_BITS} 个；题面会写清分母。`}
+          {questionKind === 'ofdm' && `按 OFDM 符号数填，每个符号 64 个子载波；题面会写清分母。`}
         </p>
 
         {customError && (
@@ -352,12 +490,13 @@ export function MissionPage() {
 
         {customQuestion && (
           <div className="custom-question">
-            <p className="mission-q">
-              {customQuestion.label}，Es/N0 = {customQuestion.snrDb} dB，样本量 {formatCount(customQuestion.sampleBits)} 比特。
-              这组参数下的误码率是多少？
-            </p>
+            <p className="mission-q">{customQuestion.prompt}</p>
             <p className="custom-tolerance">
-              判分容差：真值大于 0 时，|你填的 − 仿真值| ≤ max(仿真值 × 10%, 1e-5)；真值等于 0 时须填 0。
+              {customQuestion.answerKind === 'rate'
+                ? '判分容差：真值大于 0 时，|你填的 − 仿真值| ≤ max(仿真值 × 10%, 1e-5)；真值等于 0 时须填 0。'
+                : `判分按整数精确比对，差 1 也算错；分母是 ${formatCount(customQuestion.total)} 个${
+                    customQuestion.kind === 'conv' ? '信息比特' : 'QPSK 符号'
+                  }，回复里会带上。`}
             </p>
 
             <div className="custom-answer-row">
@@ -365,7 +504,7 @@ export function MissionPage() {
                 className="mission-input"
                 type="text"
                 inputMode="decimal"
-                placeholder="比如 2.9e-2"
+                placeholder={customQuestion.answerKind === 'rate' ? '比如 2.9e-2' : '填一个整数'}
                 value={customAnswer}
                 onChange={(event) => {
                   setCustomAnswer(event.target.value)
@@ -380,10 +519,16 @@ export function MissionPage() {
             </div>
 
             {customGrade && customGrade.parsed !== null && (
-              <>
-                <p className={customGrade.correct ? 'mission-reason ok' : 'mission-reason bad'}>
-                  {customGrade.reason}
-                </p>
+              <p className={customGrade.correct ? 'mission-reason ok' : 'mission-reason bad'}>
+                {customGrade.reason}
+              </p>
+            )}
+
+            <div className="custom-actions">
+              <a className="custom-transfer" href={labHref(customQuestion)}>
+                用这组参数去实验台
+              </a>
+              {customGrade && customGrade.parsed !== null && (
                 <button
                   type="button"
                   className="custom-save"
@@ -392,8 +537,8 @@ export function MissionPage() {
                 >
                   {savedId === null ? '保存这道题' : '已存到本地'}
                 </button>
-              </>
-            )}
+              )}
+            </div>
           </div>
         )}
 
@@ -414,16 +559,17 @@ export function MissionPage() {
               {savedQuestions.map((item) => (
                 <li className="saved-item" key={item.id}>
                   <div className="saved-line">
-                    <span className="saved-params">
-                      {orderLabel(item.order)} · {item.snrDb} dB · {formatCount(item.sampleBits)} 比特
-                    </span>
+                    <span className="saved-params">{item.summary}</span>
                     <span className={item.correct ? 'mission-flag ok' : 'mission-flag bad'}>
                       {item.correct ? '答对' : '答错'}
                     </span>
                   </div>
                   <p className="saved-detail">
-                    仿真答案 {formatBer(item.truth)}（错 {formatCount(item.bitErrors)} / 共 {formatCount(item.bitCount)} 比特）；
-                    你填 {formatBer(item.given)}
+                    {item.kind === 'qam'
+                      ? `仿真答案 ${formatBer(item.truth)}（错 ${formatCount(item.errors)} / 共 ${formatCount(item.total)} 比特）；你填 ${formatBer(item.given)}`
+                      : `仿真答案 ${item.truth} 个（分母 ${formatCount(item.total)} 个${
+                          item.kind === 'conv' ? '信息比特' : 'QPSK 符号'
+                        }）；你填 ${item.given}`}
                   </p>
                   <div className="saved-foot">
                     <time dateTime={item.savedAt}>{formatSavedAt(item.savedAt)}</time>

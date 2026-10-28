@@ -21,9 +21,11 @@ import {
   transmit,
 } from '../core/conv'
 import { deriveSeed } from '../core/metrics'
+import { FromQuestionNote } from './FromQuestionNote'
+import { CONV_MAX_INFO_BITS, readConvParams } from '../core/labQuestions'
 
-/** 短序列的信息比特数。 */
-const DEMO_BITS = 12
+/** 短序列默认信息比特数；上限与页面能摆开的格子数一致。 */
+const DEFAULT_INFO_BITS = 12
 const DEMO_SEED = 20261027
 const CURVE_BITS = 20000
 const FROM_DB = 0
@@ -72,8 +74,11 @@ function BitRow({
 }
 
 export function ConvPage() {
-  const [ebN0, setEbN0] = useState(2)
-  const [noiseOn, setNoiseOn] = useState(true)
+  const [initial] = useState(() => readConvParams(window.location.hash))
+  const [ebN0, setEbN0] = useState(initial.ebN0)
+  const [infoBits, setInfoBits] = useState(initial.infoBits)
+  const [fromQuery, setFromQuery] = useState(initial.fromQuery)
+  const [noiseOn, setNoiseOn] = useState(initial.noise)
   const [seed, setSeed] = useState(DEMO_SEED)
   const [flipKey, setFlipKey] = useState<FlipKey>('none')
   const [decoder, setDecoder] = useState<'hard' | 'soft'>('hard')
@@ -81,7 +86,7 @@ export function ConvPage() {
   const demo = useMemo(() => {
     const bitsRng = createRng(seed)
     const bits: number[] = []
-    for (let i = 0; i < DEMO_BITS; i += 1) bits.push(bitsRng.next() > 0.5 ? 1 : 0)
+    for (let i = 0; i < infoBits; i += 1) bits.push(bitsRng.next() > 0.5 ? 1 : 0)
 
     const encoded = encodeConvolutional(bits)
     // 码率 1/2：同样的 Eb/N0 下，每个码符号只有一半能量。
@@ -109,7 +114,7 @@ export function ConvPage() {
       codedErrors: sliced.reduce((sum, bit, index) => sum + (bit === encoded.coded[index] ? 0 : 1), 0),
       infoErrors: info.reduce((sum, bit, index) => sum + (bit === bits[index] ? 0 : 1), 0),
     }
-  }, [ebN0, noiseOn, seed, flipKey, decoder])
+  }, [ebN0, noiseOn, seed, flipKey, decoder, infoBits])
 
   const curve = useMemo(
     () =>
@@ -151,6 +156,19 @@ export function ConvPage() {
           也能顺着编码留下的约束找回去。下面先用一条 12 比特的短序列把四行摊开，再扫一条对照曲线。
         </p>
       </header>
+
+      {fromQuery && (
+        <FromQuestionNote
+          text={`这组参数来自任务模式「你自己出题」：卷积码 · ${ebN0} dB · ${infoBits} 信息比特 · ${noiseOn ? '有噪声' : '无噪声'}。已经原样回填；改动控件后这组参数就归你了。`}
+          onRestore={() => {
+            setEbN0(2)
+            setInfoBits(DEFAULT_INFO_BITS)
+            setNoiseOn(true)
+            setFromQuery(false)
+            history.replaceState(null, '', '#/conv')
+          }}
+        />
+      )}
 
       <div className="lab-layout">
         <section className="chart-block sequence" aria-label="短序列例子">
@@ -203,10 +221,10 @@ export function ConvPage() {
           </div>
 
           <p className="read-guide">
-            四行是同一条链路上四个位置的样子：<strong>原始</strong>是你要发的 12 位信息；
-            <strong>编码后</strong>是真正上路的 28 位码字（末尾两位淡灰是补零）；
+            四行是同一条链路上四个位置的样子：<strong>原始</strong>是你要发的 {infoBits} 位信息；
+            <strong>编码后</strong>是真正上路的 {2 * (infoBits + 2)} 位码字（末尾两位淡灰是补零）；
             <strong>加噪后</strong>是接收端按门限切出来的比特，琥珀格是噪声打翻的；
-            <strong>译码后</strong>只留 12 位信息，红色格表示没纠回来、页面不会替你圆。
+            <strong>译码后</strong>只留 {infoBits} 位信息，红色格表示没纠回来、页面不会替你圆。
             把噪声关掉再点「翻 2 位」，加噪后会出现两个琥珀，译码后照样全对——这就是纠错在干活。
           </p>
         </section>
@@ -227,6 +245,27 @@ export function ConvPage() {
             />
             <span className="control-hint">
               码率 1/2 的那 3.01 dB 折算已经算进内部，这里填的就是每信息比特的信噪比。
+            </span>
+          </label>
+
+          <label className="control">
+            <span className="control-label">
+              信息比特数
+              <strong>{infoBits} 位</strong>
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={CONV_MAX_INFO_BITS}
+              step={1}
+              value={infoBits}
+              onChange={(event) => {
+                const next = Number(event.target.value)
+                if (Number.isInteger(next) && next >= 1 && next <= CONV_MAX_INFO_BITS) setInfoBits(next)
+              }}
+            />
+            <span className="control-hint">
+              短序列一次只摆 {CONV_MAX_INFO_BITS} 位，所以这里最大 {CONV_MAX_INFO_BITS}；改完四行会按新长度重画。
             </span>
           </label>
 
@@ -318,6 +357,10 @@ export function ConvPage() {
           </div>
 
           <dl className="params">
+            <div>
+              <dt>短序列长度</dt>
+              <dd>{infoBits} 个信息比特（最多 {CONV_MAX_INFO_BITS} 位，四行能同时摆开）</dd>
+            </div>
             <div>
               <dt>码型</dt>
               <dd>约束长度 3、码率 1/2、生成多项式 7 与 5</dd>

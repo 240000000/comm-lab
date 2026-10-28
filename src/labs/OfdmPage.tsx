@@ -7,8 +7,10 @@ import { useMemo, useState } from 'react'
 import { MAX_CP, MAX_DELAY, SUBCARRIERS, runOfdm } from '../core/ofdm.ts'
 import { OfdmSpectrumChart } from './OfdmSpectrumChart.tsx'
 import { OfdmTimeChart } from './OfdmTimeChart.tsx'
+import { FromQuestionNote } from './FromQuestionNote.tsx'
+import { OFDM_MAX_SYMBOLS, readOfdmParams } from '../core/labQuestions.ts'
 
-const SYMBOLS = 200
+const DEFAULT_SYMBOLS = 200
 const DEFAULT_SEED = 20261027
 const DEFAULT_CP = 16
 const DEFAULT_DELAY = 9
@@ -29,11 +31,17 @@ function readout(errors: number, total: number, unit: string) {
 }
 
 export function OfdmPage() {
-  const [cpLen, setCpLen] = useState(DEFAULT_CP)
-  const [delay, setDelay] = useState(DEFAULT_DELAY)
+  const [initial] = useState(() => readOfdmParams(window.location.hash))
+  const [cpLen, setCpLen] = useState(initial.cpLen)
+  const [delay, setDelay] = useState(initial.delay)
+  const [symbolCount, setSymbolCount] = useState(initial.symbolCount)
+  const [fromQuery, setFromQuery] = useState(initial.fromQuery)
   const [seed, setSeed] = useState(DEFAULT_SEED)
 
-  const result = useMemo(() => runOfdm({ cpLen, delay, symbolCount: SYMBOLS, seed }), [cpLen, delay, seed])
+  const result = useMemo(
+    () => runOfdm({ cpLen, delay, symbolCount, seed }),
+    [cpLen, delay, symbolCount, seed],
+  )
 
   const withCp = readout(result.withCp.symbolErrors, result.withCp.symbolCount, ' QPSK 符号')
   const noCp = readout(result.noCp.symbolErrors, result.noCp.symbolCount, ' QPSK 符号')
@@ -52,6 +60,19 @@ export function OfdmPage() {
         一条主径，加一条延时径。把延时慢慢拉过 CP 的长度：CP 之内，多径的拖尾落在前缀里，数据段是干净的；CP 之外，
         拖尾压进数据段，码间干扰就来了。左边是时域，下边是 64 个子载波上的接收点。
       </p>
+
+      {fromQuery && (
+        <FromQuestionNote
+          text={`这组参数来自任务模式「你自己出题」：OFDM · CP ${cpLen} · 延时 ${delay} · ${symbolCount} 符号。已经原样回填；改动控件后这组参数就归你了。`}
+          onRestore={() => {
+            setCpLen(DEFAULT_CP)
+            setDelay(DEFAULT_DELAY)
+            setSymbolCount(DEFAULT_SYMBOLS)
+            setFromQuery(false)
+            history.replaceState(null, '', '#/ofdm')
+          }}
+        />
+      )}
 
       <section className="lab-layout">
         <div className="chart-block">
@@ -101,6 +122,26 @@ export function OfdmPage() {
               : `延时 ${delay} > CP ${cpLen}：拖尾压进数据段 ${intrude} 个采样，码间干扰从这里开始。`}
           </p>
 
+          <label className="control-label" htmlFor="symbol-count">
+            <span>统计符号数</span>
+            <strong>{symbolCount} 个符号</strong>
+          </label>
+          <input
+            id="symbol-count"
+            type="number"
+            min={1}
+            max={OFDM_MAX_SYMBOLS}
+            step={1}
+            value={symbolCount}
+            onChange={(event) => {
+              const next = Number(event.target.value)
+              if (Number.isInteger(next) && next >= 1 && next <= OFDM_MAX_SYMBOLS) setSymbolCount(next)
+            }}
+          />
+          <p className="control-hint">
+            按 OFDM 符号填（每个符号 64 个子载波）。最多 {OFDM_MAX_SYMBOLS} 个，改完两条支路的读数会按新分母重算。
+          </p>
+
           <label className="control-label" htmlFor="seed">
             <span>随机种子</span>
             <strong>{seed}</strong>
@@ -134,7 +175,7 @@ export function OfdmPage() {
             <div>
               <dt>统计样本</dt>
               <dd>
-                {SYMBOLS} 个符号 / {result.withCp.symbolCount.toLocaleString('en-US')} 个 QPSK 符号
+                {symbolCount.toLocaleString('en-US')} 个符号 / {result.withCp.symbolCount.toLocaleString('en-US')} 个 QPSK 符号
               </dd>
             </div>
             <div>
