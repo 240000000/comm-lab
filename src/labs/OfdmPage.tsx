@@ -1,6 +1,9 @@
 /**
  * OFDM 实验台：只演示一件事——循环前缀把多径的拖尾关在 CP 里。
  * 不做信道估计、不做均衡、不做频偏，也不做多天线。
+ *
+ * 版式（R16 第二批）：上半屏左时域、右接收点；参数压成一条横栏；读数在横栏右端；
+ * 长说明默认折叠；页面底部留给结论卡片。
  */
 import { useMemo, useState } from 'react'
 
@@ -49,7 +52,7 @@ export function OfdmPage() {
   const intrude = result.wave.intrudingSamples
 
   return (
-    <main className="lab">
+    <main className="lab lab-ofdm">
       <a className="back" href="#/">
         ← 返回首页
       </a>
@@ -57,8 +60,9 @@ export function OfdmPage() {
       <p className="eyebrow">OFDM 时频链路</p>
       <h1>循环前缀到底挡住了什么</h1>
       <p className="lede">
-        一条主径，加一条延时径。把延时慢慢拉过 CP 的长度：CP 之内，多径的拖尾落在前缀里，数据段是干净的；CP 之外，
-        拖尾压进数据段，码间干扰就来了。左边是时域，下边是 64 个子载波上的接收点。
+        一条主径，加一条延时径。把延时慢慢拉过 CP 的长度：CP 之内，多径的拖尾落在前缀里，数据段是干净的；CP
+        之外，拖尾压进数据段，码间干扰就来了。左边是时域，右边是 64 个子载波上的接收点，
+        两条支路的错号数在下面横栏的右端。
       </p>
 
       {fromQuery && (
@@ -74,19 +78,41 @@ export function OfdmPage() {
         />
       )}
 
-      <section className="lab-layout">
-        <div className="chart-block">
+      <section className="ofdm-stage">
+        <div className="ofdm-panel ofdm-time">
           <h2 className="section-head">一个 OFDM 符号的时域波形</h2>
           <OfdmTimeChart wave={result.wave} />
-          <p className="read-guide">
-            横轴是一个符号的 {SUBCARRIERS + cpLen} 个采样：左边 {cpLen} 个是 CP（浅色底），右边 {SUBCARRIERS} 个是数据段。
-            青线和灰线在哪里分开，就说明延时径在那里咬了进来。延时 ≤ CP 时，分开的地方全在底色里；延时 &gt; CP 时，
-            分开的地方会挪进数据段——也就是码间干扰真正发生的位置。
-          </p>
         </div>
 
-        <div className="controls">
-          <label className="control-label" htmlFor="cp-len">
+        <div className="ofdm-panel ofdm-space">
+          <div className="ofdm-space-head">
+            <h2 className="section-head">64 个子载波上的接收点</h2>
+            <p className="ofdm-caption">空心方框是 QPSK 的理想位置；点贴着方框，就说明这个子载波没被码间干扰碰到。</p>
+          </div>
+          <div className="spectrum-pair">
+            <div>
+              <p className="spectrum-title">有 CP · 误符号率 {withCp.value}</p>
+              <OfdmSpectrumChart
+                points={result.withCp.constellation}
+                accent="#3ce3c6"
+                hasError={result.withCp.symbolErrors > 0}
+              />
+            </div>
+            <div>
+              <p className="spectrum-title">没有 CP · 误符号率 {noCp.value}</p>
+              <OfdmSpectrumChart
+                points={result.noCp.constellation}
+                accent="#ffb054"
+                hasError={result.noCp.symbolErrors > 0}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="ofdm-bar" aria-label="OFDM 参数与两条支路的读数">
+        <div className="ofdm-bar-item">
+          <label className="ofdm-bar-label" htmlFor="cp-len">
             <span>循环前缀长度 CP</span>
             <strong>{cpLen} 个采样</strong>
           </label>
@@ -99,11 +125,10 @@ export function OfdmPage() {
             value={cpLen}
             onChange={(event) => setCpLen(Number(event.target.value))}
           />
-          <p className="control-hint">
-            CP 越长，能吸收的延时越长，但每发 64 个数据采样就白搭 {cpLen} 个采样，速率按 64/{64 + cpLen} 掉。
-          </p>
+        </div>
 
-          <label className="control-label" htmlFor="delay">
+        <div className="ofdm-bar-item">
+          <label className="ofdm-bar-label" htmlFor="delay">
             <span>延时径的延时</span>
             <strong>{delay} 个采样</strong>
           </label>
@@ -116,15 +141,12 @@ export function OfdmPage() {
             value={delay}
             onChange={(event) => setDelay(Number(event.target.value))}
           />
-          <p className="control-hint">
-            {echoInCp
-              ? `延时 ${delay} ≤ CP ${cpLen}：拖尾整个落在前缀里，数据段没有被压到。`
-              : `延时 ${delay} > CP ${cpLen}：拖尾压进数据段 ${intrude} 个采样，码间干扰从这里开始。`}
-          </p>
+        </div>
 
-          <label className="control-label" htmlFor="symbol-count">
+        <div className="ofdm-bar-item ofdm-bar-num">
+          <label className="ofdm-bar-label" htmlFor="symbol-count">
             <span>统计符号数</span>
-            <strong>{symbolCount} 个符号</strong>
+            <strong>{symbolCount} 个</strong>
           </label>
           <input
             id="symbol-count"
@@ -138,11 +160,10 @@ export function OfdmPage() {
               if (Number.isInteger(next) && next >= 1 && next <= OFDM_MAX_SYMBOLS) setSymbolCount(next)
             }}
           />
-          <p className="control-hint">
-            按 OFDM 符号填（每个符号 64 个子载波）。最多 {OFDM_MAX_SYMBOLS} 个，改完两条支路的读数会按新分母重算。
-          </p>
+        </div>
 
-          <label className="control-label" htmlFor="seed">
+        <div className="ofdm-bar-item ofdm-bar-seed">
+          <label className="ofdm-bar-label" htmlFor="seed">
             <span>随机种子</span>
             <strong>{seed}</strong>
           </label>
@@ -157,81 +178,70 @@ export function OfdmPage() {
               换一颗
             </button>
           </div>
-          <p className="control-hint">同一颗种子、同一组参数，两条支路的误符号率逐位相同。</p>
+        </div>
 
-          <dl className="params">
-            <div>
-              <dt>子载波数</dt>
-              <dd>{SUBCARRIERS}（刚好一个符号 64 个采样）</dd>
-            </div>
-            <div>
-              <dt>调制</dt>
-              <dd>QPSK，每子载波 2 比特</dd>
-            </div>
-            <div>
-              <dt>延时径幅度</dt>
-              <dd>0.5（功率是主径的 1/4，不会两径抵消）</dd>
-            </div>
-            <div>
-              <dt>统计样本</dt>
-              <dd>
-                {symbolCount.toLocaleString('en-US')} 个符号 / {result.withCp.symbolCount.toLocaleString('en-US')} 个 QPSK 符号
-              </dd>
-            </div>
-            <div>
-              <dt>变换</dt>
-              <dd>按定义算的 64 点 DFT / IDFT</dd>
-            </div>
-          </dl>
+        <div className="ofdm-bar-readouts">
+          <div className="ofdm-ro">
+            <span className="ofdm-ro-title">有 CP</span>
+            <strong className="ofdm-ro-value">{withCp.value}</strong>
+            <span className="ofdm-ro-count">{withCp.count}</span>
+            <span className="ofdm-ro-evm">EVM {result.withCp.evmPercent.toFixed(1)}%</span>
+          </div>
+          <div className="ofdm-ro">
+            <span className="ofdm-ro-title">没有 CP</span>
+            <strong className="ofdm-ro-value">{noCp.value}</strong>
+            <span className="ofdm-ro-count">{noCp.count}</span>
+            <span className="ofdm-ro-evm">EVM {result.noCp.evmPercent.toFixed(1)}%</span>
+          </div>
         </div>
       </section>
 
-      <section className="readouts">
-        <div className="readout">
-          <h2>有 CP 的误符号率</h2>
-          <p className="readout-value">{withCp.value}</p>
-          <p className="readout-count">{withCp.count}</p>
-          <p className="readout-note">
-            每符号 64 个采样之外多带了 {cpLen} 个前缀，收端丢掉前缀再解。
-            EVM 小字：{result.withCp.evmPercent.toFixed(1)}%（按 64 个子载波各自归一）
-          </p>
-        </div>
-        <div className="readout">
-          <h2>没有 CP 的误符号率</h2>
-          <p className="readout-value">{noCp.value}</p>
-          <p className="readout-count">{noCp.count}</p>
-          <p className="readout-note">
-            同样的数据、同样的信道，只是不发前缀。
-            EVM 小字：{result.noCp.evmPercent.toFixed(1)}%（按 64 个子载波各自归一）
-          </p>
-        </div>
-      </section>
+      <p className="ofdm-dyn">
+        {echoInCp
+          ? `延时 ${delay} ≤ CP ${cpLen}：拖尾整个落在前缀里，数据段没有被压到。`
+          : `延时 ${delay} > CP ${cpLen}：拖尾压进数据段 ${intrude} 个采样，码间干扰从这里开始。`}
+      </p>
 
-      <section className="chart-block">
-        <h2 className="section-head">64 个子载波上的接收点</h2>
-        <p className="control-hint">
-          空心方框是 QPSK 的四个理想位置；实心点是最后一个符号解出来的 64 个接收点。点都按各自子载波归一过，
-          所以「点贴在方框上」= 那个子载波没有被码间干扰碰过。右边那条支路没有 CP。
+      <details className="ofdm-guide">
+        <summary>怎么读这两张图</summary>
+        <p>
+          横轴是一个符号的 {SUBCARRIERS + cpLen} 个采样：左边 {cpLen} 个是 CP（浅色底），右边 {SUBCARRIERS}{' '}
+          个是数据段。青线和灰线在哪里分开，就说明延时径在那里咬了进来。延时 ≤ CP 时，分开的地方全在底色里；
+          延时 &gt; CP 时，分开的地方会挪进数据段——也就是码间干扰真正发生的位置。
         </p>
-        <div className="spectrum-pair">
+        <p>
+          接收点图里，空心方框是 QPSK 的四个理想位置，实心点是最后一个符号解出来的 64 个接收点。点都按各自子载波归一过，
+          所以「点贴在方框上」= 那个子载波没有被码间干扰碰过。右边那张是没有 CP 的支路，用来对照。
+        </p>
+      </details>
+
+      <details className="ofdm-params">
+        <summary>参数与口径</summary>
+        <dl className="params">
           <div>
-            <p className="spectrum-title">有 CP · 误符号率 {withCp.value}</p>
-            <OfdmSpectrumChart
-              points={result.withCp.constellation}
-              accent="#3ce3c6"
-              hasError={result.withCp.symbolErrors > 0}
-            />
+            <dt>子载波数</dt>
+            <dd>{SUBCARRIERS}（刚好一个符号 64 个采样）</dd>
           </div>
           <div>
-            <p className="spectrum-title">没有 CP · 误符号率 {noCp.value}</p>
-            <OfdmSpectrumChart
-              points={result.noCp.constellation}
-              accent="#ffb054"
-              hasError={result.noCp.symbolErrors > 0}
-            />
+            <dt>调制</dt>
+            <dd>QPSK，每子载波 2 比特</dd>
           </div>
-        </div>
-      </section>
+          <div>
+            <dt>延时径幅度</dt>
+            <dd>0.5（功率是主径的 1/4，不会两径抵消）</dd>
+          </div>
+          <div>
+            <dt>统计样本</dt>
+            <dd>
+              {symbolCount.toLocaleString('en-US')} 个符号 / {result.withCp.symbolCount.toLocaleString('en-US')} 个 QPSK 符号
+            </dd>
+          </div>
+          <div>
+            <dt>变换</dt>
+            <dd>按定义算的 64 点 DFT / IDFT</dd>
+          </div>
+        </dl>
+      </details>
 
       <section className="notes">
         <article className="note-card">

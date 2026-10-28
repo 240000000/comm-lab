@@ -12,8 +12,8 @@ import { useEffect, useRef } from 'react'
 
 import type { WaveformView } from '../core/ofdm.ts'
 
-const WIDTH = 640
-const HEIGHT = 232
+const WIDTH = 440
+const HEIGHT = 300
 const PAD_LEFT = 42
 const PAD_RIGHT = 14
 const PAD_TOP = 16
@@ -40,8 +40,6 @@ export function OfdmTimeChart({ wave }: { wave: WaveformView }) {
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     canvas.width = Math.round(WIDTH * dpr)
     canvas.height = Math.round(HEIGHT * dpr)
-    canvas.style.width = `${WIDTH}px`
-    canvas.style.height = `${HEIGHT}px`
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -68,6 +66,15 @@ export function OfdmTimeChart({ wave }: { wave: WaveformView }) {
       ctx.lineTo(xOf(cpLen - 1) + plotW / (n - 1), PAD_TOP + plotH)
       ctx.stroke()
       ctx.setLineDash([])
+    }
+
+    // 拖尾压进数据段的那一段：淡淡的警告底色，跟着延时与 CP 变
+    if (intrudingSamples > 0) {
+      const step = plotW / (n - 1)
+      const start = cpLen
+      const end = cpLen + intrudingSamples - 1
+      ctx.fillStyle = 'rgba(255, 176, 84, 0.13)'
+      ctx.fillRect(xOf(start) - step / 2, PAD_TOP, xOf(end) - xOf(start) + step, plotH)
     }
 
     // 零线

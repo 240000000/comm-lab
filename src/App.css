@@ -1550,3 +1550,258 @@ a.card {
     padding: 42px 8px 8px;
   }
 }
+
+/* ---- OFDM 页（R16 第二批）：上图下一栏，读数在栏尾 ---- */
+
+.lab-ofdm {
+  padding-top: clamp(24px, 4vh, 40px);
+}
+
+.lab-ofdm .back {
+  margin-bottom: 18px;
+}
+
+.lab-ofdm h1 {
+  margin: 6px 0 10px;
+  font-size: clamp(28px, 3.6vw, 38px);
+}
+
+.lab-ofdm .lede {
+  max-width: none;
+  margin-bottom: 14px;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.ofdm-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 416px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 2px;
+}
+
+.ofdm-panel {
+  min-width: 0;
+}
+
+.ofdm-panel .section-head {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.ofdm-time .constellation-frame {
+  display: block;
+  padding: 6px;
+}
+
+.ofdm-time .constellation {
+  width: 100%;
+  height: auto;
+}
+
+.ofdm-caption {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--dim);
+}
+
+.ofdm-space-head .ofdm-caption {
+  margin: 0 0 8px;
+}
+
+.ofdm-space .spectrum-pair {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 16px;
+  margin: 0;
+}
+
+.ofdm-space .spectrum-pair > div {
+  flex: 0 0 314px;
+  min-width: 0;
+}
+
+.ofdm-space .constellation-frame {
+  padding: 6px;
+  border-radius: 10px;
+}
+
+.ofdm-space .spectrum-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.ofdm-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.55fr 0.8fr 1.35fr;
+  gap: 12px;
+  align-items: start;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0d151d;
+}
+
+.ofdm-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ofdm-bar-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+
+.ofdm-bar-label strong {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.ofdm-bar input[type="range"] {
+  width: 100%;
+  margin: 0;
+}
+
+.ofdm-bar input[type="number"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.ofdm-bar .seed-row {
+  display: flex;
+  gap: 6px;
+}
+
+.ofdm-bar .seed-row .ghost {
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.ofdm-bar-readouts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.ofdm-ro {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  row-gap: 0;
+  align-items: baseline;
+}
+
+.ofdm-ro-title {
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.ofdm-ro-value {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 15px;
+  color: var(--text);
+  text-align: right;
+}
+
+.ofdm-ro-count {
+  grid-column: 1 / -1;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+
+.ofdm-ro-evm {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: #6f8399;
+}
+
+.ofdm-dyn {
+  margin: 6px 2px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--dim);
+}
+
+.ofdm-guide,
+.ofdm-params {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+.ofdm-guide summary,
+.ofdm-params summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.ofdm-guide p {
+  max-width: 900px;
+  margin: 8px 0 0;
+  line-height: 1.85;
+}
+
+.ofdm-params .params {
+  margin-top: 8px;
+}
+
+@media (max-width: 1120px) {
+  .ofdm-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ofdm-time {
+    max-width: 520px;
+  }
+}
+
+@media (max-width: 720px) {
+  .ofdm-space .spectrum-pair {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .ofdm-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ofdm-bar-readouts {
+    grid-column: 1 / -1;
+    padding-top: 10px;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .ofdm-space .spectrum-pair {
+    flex-direction: column;
+  }
+
+  .ofdm-space .spectrum-pair > div {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .ofdm-bar {
+    grid-template-columns: 1fr;
+  }
+}
