@@ -4,7 +4,7 @@
 
 在线地址：https://240000000.github.io/comm-lab/
 
-本文件对应仓库 tag R23，仓库地址：https://github.com/240000000/comm-lab。想对着看代码，`git show R23` 能看到这一版的全部改动。
+本文件对应仓库提交 0f1646d（tag R23 之后的文字校订），仓库地址：https://github.com/240000000/comm-lab。想对着看代码，`git show 0f1646d` 能看到这一版的全部改动。
 
 ---
 
