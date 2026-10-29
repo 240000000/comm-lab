@@ -112,7 +112,7 @@ tests/           Node 内置 test runner 的单测（npm test）
 docs/dialogues/  与 AI 协作的原始 Prompt 存档，按轮次追加
 docs/preview.md  作品介绍（给评委看的一两页）
 docs/video-script.md  录屏脚本（分段、旁白、屏幕动作）
-docs/images/     文档里引用的截图
+docs/images/     文档里引用的六张页面截图（QAM 16QAM / 64QAM / BPSK 与卷积四行、曲线）
 docs/round-checklist.md  每轮收尾的固定清单
 .github/         GitHub Pages 自动部署
 public/          静态资源
