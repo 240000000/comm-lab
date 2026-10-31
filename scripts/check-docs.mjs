@@ -317,8 +317,10 @@ if (tagRun.status !== 0) {
 
   for (const file of FILES) {
     readFileSync(join(ROOT, file), 'utf8').split('\n').forEach((line, i) => {
+      const seen = new Set();
       for (const m of line.matchAll(/(?<![\w])R\d+[a-z]?(?![\w])/g)) {
-        if (tagSet.has(m[0])) continue;
+        if (tagSet.has(m[0]) || seen.has(m[0])) continue;
+        seen.add(m[0]);
         failures.push({
           file,
           line: i + 1,
@@ -333,11 +335,69 @@ if (tagRun.status !== 0) {
   structuralLine = `  轮次表 ${rows.length} 行，git tag -l ${tagList.length} 个；正文里的 tag 名已逐个核对。`;
 }
 
+// 表题与图题：md2docx 认「表题：」前缀，看不到就不给表编号，PDF 与仓库源稿就漂了。
+// 规则：表题恰好 7 条；每张表（连续 | 开头的行）上一行必须紧贴表题；图恰好 3 张且 alt 就是图题。
+let captionLine = '';
+{
+  const reportLines = readFileSync(join(ROOT, 'docs/tech-report.md'), 'utf8').split(/\r?\n/);
+  const captions = [];
+  const tables = [];
+  const figures = [];
+  reportLines.forEach((line, i) => {
+    if (line.startsWith('表题：')) captions.push(i + 1);
+    if (line.startsWith('|') && (i === 0 || !reportLines[i - 1].startsWith('|'))) tables.push(i);
+    const m = line.match(/^!\[(.*?)\]\((.*?)\)\s*$/);
+    if (m) figures.push({ line: i + 1, alt: m[1] });
+  });
+
+  if (captions.length !== 7) {
+    failures.push({
+      file: 'docs/tech-report.md',
+      line: captions[0] ?? 0,
+      label: '「表题：」行数不是 7',
+      written: `${captions.length} 条`,
+      actual: '7 条',
+    });
+  }
+  for (const at of tables) {
+    const prev = at > 0 ? reportLines[at - 1] : '';
+    if (prev.startsWith('表题：')) continue;
+    failures.push({
+      file: 'docs/tech-report.md',
+      line: at + 1,
+      label: '表格上一行不是「表题：」',
+      written: prev === '' ? '空行' : `「${prev.length > 30 ? `${prev.slice(0, 30)}…` : prev}」`,
+      actual: '紧贴一行「表题：…」',
+    });
+  }
+  if (figures.length !== 3) {
+    failures.push({
+      file: 'docs/tech-report.md',
+      line: figures[0]?.line ?? 0,
+      label: '图片数与图题数不是 3',
+      written: `${figures.length} 张`,
+      actual: '3 张',
+    });
+  }
+  for (const fig of figures) {
+    if (fig.alt.trim()) continue;
+    failures.push({
+      file: 'docs/tech-report.md',
+      line: fig.line,
+      label: '图片缺少图题（alt 文字）',
+      written: '空的',
+      actual: '一段图题文字',
+    });
+  }
+  captionLine = `  表题 ${captions.length} 条（表格 ${tables.length} 张）、图题 ${figures.length} 条。`;
+}
+
 console.log(`check-docs：用 src/core 重算文档数字（种子 ${SEED}）`);
 console.log(
   `  测试 ${testCount} 条 / ${testFileCount} 个文件；页面默认 ${PAGE_BITS} 比特，16QAM 12 dB 为 ${p12(16).symbolCount} 个符号、${p12(16).bitCount} 个比特`,
 );
 console.log(structuralLine);
+console.log(captionLine);
 console.log(
   `  本机耗时：单次 20,000 符号 ${singleSim.ms.toFixed(1)} ms；16QAM 21 点 ${berSweep.ms.toFixed(1)} ms；卷积 11 点 ${convSweep.ms.toFixed(1)} ms；OFDM 200 符号 ${ofdm.ms.toFixed(1)} ms`,
 );

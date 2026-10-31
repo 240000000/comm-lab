@@ -38,6 +38,7 @@
 | R22 | 2026-10-29 | `R22` | `95f0d8b` | docs(trace)：补 R12 与 R15 的对话原文、INDEX 十三行、README 与 preview 改 171 条并补三条原理短片说明（5 文件） |
 | R24 | 2026-10-31 | `R24` | 见 `R24` tag | ci(docs)：workflow 依次跑 `npm ci`/`npm test`/`npm run check:docs`/`npm run build`、node 22→24；新增 `scripts/check-docs.mjs`（68 条断言）与 `npm run check:docs`；preview/tech-report/README 数字按实测校正（8 文件） |
 | R25 | 2026-10-31 | `R25` | 见 `R25` tag | docs(report)：3.5 轮次表补到 R24（29 行，五个补丁轮各写理由）、新增 3.4 三条原理短片（42/48/59 秒、1,697,865/435,941/1,004,666 字节）、加目录约 17 页；`check-docs` 增轮次表行数与 tag 名两条断言；checkout 设 `fetch-depth: 0` 以取到 tag（5 文件） |
+| R26 | 2026-10-31 | `R26` | 见 `R26` tag | docs(report)：仓库补齐 7 条「表题：」、轮次表补 R26 与 31 个 tag/63 次提交；`check-docs` 增表题恰好 7 条、每张表紧贴表题、图片 3 条图题三条断言（4 文件） |
 
 ## 约定
 
