@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "check:docs": "node scripts/check-docs.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "node --test"

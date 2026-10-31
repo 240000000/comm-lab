@@ -36,6 +36,7 @@
 | R20c | 2026-10-28 | `R20c` | `6a0a974` | fix(shorts)：三条旁白换成同一音色的合成版，只换音频文件（3 文件，0 行代码改动） |
 | R21 | 2026-10-28 | `R21` | `72d6b0a` | docs(images)：六张文档图按当前界面重截（同名同尺寸）、README/preview/video-script/shooting-list 四处指路校订，不动版式（11 文件 +69/−13） |
 | R22 | 2026-10-29 | `R22` | `95f0d8b` | docs(trace)：补 R12 与 R15 的对话原文、INDEX 十三行、README 与 preview 改 171 条并补三条原理短片说明（5 文件） |
+| R24 | 2026-10-31 | `R24` | 见 `R24` tag | ci(docs)：workflow 依次跑 `npm ci`/`npm test`/`npm run check:docs`/`npm run build`、node 22→24；新增 `scripts/check-docs.mjs`（68 条断言）与 `npm run check:docs`；preview/tech-report/README 数字按实测校正（8 文件） |
 
 ## 约定
 
