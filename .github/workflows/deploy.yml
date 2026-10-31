@@ -19,6 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # check:docs 要数 git tag -l，浅克隆里没有 tag，会假红。
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

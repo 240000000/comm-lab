@@ -243,10 +243,101 @@ for (const rule of rules) {
   perFile.set(rule.file, perFile.get(rule.file) + matches);
 }
 
+// 结构性断言：轮次表与 tag 列表一一对应；正文提到的 tag 必须真实存在。
+// 这两条不涉及数字，但同样会过期（表只写到 R10、正文写了一个不存在的 tag）。
+let structuralLine = '';
+const tagRun = spawnSync('git', ['tag', '-l'], { cwd: ROOT, encoding: 'utf8' });
+const tagList = tagRun.status === 0 ? tagRun.stdout.split('\n').map((s) => s.trim()).filter(Boolean) : [];
+
+if (tagRun.status !== 0) {
+  failures.push({
+    file: '(git)',
+    line: 0,
+    label: 'git tag -l',
+    missing: true,
+    hint: '读不到 tag 列表：check-docs 要在 git 仓库里跑（CI 里 checkout 之后就满足）',
+  });
+} else {
+  const reportLines = readFileSync(join(ROOT, 'docs/tech-report.md'), 'utf8').split('\n');
+  const headAt = reportLines.findIndex((line) => /^### .*轮次与 tag 对照/.test(line));
+  const tableAt = reportLines.findIndex((line, i) => i > headAt && /^\|\s*轮次\s*\|/.test(line));
+  const tableLine = tableAt >= 0 ? tableAt + 1 : headAt + 1;
+  const rows = [];
+  if (headAt >= 0) {
+    for (let i = headAt + 1; i < reportLines.length && !/^### /.test(reportLines[i]); i += 1) {
+      const m = reportLines[i].match(/^\|\s*(R\d+[a-z]?)\s*\|\s*(R\d+[a-z]?)\s*\|/);
+      if (m) rows.push({ line: i + 1, round: m[1], tag: m[2] });
+    }
+  }
+
+  const tagSet = new Set(tagList);
+  const rowTags = new Set(rows.map((row) => row.tag));
+
+  if (headAt < 0) {
+    failures.push({
+      file: 'docs/tech-report.md',
+      line: 0,
+      label: '轮次与 tag 对照',
+      missing: true,
+      hint: '找不到「### … 轮次与 tag 对照」小节，表被改名或删掉了',
+    });
+  } else {
+    if (rows.length !== tagList.length) {
+      failures.push({
+        file: 'docs/tech-report.md',
+        line: tableLine,
+        label: '轮次表行数与 git tag -l 不一致',
+        written: `表里 ${rows.length} 行`,
+        actual: `git tag -l 有 ${tagList.length} 个`,
+      });
+    }
+    for (const tag of tagList) {
+      if (!rowTags.has(tag)) {
+        failures.push({
+          file: 'docs/tech-report.md',
+          line: tableLine,
+          label: `轮次表缺 ${tag} 这一行`,
+          written: '缺',
+          actual: `git tag -l 有 ${tag}`,
+        });
+      }
+    }
+    for (const row of rows) {
+      if (!tagSet.has(row.tag)) {
+        failures.push({
+          file: 'docs/tech-report.md',
+          line: row.line,
+          label: `轮次表写了 ${row.tag}，但它不是仓库里的 tag`,
+          written: row.tag,
+          actual: 'git tag -l 里没有',
+        });
+      }
+    }
+  }
+
+  for (const file of FILES) {
+    readFileSync(join(ROOT, file), 'utf8').split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(/(?<![\w])R\d+[a-z]?(?![\w])/g)) {
+        if (tagSet.has(m[0])) continue;
+        failures.push({
+          file,
+          line: i + 1,
+          label: `正文提到 ${m[0]}，但 git tag -l 里没有这个 tag`,
+          written: m[0],
+          actual: 'git tag -l 里没有',
+        });
+      }
+    });
+  }
+
+  structuralLine = `  轮次表 ${rows.length} 行，git tag -l ${tagList.length} 个；正文里的 tag 名已逐个核对。`;
+}
+
 console.log(`check-docs：用 src/core 重算文档数字（种子 ${SEED}）`);
 console.log(
   `  测试 ${testCount} 条 / ${testFileCount} 个文件；页面默认 ${PAGE_BITS} 比特，16QAM 12 dB 为 ${p12(16).symbolCount} 个符号、${p12(16).bitCount} 个比特`,
 );
+console.log(structuralLine);
 console.log(
   `  本机耗时：单次 20,000 符号 ${singleSim.ms.toFixed(1)} ms；16QAM 21 点 ${berSweep.ms.toFixed(1)} ms；卷积 11 点 ${convSweep.ms.toFixed(1)} ms；OFDM 200 符号 ${ofdm.ms.toFixed(1)} ms`,
 );
@@ -261,7 +352,7 @@ if (failures.length > 0) {
     }
     console.error(`\n${f.file}:${f.line}  ${f.label}`);
     console.error(`  文档：${f.written}`);
-    console.error(`  实际：${formatValue(f.actual)}${f.hint}`);
+    console.error(`  实际：${formatValue(f.actual)}${f.hint ?? ''}`);
   }
   console.error(`\n共 ${failures.length} 处不符，check:docs 未通过。`);
   process.exit(1);
