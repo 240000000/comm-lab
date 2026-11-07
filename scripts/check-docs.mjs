@@ -399,7 +399,7 @@ let courseLine = '';
 {
   const { COURSE_CHAPTERS } = await import(pathToFileURL(join(ROOT, 'src/core/course.ts')).href);
   const reportLines = readFileSync(join(ROOT, 'docs/tech-report.md'), 'utf8').split(/\r?\n/);
-  const headAt = reportLines.findIndex((line) => line.startsWith('| 章 | 标题 | 一屏 |'));
+  const headAt = reportLines.findIndex((line) => line.startsWith('| 章 | 标题 | 形态 |'));
   const rows = [];
   if (headAt >= 0) {
     for (let i = headAt + 1; i < reportLines.length; i++) {
@@ -418,7 +418,7 @@ let courseLine = '';
       line: 0,
       label: '找不到课程视图的 13 章表',
       written: '没有这张表',
-      actual: '| 章 | 标题 | 一屏 | 参数 | 深度实验台 |',
+      actual: '| 章 | 标题 | 形态 | 参数 | 实验台入口 |',
     });
   } else if (rows.length !== COURSE_CHAPTERS.length) {
     failures.push({
@@ -434,10 +434,15 @@ let courseLine = '';
       const want = [
         String(chapter.no),
         chapter.title,
-        chapter.implemented ? '是' : '未实现',
+        chapter.implemented ? '一屏' : chapter.labs?.length ? '深度实验台' : '未实现',
         String(chapter.params.length),
-        chapter.lab ? '有' : '—',
+        chapter.labs?.length
+          ? chapter.labs.map((lab) => lab.label.replace(/\s*实验台$/, '')).join(' + ')
+          : '—',
       ];
+      // 13 行 × 5 列逐个比对，全部计入断言总数——「跑了不计数」等于没跑。
+      checked += want.length
+      perFile.set('docs/tech-report.md', (perFile.get('docs/tech-report.md') ?? 0) + want.length)
       want.forEach((value, col) => {
         const got = row.cells[col] ?? '';
         if (got === value) return;
@@ -450,7 +455,7 @@ let courseLine = '';
         });
       });
     }
-    courseLine = `  课程视图 ${rows.length} 章逐个对上（参数个数与实验台入口由 course.ts 复算）。`;
+    courseLine = `  课程视图 ${rows.length} 章 × 5 列逐个对上（共 ${rows.length * 5} 条，参数个数与实验台入口由 course.ts 复算）。`;
   }
 }
 

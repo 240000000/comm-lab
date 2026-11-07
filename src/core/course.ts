@@ -2,16 +2,19 @@
  * 课程视图的计算核。
  *
  * 13 章共用一份目录：每章一条配置（问题、参数、默认值、反例预设），
- * 已实现的三章再挂一个纯函数 compute(params) → 一屏要画的曲线、三个读数、一句结论。
+ * 已实现的四章再挂一个纯函数 compute(params) → 一屏要画的曲线、三个读数、一句结论。
  * 页面只负责把返回值摆出来，不自己算任何数字。
  *
  * 三章都只用仓库已有的 dft / idft，不引第三方库：
  * - 第 2 章：脉冲的自相关与功率谱互为傅氏对；
  * - 第 5 章：AM / DSB / SSB / FM 的波形、带宽、解调失真与输出信噪比；
+ * - 第 6 章：升余弦成形的眼图、峰值 ISI 与采样相位偏差；
  * - 第 10 章：抽样混叠、量化信噪比与 PCM 码率。
  */
 
 import { dft, idft, type Complex } from './dft.ts'
+import { qFunction } from './ber.ts'
+import { createRng } from './rng.ts'
 
 export type CourseParam = {
   key: string
@@ -54,8 +57,8 @@ export type CourseChapter = {
   implemented: boolean
   /** 未实现的原因，一句话。 */
   reason: string
-  /** 有深度实验台的章，给一个入口。 */
-  lab?: { label: string; href: string }
+  /** 有深度实验台的章，给一个或多个入口。 */
+  labs?: Array<{ label: string; href: string }>
   question: string
   params: CourseParam[]
   defaults: Record<string, number>
@@ -493,6 +496,146 @@ function computeSource(params: Record<string, number>): CourseView {
   }
 }
 
+/* ---------- 第 6 章：数字基带传输的眼图 ---------- */
+
+const alphaParam: CourseParam = { key: 'alpha', label: '滚降系数 α', min: 0.05, max: 1, step: 0.05, unit: '' }
+const eyeSnrParam: CourseParam = { key: 'eyeSnrDb', label: '信噪比 Eb/N0', min: 0, max: 30, step: 1, unit: 'dB' }
+const multipathParam: CourseParam = { key: 'multipath', label: '多径', min: 0, max: 1, step: 1, unit: '', options: ['关', '开'] }
+
+const EYE_SEED = 20261027
+const EYE_SYMBOLS = 400
+const EYE_GRID = 32
+const EYE_SPAN = 6
+/** 采样时钟偏差，单位是一个码元周期：真实接收机对不上点，正是眼图要防的事。 */
+const EYE_PHASE = 0.2
+
+/**
+ * 升余弦脉冲的时域值，t 以码元周期为单位。
+ * 在 t = ±1/(2α) 处分子分母同时为零，取极限 (π/4)·sinc(t)。
+ */
+function raisedCosine(t: number, alpha: number): number {
+  if (Math.abs(t) < 1e-9) return 1
+  const sinc = Math.sin(Math.PI * t) / (Math.PI * t)
+  const denom = 1 - (2 * alpha * t) ** 2
+  if (Math.abs(denom) < 1e-9) return (Math.PI / 4) * sinc
+  return (sinc * Math.cos(Math.PI * alpha * t)) / denom
+}
+
+/** 某一时刻的接收值：只累加 ±EYE_SPAN 个码元内的脉冲尾巴，截断本身就是实测的一部分。 */
+function eyeSample(t: number, symbols: number[], alpha: number, echo: number): number {
+  let sum = 0
+  const from = Math.floor(t) - EYE_SPAN
+  const to = Math.ceil(t) + EYE_SPAN
+  for (let k = from; k <= to; k += 1) {
+    if (k < 0 || k >= symbols.length) continue
+    sum += symbols[k] * raisedCosine(t - k, alpha)
+    if (echo > 0) sum += symbols[k] * echo * raisedCosine(t - k - 0.5, alpha)
+  }
+  return sum
+}
+
+function computeEye(params: Record<string, number>): CourseView {
+  const alpha = params.alpha
+  const snrDb = params.eyeSnrDb
+  const echo = params.multipath === 1 ? 0.5 : 0
+  const seed = EYE_SEED + Math.round(alpha * 100) * 7 + Math.round(snrDb) * 3 + Math.round(echo * 10)
+  const rng = createRng(seed)
+  const ebN0 = 10 ** (snrDb / 10)
+  const sigma = Math.sqrt(1 / (2 * ebN0))
+
+  const symbols: number[] = []
+  for (let k = 0; k < EYE_SYMBOLS; k += 1) symbols.push(rng.next() < 0.5 ? -1 : 1)
+
+  const phases: number[] = []
+  for (let i = -EYE_GRID; i <= EYE_GRID; i += 1) phases.push(i / EYE_GRID)
+  const columns: number[][] = phases.map(() => [])
+  const center: number[] = []
+  let errors = 0
+  let decided = 0
+
+  for (let m = 10; m < EYE_SYMBOLS - 10; m += 1) {
+    for (let i = 0; i < phases.length; i += 1) {
+      const value = eyeSample(m + EYE_PHASE + phases[i], symbols, alpha, echo) + sigma * rng.gauss()
+      columns[i].push(value)
+      if (i === EYE_GRID) {
+        center.push(value)
+        decided += 1
+        if (Math.sign(value) !== Math.sign(symbols[m])) errors += 1
+      }
+    }
+  }
+
+  // 峰值 ISI：同一时刻所有别的码元尾巴（含回波）绝对值的和，可以在纸上算。
+  let isi = 0
+  for (let k = -EYE_SPAN; k <= EYE_SPAN; k += 1) {
+    if (k !== 0) isi += Math.abs(raisedCosine(k + EYE_PHASE, alpha))
+    if (echo > 0) isi += echo * Math.abs(raisedCosine(k + EYE_PHASE - 0.5, alpha))
+  }
+
+  // 取 2% / 98% 分位而不是极值：极值由 380 条轨迹里最倒霉的那几条噪声决定，
+  // 会把开口撑到 2 以上，和「眼高」这个量对不上。
+  const quantile = (values: number[], q: number): number => {
+    const sorted = [...values].sort((a, b) => a - b)
+    const pos = (sorted.length - 1) * q
+    const lo = Math.floor(pos)
+    const hi = Math.ceil(pos)
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo)
+  }
+  const upper = columns.map((values) => quantile(values, 0.98))
+  const lower = columns.map((values) => quantile(values, 0.02))
+  // 眼高按判决点上下两条包络的 p2–p98 区间算，再折半归一到「满开 = 2」，
+  // 避免 380 条轨迹里最极端的噪声把读数撑到 2 以上。
+  const eyeHeight = Math.min(2, (upper[EYE_GRID] - lower[EYE_GRID]) / 2)
+  const theoryHeight = Math.max(0, 2 * (1 - isi))
+  const ber = decided > 0 ? errors / decided : 0
+  const theoryBer = qFunction(Math.sqrt(2 * ebN0))
+  // 采样偏 0.2 个码元时，峰值 ISI 一旦逼近 1，判决点上的余量就被尾巴吃光了。
+  const failed = isi > 0.85 || eyeHeight < 0.6 || snrDb <= 8 || (ber > theoryBer * 10 && ber > 0)
+
+  const series: CourseSeries[] = [
+    { name: '上包络（最坏的那个码元）', color: '#3ce3c6', points: phases.map((p, i) => [p, upper[i]] as [number, number]) },
+    { name: '下包络（最坏的那个码元）', color: '#8f7fd4', points: phases.map((p, i) => [p, lower[i]] as [number, number]) },
+  ]
+
+  const fmtBer = (value: number): string => (value === 0 ? '0（本批没出错）' : value.toExponential(2))
+
+  return {
+    series,
+    xLabel: '相对判决点的位置（码元周期）',
+    yLabel: '接收幅度',
+    readouts: [
+      {
+        label: '眼高（实测）',
+        value: eyeHeight.toFixed(2),
+        hint: `判决点 p2–p98 区间折半，满开为 2；理论开口 ${theoryHeight.toFixed(2)}`,
+        warn: eyeHeight < 0.6,
+      },
+      {
+        label: '峰值 ISI（理论）',
+        value: isi.toFixed(3),
+        hint: `截断到 ±${EYE_SPAN} 个码元、采样偏 ${EYE_PHASE} 个码元；超过 0.85 就闭上`,
+        warn: isi > 0.85,
+      },
+      {
+        label: '误码率（实测）',
+        value: fmtBer(ber),
+        hint: `理论 Q(√(2Eb/N0)) = ${theoryBer.toExponential(2)}`,
+        warn: ber > theoryBer * 10 && ber > 0,
+      },
+    ],
+    conclusion: failed
+      ? snrDb <= 8
+        ? '噪声太大，上下两条包络已经叠到一起，判决等于猜。'
+        : alpha < 0.2
+          ? '滚降压得太小，脉冲尾巴拖到邻近码元上，采样一偏眼图就闭上了。'
+          : echo > 0
+            ? '多径把同一个码元的能量拖到半个码元之后，判决点上的开口被回波吃掉了。'
+            : '眼图快闭上了，先查采样相位。'
+      : '采样偏了 0.2 个码元，眼图仍然张着：升余弦把码元间的干扰压在了判决点附近。',
+    failed,
+  }
+}
+
 const tauParam: CourseParam = { key: 'tau', label: '脉冲宽度 τ', min: 0.2, max: 4, step: 0.1, unit: 'ms' }
 const shapeParam: CourseParam = { key: 'shape', label: '脉冲形状', min: 0, max: 1, step: 1, unit: '', options: ['矩形', '三角'] }
 const kindParam: CourseParam = { key: 'kind', label: '信号判据', min: 0, max: 1, step: 1, unit: '', options: ['能量信号', '功率信号'] }
@@ -550,7 +693,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     title: '信道',
     implemented: false,
     reason: '多径与 CP 的完整链路已经在 OFDM 实验台里，重复做一屏只会更浅。',
-    lab: { label: 'OFDM 实验台', href: '#/ofdm' },
+    labs: [{ label: 'OFDM 实验台', href: '#/ofdm' }],
     question: '',
     params: [],
     defaults: {},
@@ -570,12 +713,13 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 6,
     title: '数字基带传输',
-    implemented: false,
-    reason: '眼图与均衡需要码元序列生成器，本轮时间不够，留到下一轮单独做。',
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    implemented: true,
+    reason: '',
+    question: '滚降系数压到很小、采样又偏了一点，眼图为什么就闭上了？',
+    params: [alphaParam, eyeSnrParam, multipathParam],
+    defaults: { alpha: 0.35, eyeSnrDb: 20, multipath: 0 },
+    failPreset: { alpha: 0.05, eyeSnrDb: 20, multipath: 0 },
+    compute: computeEye,
   },
   {
     no: 7,
@@ -592,7 +736,10 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     title: '新型数字带通调制',
     implemented: false,
     reason: 'QAM 与 OFDM 的完整实验台已经在第 4、7 章的位置之外单独存在，这里只放入口。',
-    lab: { label: 'QAM 实验台', href: '#/qam' },
+    labs: [
+      { label: 'QAM 实验台', href: '#/qam' },
+      { label: 'OFDM 实验台', href: '#/ofdm' },
+    ],
     question: '',
     params: [],
     defaults: {},
@@ -600,9 +747,9 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   },
   {
     no: 9,
-    title: '模拟信号的数字传输',
+    title: '数字信号的最佳接收',
     implemented: false,
-    reason: '抽样、量化、PCM 这一套已经放在第 10 章的一屏里，拆成两章会重复。',
+    reason: '匹配滤波与最大似然判决要一整页公式，一屏里放不下；判决那一半由第 11 章的 Viterbi 实验台承担。',
     question: '',
     params: [],
     defaults: {},
@@ -624,7 +771,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     title: '差错控制编码',
     implemented: false,
     reason: '卷积码与 Viterbi 的完整实验台已经存在，这里只放入口。',
-    lab: { label: '卷积码实验台', href: '#/conv' },
+    labs: [{ label: '卷积码实验台', href: '#/conv' }],
     question: '',
     params: [],
     defaults: {},

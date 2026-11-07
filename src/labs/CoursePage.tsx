@@ -207,10 +207,14 @@ function TodoScreen({ chapter }: { chapter: CourseChapter }) {
       <p className="eyebrow">第 {chapter.no} 章 · {chapter.title}</p>
       <h2>未实现</h2>
       <p className="course-reason">{chapter.reason}</p>
-      {chapter.lab ? (
-        <a className="course-btn" href={chapter.lab.href}>
-          去{chapter.lab.label}
-        </a>
+      {chapter.labs?.length ? (
+        <div className="course-links">
+          {chapter.labs.map((lab) => (
+            <a className="course-btn" key={lab.href} href={lab.href}>
+              去{lab.label}
+            </a>
+          ))}
+        </div>
       ) : null}
     </section>
   )

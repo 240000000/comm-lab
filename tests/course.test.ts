@@ -20,7 +20,7 @@ test('左树 13 章，章号 1 到 13 连续', () => {
 
 test('本轮只实现第 2、5、10 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [2, 5, 10])
+  assert.deepEqual(done, [2, 5, 6, 10])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -29,8 +29,12 @@ test('本轮只实现第 2、5、10 章', () => {
 
 test('只有第 4、8、11 章带深度实验台入口', () => {
   assert.deepEqual(DEEP_LAB_CHAPTERS, [4, 8, 11])
-  const withLab = COURSE_CHAPTERS.filter((c) => c.lab).map((c) => c.no)
+  const withLab = COURSE_CHAPTERS.filter((c) => c.labs?.length).map((c) => c.no)
   assert.deepEqual(withLab, [4, 8, 11])
+  // 第 8 章同时有 QAM 与 OFDM 两台，第 4、11 章各一台。
+  assert.equal(chapterByNo(8)?.labs?.length, 2)
+  assert.equal(chapterByNo(4)?.labs?.length, 1)
+  assert.equal(chapterByNo(11)?.labs?.length, 1)
 })
 
 test('未实现的章也有一句话问题和空参数，页面不会崩', () => {
@@ -104,4 +108,36 @@ test('#/course 路由认得出来，未知路径仍回首页', () => {
   assert.equal(parseHash('#/course/'), 'course')
   assert.equal(parseHash('#/course?no=5'), 'course')
   assert.equal(parseHash('#/nope'), 'home')
+})
+
+test('第 6 章眼图：默认张着、反例闭上，两个读数带理论对照', () => {
+  const chapter = chapterByNo(6)
+  assert.ok(chapter)
+  const base = chapter.compute(chapter.defaults)
+  assert.equal(base.failed, false)
+  const eye = Number(base.readouts[0].value)
+  assert.ok(eye > 0 && eye <= 2, `眼高应落在 (0, 2]，实际 ${eye}`)
+  assert.ok(base.readouts.some((item) => item.hint.includes('理论')))
+
+  const failed = chapter.compute(chapter.failPreset)
+  assert.equal(failed.failed, true)
+  assert.ok(failed.readouts.some((item) => item.warn), '反例里至少要有一条读数标红')
+  assert.notEqual(failed.conclusion, base.conclusion)
+  assert.ok(failed.conclusion.includes('噪声') || failed.conclusion.includes('多径') || failed.conclusion.includes('滚降'))
+})
+
+test('第 6 章：滚降系数越小，峰值 ISI 越大', () => {
+  const chapter = chapterByNo(6)
+  const isi = (alpha: number): number =>
+    Number(chapter.compute({ alpha, eyeSnrDb: 20, multipath: 0 }).readouts[1].value)
+  assert.ok(isi(0.05) > isi(0.35))
+  assert.ok(isi(0.35) > isi(0.99))
+})
+
+test('第 6 章同参重跑结果一致', () => {
+  const chapter = chapterByNo(6)
+  const a = chapter.compute(chapter.defaults)
+  const b = chapter.compute(chapter.defaults)
+  assert.deepEqual(a.readouts, b.readouts)
+  assert.equal(a.series[0].points.length, b.series[0].points.length)
 })
