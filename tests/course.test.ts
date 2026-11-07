@@ -19,9 +19,9 @@ test('左树 13 章，章号 1 到 13 连续', () => {
   })
 })
 
-test('本轮只实现第 2、5、6、7、8、10 章', () => {
+test('本轮只实现第 2、5、6、7、8、9、10 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [2, 5, 6, 7, 8, 10])
+  assert.deepEqual(done, [2, 5, 6, 7, 8, 9, 10])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -290,4 +290,42 @@ test('第 8 章：四档蒙特卡洛实测都落在理论值的十分之一到�
   assert.equal(bad.failed, true)
   assert.equal(bad.readouts[2].warn, true, '失效档的实测读数要标红')
   assert.match(bad.conclusion, /每传 20 个符号就错一个/)
+})
+
+test('第 9 章：三种波形在 Δt=0 的峰值信噪比完全相等，且等于 10·log10(2γ)', () => {
+  const chapter = chapterByNo(9)
+  const snr = [0, 1, 2].map((wave) => Number.parseFloat(chapter.compute({ ...chapter.defaults, wave }).readouts[0].value))
+  const expect = 10 * Math.log10(2 * 10 ** (8 / 10))
+  for (const value of snr) assert.ok(Math.abs(value - expect) < 0.05, `峰值信噪比 ${value} 与 10log10(2γ)=${expect.toFixed(2)} 差得太多`)
+  assert.ok(Math.abs(snr[0] - snr[1]) < 0.01 && Math.abs(snr[1] - snr[2]) < 0.01, '三种波形必须完全打平')
+})
+
+test('第 9 章：矩形波 Δt=0.4 损失 4.44 dB，数值 ρ 与解析 1−Δt 对上', () => {
+  const chapter = chapterByNo(9)
+  const view = chapter.compute({ ...chapter.defaults, dt: 0.4 })
+  const loss = Number.parseFloat(view.readouts[1].value)
+  assert.ok(Math.abs(loss - 4.44) < 0.05, `损失应为 4.44 dB，实际 ${loss}`)
+  const rho = 10 ** (-loss / 20)
+  assert.ok(Math.abs(rho - (1 - 0.4)) < 0.01, `数值 ρ=${rho.toFixed(3)} 与解析 0.6 差得太多`)
+  assert.equal(view.failed, true, 'Δt=0.4 应当判失配')
+  assert.equal(view.readouts[1].warn, true, '损失读数要标红')
+})
+
+test('第 9 章：三种波形在 Δt=0 的理论误码率彼此相等', () => {
+  const chapter = chapterByNo(9)
+  const ber = [0, 1, 2].map((wave) => chapter.compute({ ...chapter.defaults, wave }).readouts[2].value)
+  assert.equal(ber[1], ber[0])
+  assert.equal(ber[2], ber[0])
+  assert.equal(ber[0], '1.91e-4')
+})
+
+test('第 9 章：实测误码率落在理论值的十分之一到十倍之间', () => {
+  const chapter = chapterByNo(9)
+  const view = chapter.compute(chapter.defaults)
+  const theory = Number(view.readouts[2].value)
+  const hint = view.readouts[2].hint
+  const match = /实测 ([0-9.e-]+)/.exec(hint)
+  assert.ok(match, `读数 hint 里要有实测值，实际：${hint}`)
+  const measured = Number(match![1])
+  assert.ok(measured > theory / 10 && measured < theory * 10, `实测 ${measured} 与理论 ${theory} 差得太远`)
 })

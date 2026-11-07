@@ -1015,7 +1015,7 @@ function computeQam(params: Record<string, number>): CourseView {
   if (failed) {
     conclusion = `同样这 ${ebn0Db} dB，256QAM 每传 20 个符号就错一个：理论 ${exponent(theoryBer)}、实测 ${exponent(measuredBer)}。多传的那一倍比特全赔进去了，这个信噪比下它没用。`
   } else if (mod === 1) {
-    conclusion = `16QAM 每赫兹传 ${efficiency.toFixed(2)} bit，${ebn0Db} dB 下理论 ${exponent(theoryBer)}。同样这条误码率，64QAM 要多花 ${extra64.toFixed(1)} dB，换来多传 50% 的比特；256QAM 多传一倍，贵得也更多。`
+    conclusion = `16QAM 每赫兹传 ${efficiency.toFixed(2)} bit，${ebn0Db} dB 下理论 ${exponent(theoryBer)}。同样这条误码率，64QAM 要多花 ${extra64.toFixed(1)} dB，换来多传 50% 的比特；256QAM 多传一倍，贵得也更多。教材常按每比特 3 dB 粗估成 6 dB，按方形星座式精确算是 ${extra64.toFixed(1)} dB。`
   } else if (moreBits > 0) {
     conclusion = `${label} 比 16QAM 多传 ${moreBits.toFixed(0)}% 的比特（每赫兹 ${efficiency.toFixed(2)} bit），代价是同一条误码率下多花 ${extraDb.toFixed(1)} dB。`
   } else {
@@ -1027,6 +1027,172 @@ function computeQam(params: Record<string, number>): CourseView {
     xLabel: 'Eb/N0（dB）',
     yLabel: '误码率 Pb',
     logY: true,
+    readouts,
+    conclusion,
+    failed,
+  }
+}
+
+/* ---------- 第 9 章：匹配滤波，波形换成什么样峰值信噪比都不变 ---------- */
+
+const MATCH_WAVES = ['矩形', '三角', '半正弦'] as const
+const MATCH_COLORS = ['#5ad1a5', '#e0a45c', '#c58bf0']
+/** 非当前档用压暗的同色系，图例里三条都在，但不抢主线。 */
+const MATCH_DIM = ['#2f6b57', '#6b5a35', '#5a4568']
+/** 蒙特卡洛比特数；固定种子，同一档重跑逐位相同。 */
+const MATCH_SAMPLES = 20000
+const MATCH_SEED = 20261109
+/** 相关用的离散点数（1024 点一段码元）与画图的相对时刻点数。 */
+const MATCH_GRID = 1024
+const MATCH_POINTS = 81
+
+const matchWaveParam: CourseParam = {
+  key: 'wave',
+  label: '发送波形',
+  min: 0,
+  max: 2,
+  step: 1,
+  unit: '',
+  options: [...MATCH_WAVES],
+}
+const matchDtParam: CourseParam = {
+  key: 'dt',
+  label: '采样失配 Δt',
+  min: 0,
+  max: 0.5,
+  step: 0.05,
+  unit: 'Ts',
+}
+const matchEbn0Param: CourseParam = {
+  key: 'ebn0Db',
+  label: 'Eb/N0',
+  min: 0,
+  max: 12,
+  step: 1,
+  unit: 'dB',
+}
+
+/** 一个码元内的三种波形，能量各自不同但都会被归一化掉。 */
+function matchShape(wave: number, t: number): number {
+  if (t < 0 || t >= 1) return 0
+  if (wave === 0) return 1
+  if (wave === 1) return 1 - Math.abs(2 * t - 1)
+  return Math.sin(Math.PI * t)
+}
+
+/** 连续取值用网格线性插值，分数位移才有一致的算法，不用给波形写分段解析式。 */
+function matchAt(wave: number, t: number): number {
+  const pos = t * MATCH_GRID
+  const i = Math.floor(pos)
+  const frac = pos - i
+  const a = matchShape(wave, i / MATCH_GRID)
+  const b = matchShape(wave, (i + 1) / MATCH_GRID)
+  return a + (b - a) * frac
+}
+
+function matchEnergy(wave: number): number {
+  let sum = 0
+  for (let i = 0; i < MATCH_GRID; i += 1) {
+    const v = matchShape(wave, i / MATCH_GRID)
+    sum += v * v
+  }
+  return sum / MATCH_GRID
+}
+
+/** 归一化自相关：τ=0 时恒为 1，所以峰值与波形形状无关。 */
+function matchCorr(wave: number, tau: number): number {
+  let sum = 0
+  for (let i = 0; i < MATCH_GRID; i += 1) {
+    const t = i / MATCH_GRID
+    sum += matchShape(wave, t) * matchAt(wave, t - tau)
+  }
+  return sum / MATCH_GRID / matchEnergy(wave)
+}
+
+/** 采样偏了 Δt，相关峰只剩 ρ(Δt)，噪声方差不变。 */
+function shootMatch(rho: number, ebn0Db: number): number {
+  const rng = createRng(MATCH_SEED + Math.round(rho * 1000) * 13 + Math.round(ebn0Db) * 7)
+  const amp = rho * Math.sqrt(2 * 10 ** (ebn0Db / 10))
+  let errors = 0
+  for (let i = 0; i < MATCH_SAMPLES; i += 1) {
+    const bit = rng.next() < 0.5 ? 0 : 1
+    const z = (bit === 1 ? amp : -amp) + rng.gauss()
+    const decided = z > 0 ? 1 : 0
+    if (decided !== bit) errors += 1
+  }
+  return errors / MATCH_SAMPLES
+}
+
+function computeMatch(params: Record<string, number>): CourseView {
+  const wave = Math.min(2, Math.max(0, Math.round(params.wave ?? 0)))
+  const dt = Math.min(0.5, Math.max(0, Math.round((params.dt ?? 0) * 20) / 20))
+  const ebn0Db = Math.min(12, Math.max(0, Math.round(params.ebn0Db ?? 8)))
+  const gamma = 10 ** (ebn0Db / 10)
+  const label = MATCH_WAVES[wave]
+
+  const rho = matchCorr(wave, dt)
+  const snrDb = 10 * Math.log10(2 * gamma)
+  const lossDb = -20 * Math.log10(Math.max(rho, 1e-6))
+  const theoryBer = qFunction(Math.sqrt(2 * rho * rho * gamma))
+  const measuredBer = shootMatch(rho, ebn0Db)
+  const cleanBer = qFunction(Math.sqrt(2 * gamma))
+  const deviate = measuredBer > 0 && (measuredBer > theoryBer * 3 || measuredBer < theoryBer / 3)
+
+  const series: CourseSeries[] = MATCH_WAVES.map((name, index) => ({
+    name,
+    color: index === wave ? MATCH_COLORS[index] : MATCH_DIM[index],
+    points: Array.from({ length: MATCH_POINTS }, (_, i) => {
+      const tau = -1 + (2 * i) / (MATCH_POINTS - 1)
+      return [tau, matchCorr(index, tau)] as [number, number]
+    }),
+  }))
+  if (dt > 0) {
+    series.push({
+      name: `${label} 失配采样`,
+      color: '#e05c5c',
+      points: Array.from({ length: MATCH_POINTS }, (_, i) => {
+        const tau = -1 + (2 * i) / (MATCH_POINTS - 1)
+        return [tau, rho * matchCorr(wave, tau - dt)] as [number, number]
+      }),
+    })
+  }
+
+  const loss = lossDb
+  const readouts: CourseReadout[] = [
+    {
+      label: '峰值信噪比（理论）',
+      value: `${snrDb.toFixed(1)} dB`,
+      hint: `10·log10(2Eb/N0) = ${snrDb.toFixed(1)} dB；只与能量有关，与波形形状无关。`,
+      warn: false,
+    },
+    {
+      label: '失配损失',
+      value: `${loss.toFixed(2)} dB`,
+      hint: `归一化相关 ρ(${dt.toFixed(2)}Ts) = ${rho.toFixed(3)}；损失 = −20·log10ρ。`,
+      warn: loss > 1,
+    },
+    {
+      label: '误码率',
+      value: exponent(theoryBer),
+      hint: `理论 Q(√(2ρ²γ))；实测 ${exponent(measuredBer)}（${MATCH_SAMPLES} 比特）。`,
+      warn: deviate || loss > 3,
+    },
+  ]
+
+  const failed = loss > 3
+  let conclusion: string
+  if (failed) {
+    conclusion = `滤波器没错，是采样点偏了 ${dt.toFixed(2)} 个码元：${label}波的 ρ 掉到 ${rho.toFixed(2)}，${loss.toFixed(2)} dB 白送掉，误码率从 ${exponent(cleanBer)} 掉到 ${exponent(theoryBer)}。`
+  } else if (dt > 0) {
+    conclusion = `采样偏了 ${dt.toFixed(2)} 个码元，ρ 还有 ${rho.toFixed(2)}，只丢 ${loss.toFixed(2)} dB；峰值信噪比仍是 ${snrDb.toFixed(1)} dB——偏的是采样时刻，不是波形。`
+  } else {
+    conclusion = `三种波形能量一样，峰值信噪比都是 ${snrDb.toFixed(1)} dB：匹配滤波器只认能量，不挑形状，差别只在脉冲形状合不合它的喜好。`
+  }
+
+  return {
+    series,
+    xLabel: '相对时刻（码元）',
+    yLabel: '归一化输出',
     readouts,
     conclusion,
     failed,
@@ -1113,7 +1279,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     no: 8,
     title: '新型数字带通调制',
     implemented: true,
-    question: '同样的带宽，为什么 64QAM 能多传 50% 的比特，却要多花 6 dB？',
+    question: '同样的带宽，为什么 64QAM 能多传 50% 的比特，却要多花几 dB？',
     reason: '',
     labs: [
       { label: 'QAM 实验台', href: '#/qam' },
@@ -1127,12 +1293,13 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 9,
     title: '数字信号的最佳接收',
-    implemented: false,
-    reason: '匹配滤波与最大似然判决要一整页公式，一屏里放不下；判决那一半由第 11 章的 Viterbi 实验台承担。',
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    implemented: true,
+    reason: '',
+    question: '换一种波形，匹配滤波器的输出信噪比为什么一点不变？',
+    params: [matchWaveParam, matchDtParam, matchEbn0Param],
+    defaults: { wave: 0, dt: 0, ebn0Db: 8 },
+    failPreset: { wave: 0, dt: 0.4, ebn0Db: 8 },
+    compute: computeMatch,
   },
   {
     no: 10,
