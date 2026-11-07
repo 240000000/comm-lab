@@ -121,6 +121,19 @@ test('第 6 章眼图：默认张着、反例闭上，两个读数带理论对�
   // 信噪比往下拖，眼高必须跟着掉——旧写法是反的。
   const lowSnr = Number(chapter.compute({ ...chapter.defaults, eyeSnrDb: 8 }).readouts[0].value)
   assert.ok(lowSnr < eye, `8 dB 的眼高 ${lowSnr} 应低于 20 dB 的 ${eye}`)
+
+  // 8 dB 眼还张着（0.90），不能判失败，也不能说「叠到一起 / 判决等于猜」。
+  const at8 = chapter.compute({ ...chapter.defaults, eyeSnrDb: 8 })
+  assert.equal(at8.failed, false, '8 dB 眼高 0.90，不该判成闭眼')
+  assert.ok(!at8.conclusion.includes('叠到一起'), `8 dB 的结论不该说眼图闭上，实际「${at8.conclusion}」`)
+  assert.ok(!at8.conclusion.includes('判决等于猜'), '8 dB 误码率为 0，不能说判决等于猜')
+  assert.ok(at8.conclusion.includes('收窄'), `8 dB 应说成「还开着但收窄」，实际「${at8.conclusion}」`)
+
+  // 4 dB 真正闭眼：必须由 eyeHeight < 0.6 触发，而不是信噪比硬阈值。
+  const at4 = chapter.compute({ ...chapter.defaults, eyeSnrDb: 4 })
+  assert.equal(at4.failed, true, '4 dB 应判失败')
+  assert.ok(Number(at4.readouts[0].value) < 0.6, `4 dB 眼高应低于 0.6，实际 ${at4.readouts[0].value}`)
+  assert.equal(at4.readouts[1].value, '0.000', '4 dB 采样对准时 ISI 仍为 0，失败只能由眼高触发')
   assert.ok(base.readouts.some((item) => item.hint.includes('理论')))
   assert.equal(base.readouts[1].value, '0.000', '采样落在判决点上时，升余弦的 ISI 应为 0')
 
@@ -130,7 +143,7 @@ test('第 6 章眼图：默认张着、反例闭上，两个读数带理论对�
   assert.ok(closed < 0.3, `α=0.05、定时误差 0.45Ts 的眼高应小于 0.3，实际 ${closed}`)
   assert.ok(failed.readouts.some((item) => item.warn), '反例里至少要有一条读数标红')
   assert.notEqual(failed.conclusion, base.conclusion)
-  assert.ok(failed.conclusion.includes('噪声') || failed.conclusion.includes('多径') || failed.conclusion.includes('滚降'))
+  assert.ok(failed.conclusion.includes('叠到一起'), `失败预设眼高 0.00，结论应说闭眼，实际「${failed.conclusion}」`)
 })
 
 test('第 6 章：滚降系数越小，峰值 ISI 越大', () => {

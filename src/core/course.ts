@@ -600,8 +600,9 @@ function computeEye(params: Record<string, number>): CourseView {
   const theoryHeight = Math.max(0, 2 * (1 - isi))
   const ber = decided > 0 ? errors / decided : 0
   const theoryBer = qFunction(Math.sqrt(2 * ebN0))
-  // 采样偏 0.2 个码元时，峰值 ISI 一旦逼近 1，判决点上的余量就被尾巴吃光了。
-  const failed = isi > 0.85 || eyeHeight < 0.6 || snrDb <= 8 || (ber > theoryBer * 10 && ber > 0)
+  // 判定只看三个读数：眼高、峰值 ISI、误码率。不再带 snrDb <= 8 的硬阈值——
+  // 低信噪比但眼还张着的时候，硬判闭眼会和屏幕上的读数打架。
+  const failed = isi > 0.85 || eyeHeight < 0.6 || (ber > theoryBer * 10 && ber > 0)
 
   const traces: CourseSeries[] = []
   for (let t = 0; t < 40; t += 1) {
@@ -640,21 +641,19 @@ function computeEye(params: Record<string, number>): CourseView {
       {
         label: '误码率（实测）',
         value: fmtBer(ber),
-        hint: `理论 Q(√(2Eb/N0)) = ${theoryBer.toExponential(2)}`,
+        hint: `理论 Q(√(2Eb/N0)) = ${theoryBer.toExponential(2)}（只计噪声、不含 ISI）`,
         warn: ber > theoryBer * 10 && ber > 0,
       },
     ],
-    conclusion: failed
-      ? snrDb <= 8
-        ? '噪声太大，上下两条包络已经叠到一起，判决等于猜。'
-        : alpha < 0.2
-          ? '滚降压得太小，脉冲尾巴拖到邻近码元上，采样一偏眼图就闭上了。'
-          : echo > 0
-            ? '多径把同一个码元的能量拖到半个码元之后，判决点上的开口被回波吃掉了。'
-            : '眼图快闭上了，先查采样相位。'
-      : timing <= 0.01
-        ? '采样正好落在判决点上，升余弦的 ISI 理论上是 0；把定时误差拖开，才看得出滚降系数在兜底。'
-        : `采样偏了 ${timing.toFixed(2)} 个码元，眼图仍然张着：升余弦把码元间的干扰压在了判决点附近。`,
+    // 结论完全按读数分支，先看最硬的那条：眼高被压到 0.6 以下才说闭眼。
+    conclusion:
+      eyeHeight < 0.6
+        ? `眼高只剩 ${eyeHeight.toFixed(2)}，上下两条包络在判决点上已经叠到一起，判决基本靠猜。`
+        : ber > theoryBer * 10 && ber > 0
+          ? `误码率 ${fmtBer(ber)} 是理论值的十倍以上，这一批确实判错了；峰值 ISI ${isi.toFixed(3)}，眼高还有 ${eyeHeight.toFixed(2)}。`
+          : isi > 0.85
+            ? `峰值 ISI ${isi.toFixed(3)}，脉冲尾巴拖到邻近码元上，判决点上的余量快被吃光了。`
+            : `还开着，只是开口从默认档收窄了：眼高 ${eyeHeight.toFixed(2)}、峰值 ISI ${isi.toFixed(3)}、误码率 ${fmtBer(ber)}，三条线一条都没踩。`,
     failed,
   }
 }
