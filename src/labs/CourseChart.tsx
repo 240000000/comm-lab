@@ -238,6 +238,8 @@ export function CourseChart({
         ctx.setLineDash([])
         // 贴着上沿的那条线没有地方写字，标注改放到线下方，免得被裁掉。
         const above = gy - 4 > PAD.top + 10
+        // 上下沿成对出现时只在上沿写字：两条线挨得太近，写两遍会糊成一团。
+        if (!g.label) continue
         ctx.textAlign = 'left'
         ctx.textBaseline = above ? 'bottom' : 'top'
         // 标注底下垫一层底色：数据点常常正好压在这条线上，不垫就看不清字。
@@ -373,7 +375,7 @@ export function CourseChart({
       ctx.fillText(s.name, legendText, legendY)
       legendY += 18
     }
-  }, [series, xLabel, yLabel, logY, bars, stack, guides])
+  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides])
 
   return <canvas className="course-canvas" ref={ref} style={{ height: HEIGHT }} />
 }

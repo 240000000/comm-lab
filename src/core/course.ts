@@ -1960,6 +1960,160 @@ function computeChannel(params: Record<string, number>): CourseView {
   }
 }
 
+/* ---------- 第 13 章：一阶数字锁相环凭什么把相位误差抹平 ---------- */
+
+// 种子写死在文件顶：同一条曲线每次打开都一样，截图和结论才对得上。
+const PLL_SEED = 20261112
+const PLL_STEPS = 60
+const PLL_BAND = 0.02
+const PLL_GHOSTS = 40
+
+const pllGainParam: CourseParam = {
+  key: 'k',
+  label: '环路增益 K',
+  min: 0.05,
+  max: 2.5,
+  step: 0.05,
+  unit: '',
+}
+
+const pllThetaParam: CourseParam = {
+  key: 'theta0',
+  label: '初始相位误差 θ₀',
+  min: 0.1,
+  max: 3,
+  step: 0.1,
+  unit: '弧度',
+}
+
+const pllNoiseParam: CourseParam = {
+  key: 'sigma',
+  label: '每步相位噪声 σ',
+  min: 0,
+  max: 0.3,
+  step: 0.01,
+  unit: '弧度',
+}
+
+// 一阶环的全部内容就是这一行：θ(n+1) = θ(n) − K·sin θ(n) + σ·w。
+// 不写成小角度近似，也不加阻尼项——「增益决定收敛」这件事就藏在原式的 sin 里。
+export function pllStep(theta: number, gain: number, sigma: number, noise: number): number {
+  return theta - gain * Math.sin(theta) + sigma * noise
+}
+
+/** 跑一条轨迹，返回 n = 0…steps 共 steps+1 个相位误差。 */
+export function pllTrace(gain: number, theta0: number, sigma: number, seed: number, steps = PLL_STEPS): number[] {
+  const rng = createRng(seed)
+  const trace: number[] = [theta0]
+  let theta = theta0
+  for (let n = 0; n < steps; n += 1) {
+    theta = pllStep(theta, gain, sigma, rng.gauss())
+    trace.push(theta)
+  }
+  return trace
+}
+
+/** 收敛步数：首次进入 ±0.02 且之后不再离开的那一步；一直没进来就返回 null。 */
+export function pllLockStep(trace: number[]): number | null {
+  // 停在最后一步不算「进去过」：得留一步在后面确认它真的没再出来。
+  for (let i = 1; i < trace.length - 1; i += 1) {
+    if (Math.abs(trace[i]) > PLL_BAND) continue
+    let stays = true
+    for (let j = i + 1; j < trace.length; j += 1) {
+      if (Math.abs(trace[j]) > PLL_BAND) {
+        stays = false
+        break
+      }
+    }
+    if (stays) return i
+  }
+  return null
+}
+
+/** 最后 10 步 |θ| 的平均：这就是「稳态」在屏幕上的样子。 */
+export function pllResidual(trace: number[], tail = 10): number {
+  const slice = trace.slice(Math.max(0, trace.length - tail))
+  return slice.reduce((sum, v) => sum + Math.abs(v), 0) / slice.length
+}
+
+function computePll(params: Record<string, number>): CourseView {
+  const gain = Math.min(pllGainParam.max, Math.max(pllGainParam.min, params.k))
+  const theta0 = Math.min(pllThetaParam.max, Math.max(pllThetaParam.min, params.theta0))
+  const sigma = Math.min(pllNoiseParam.max, Math.max(pllNoiseParam.min, params.sigma))
+
+  const trace = pllTrace(gain, theta0, sigma, PLL_SEED)
+  const lockStep = pllLockStep(trace)
+  const locked = lockStep !== null
+  const residual = pllResidual(trace)
+  const multiplier = 1 - gain
+  const converges = Math.abs(multiplier) < 1
+
+  // 淡迹线先入数组、主迹线最后画，读数的这一条才压在最上面。
+  const series: CourseSeries[] = []
+  if (sigma > 0) {
+    for (let g = 0; g < PLL_GHOSTS; g += 1) {
+      const ghost = pllTrace(gain, theta0, sigma, PLL_SEED + 101 * (g + 1))
+      series.push({
+        name: '同参数的另一条轨迹',
+        color: '#5d7f95',
+        quiet: true,
+        points: ghost.map((v, n) => [n, v] as [number, number]),
+      })
+    }
+  }
+  series.push({
+    name: '相位误差 θ(n)',
+    color: '#5ad1a5',
+    points: trace.map((v, n) => [n, v] as [number, number]),
+  })
+
+  const readouts: CourseReadout[] = [
+    {
+      label: '剩余相位误差（实测 / 理论）',
+      value: `${residual.toFixed(3)} / 0.000`,
+      hint: '理论稳态误差是 0：无噪声时 θ(n+1) = θ(n) − K·sin θ(n) 的不动点就是 θ = 0；实测取第 51–60 步 |θ| 的平均。',
+      warn: !locked || residual > PLL_BAND,
+    },
+    {
+      label: '收敛步数',
+      value: lockStep === null ? '—' : `${lockStep}`,
+      hint: '首次进入 ±0.02 弧度、并且之后不再离开的那一步；小角度下 θ(n+1) ≈ (1−K)·θ(n)，误差每步乘上 1−K。',
+      warn: lockStep === null,
+    },
+    {
+      label: '环路锁定',
+      value: locked ? '锁住' : '没锁住',
+      hint: `理论上收敛条件是 |1−K| < 1，也就是 0 < K < 2；当前 K = ${gain.toFixed(2)}，误差乘数 1−K = ${multiplier.toFixed(2)}。`,
+      warn: !locked,
+    },
+  ]
+
+  let conclusion: string
+  if (!converges) {
+    conclusion = `K = ${gain.toFixed(2)} 时 |1−K| = ${Math.abs(multiplier).toFixed(2)} > 1，一阶环把相位误差越放越大：θ 在正负之间来回摆、摆幅还在长，60 步走完根本没进 ±0.02 的判定带。增益越过 2，环路把误差放大而不是抹平，锁相环不是随便给个增益就能锁上。`
+  } else if (!locked) {
+    conclusion = `K = ${gain.toFixed(2)} 时 |1−K| = ${Math.abs(multiplier).toFixed(2)} < 1，收是收敛的，但每步只抹掉 ${(100 * gain).toFixed(0)}% 的误差，60 步后还剩 ${residual.toFixed(3)} 弧度，还在 ±0.02 的判定带外面。增益太小不是锁不上，是 60 步里来不及锁。`
+  } else {
+    conclusion = `接收端和解调端各自有一个时钟，相位对不上，判出来的符号就整段错位——所以要先追相位，再谈判决。K = ${gain.toFixed(2)} 时误差乘数 1−K = ${multiplier.toFixed(2)}，θ₀ = ${theta0.toFixed(2)} 弧度在第 ${lockStep} 步就落进 ±0.02，60 步后只剩 ${residual.toFixed(3)}。一阶环的好处就是这个乘数能一眼算出来：|1−K| < 1，也就是 0 < K < 2，才收敛。`
+    if (sigma > 0) {
+      conclusion += ` 现在叠了 σ = ${sigma.toFixed(2)} 弧度的每步噪声，误差收不到 0，只在 0 附近来回抖——背景那 40 条淡迹线就是同一参数下的另外 40 次实验。`
+    }
+  }
+
+  return {
+    series,
+    xLabel: '迭代次数 n',
+    yLabel: '相位误差 θ（弧度）',
+    guides: [
+      { y: PLL_BAND, label: `±${PLL_BAND.toFixed(2)} 弧度：判定带的上下沿` },
+      { y: -PLL_BAND, label: '' },
+    ],
+    readouts,
+    conclusion,
+    failed: !locked,
+  }
+}
+
 export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 1,
@@ -2102,12 +2256,13 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 13,
     title: '同步原理',
-    implemented: false,
-    reason: '载波同步与位同步要画相位误差随时间的漂移，一屏里至少两条时间轴，留到功能冻结前再评估。',
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    implemented: true,
+    reason: '',
+    question: '相位差着半个符号，环路凭什么自己追上去？',
+    params: [pllGainParam, pllThetaParam, pllNoiseParam],
+    defaults: { k: 0.6, theta0: 2, sigma: 0 },
+    failPreset: { k: 2.4, theta0: 2, sigma: 0 },
+    compute: computePll,
   },
 ]
 

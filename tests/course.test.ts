@@ -14,6 +14,10 @@ import {
   channelCapacity,
   channelLimit,
   chapterByNo,
+  pllLockStep,
+  pllResidual,
+  pllStep,
+  pllTrace,
   processSigmaTheory,
   processStats,
   selfInfo,
@@ -31,7 +35,7 @@ test('左树 13 章，章号 1 到 13 连续', () => {
 
 test('本轮只实现第 1、2、3、4、5、6、7、8、9、10、11、12 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+  assert.deepEqual(done, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -565,4 +569,46 @@ test('第 3 章：σ_T 随观测时长按 1/√T 收窄', () => {
   for (const ratio of [ratioA, ratioB]) {
     assert.ok(Math.abs(ratio - Math.sqrt(10)) / Math.sqrt(10) < 0.15, `实测比值 ${ratio} 偏离 √10 超过 15%`)
   }
+})
+
+test('第 13 章：无噪声 K=0.6、θ₀=2.0 在 60 步内进带且不再离开', () => {
+  const trace = pllTrace(0.6, 2, 0, 20261112)
+  const lock = pllLockStep(trace)
+  assert.ok(lock !== null, '60 步里一直没进 ±0.02')
+  assert.ok(lock! <= 60)
+  // 实测第 7 步进带（2.0000 → 1.4544 → 0.8585 → 0.4044 → 0.1683 → 0.0678 → 0.0272 → 0.0109）。
+  assert.equal(lock, 7)
+  assert.ok(pllResidual(trace) < 0.02, `稳态 ${pllResidual(trace)} 还在带外`)
+  const view = chapterByNo(13)!.compute({ k: 0.6, theta0: 2, sigma: 0 })
+  assert.equal(view.failed, false)
+  assert.equal(view.readouts[1].value, '7')
+  assert.equal(view.readouts.some((r) => r.warn), false)
+})
+
+test('第 13 章：小角度下第一步按 1−K 缩，θ₁/θ₀ = 1−K', () => {
+  const ratio = pllStep(0.05, 0.6, 0, 0) / 0.05
+  // 实测 0.400250：sin 0.05 略小于 0.05，所以比 0.40 多 2.5e-4。
+  assert.ok(Math.abs(ratio - 0.4) < 1e-3, `实测 ${ratio} 偏离 1−K = 0.40 超过 1e-3`)
+})
+
+test('第 13 章：K=2.40 越过收敛边界，60 步后仍在振荡而不是单调爬行', () => {
+  const trace = pllTrace(2.4, 2, 0, 20261112)
+  assert.ok(Math.abs(trace[trace.length - 1]) > 0.5, `末值 ${trace[trace.length - 1]} 已经贴到 0 附近`)
+  let flips = 0
+  for (let i = 2; i < trace.length; i += 1) {
+    if (Math.sign(trace[i]) !== Math.sign(trace[i - 1])) flips += 1
+  }
+  assert.ok(flips > 10, `只变号 ${flips} 次，不像振荡`)
+  assert.equal(pllLockStep(trace), null)
+  const view = chapterByNo(13)!.compute({ k: 2.4, theta0: 2, sigma: 0 })
+  assert.equal(view.failed, true)
+  assert.equal(view.readouts[2].value, '没锁住')
+  assert.ok(view.conclusion.includes('放大'))
+})
+
+test('第 13 章：K=0.05 太慢，60 步后还在 ±0.02 外面', () => {
+  const trace = pllTrace(0.05, 2, 0, 20261112)
+  // 实测末值 0.1479，相当于 2·(1−K)^60。
+  assert.ok(Math.abs(trace[trace.length - 1]) > 0.02, `末值 ${trace[trace.length - 1]} 已经进带`)
+  assert.equal(pllLockStep(trace), null)
 })
