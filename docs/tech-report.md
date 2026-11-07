@@ -437,7 +437,7 @@ npm run dev
 
 这张表 48 行里，R13、R16、R17 到 R20、R24 四件事在正文里有细节：R13 把 QAM 从写死 16 改成四档可切（`QAM_ORDERS = [2, 4, 16, 64]`），换阶时星座、三个读数、曲线与派生种子一起重算；R16 那轮界面重做拆成四个 tag，见下面「五个补丁轮」一段；R17 到 R20 的三条短片见 3.4；R24 的 CI 见 2.1 与本节末。
 
-截至 R43，`git tag -l` 一共 48 个 tag，`git rev-list --count HEAD` 一共 84 次提交。上面这张表 48 行，与 48 个 tag 一一对应；`npm run check:docs` 会数这两边的数，删掉一行就报缺哪个 tag，正文里出现一个不存在的 tag 名也会报。
+截至 R43，`git tag -l` 一共 48 个 tag，`git rev-list --count R43` 一共 85 次提交。上面这张表 48 行，与 48 个 tag 一一对应；`npm run check:docs` 会数这两边的数，删掉一行就报缺哪个 tag，正文里出现一个不存在的 tag 名也会报。
 
 五个补丁轮为什么单独打 tag，分两组说。
 
@@ -445,7 +445,7 @@ R16 是一轮界面重做，按页拆成四次提交、四个 tag：R16 首页�
 
 R20 是短片返工，三次提交三种文件大小：R20 降码率（QAM 那条从 6.6 MB 降到 1.42 MB）并把 OFDM 接成 59 秒；R20b 换旁白，三条 1,677,954 / 420,369 / 990,019 字节；R20c 只换音频，三条 1,697,865 / 435,941 / 1,004,666 字节。只打一个 tag，字节数就和「哪一版」对不上，评审按 tag 回看会看到两个不同的数。
 
-84 次提交里 36 次没打 tag：R1–R10 那段 12 次，其中 9 次是修正类（`3be4d19` 存档按原话更正、`972ec1c` R2 存档补 AI 侧原文、`b5ac90a` hover 收窄与 INDEX 补 R2、`241c159` INDEX 补 R3、`88bdacf` INDEX 补 R4 与收尾清单成文、`f93afb7` INDEX 补 R5、`083f18c` README 去掉未做的 OFDM 说法、`079e8bc` 把写了没做的事改成实话、`cfd34a9` 索引补上这次校订），另 3 次是初始骨架、CI 配置与 README 首版（`dc27b93`、`63bbf6c`、`ec219b6`），不计入轮次；R11 之后的 24 次是存档补写、INDEX、图注与短片修复，逐条列在 `docs/dialogues/INDEX.md`。
+85 次提交里 37 次没打 tag：R1–R10 那段 12 次，其中 9 次是修正类（`3be4d19` 存档按原话更正、`972ec1c` R2 存档补 AI 侧原文、`b5ac90a` hover 收窄与 INDEX 补 R2、`241c159` INDEX 补 R3、`88bdacf` INDEX 补 R4 与收尾清单成文、`f93afb7` INDEX 补 R5、`083f18c` README 去掉未做的 OFDM 说法、`079e8bc` 把写了没做的事改成实话、`cfd34a9` 索引补上这次校订），另 3 次是初始骨架、CI 配置与 README 首版（`dc27b93`、`63bbf6c`、`ec219b6`），不计入轮次；R11 之后的 25 次是存档补写、INDEX、图注与短片修复，逐条列在 `docs/dialogues/INDEX.md`。
 
 每个 tag 都对应一次推送到 `main`。R24 起 GitHub Actions 依次跑 `npm ci`、`npm test`、`npm run check:docs`、`npm run build`，全绿才上传 Pages；R9、R10 那两次的 `conclusion` 也是 `success`（当时 CI 还只跑 build，理由见 2.1）。
 
