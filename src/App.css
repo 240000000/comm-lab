@@ -290,6 +290,79 @@ a.card {
   color: var(--accent);
 }
 
+/**
+ * 标签行右侧那个数值框。
+ * 它顶掉了原来写死的 strong：平时没有边框、字号与颜色跟原来的 strong 一样，
+ * 只有聚焦时才显边框；宽度固定，位数从 0.05 变到 1 也不会把标签挤得跳一下。
+ */
+.control .param-value,
+.ofdm-bar-item .param-value {
+  flex: 0 0 auto;
+  width: 92px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 15px;
+  font-weight: 400;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.control .param-value::-webkit-outer-spin-button,
+.control .param-value::-webkit-inner-spin-button,
+.ofdm-bar-item .param-value::-webkit-outer-spin-button,
+.ofdm-bar-item .param-value::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.control .param-value:hover,
+.ofdm-bar-item .param-value:hover {
+  border-color: var(--line);
+}
+
+.control .param-value:focus,
+.ofdm-bar-item .param-value:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #0b1219;
+}
+
+.ofdm-bar-label .param-value {
+  width: 84px;
+  padding: 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/**
+ * 数值框右边的单位。
+ * 单位单独一个字，不跟着数字一起进输入框：输入框只收数字，单位不会被误删改。
+ */
+.param-field {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.param-unit {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12.5px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.ofdm-bar-label .param-unit {
+  color: var(--text);
+}
+
 .control input[type='range'] {
   width: 100%;
   accent-color: var(--accent);
@@ -1394,6 +1467,10 @@ a.card {
 }
 
 .lab-qam .control-label strong {
+  font-size: 14px;
+}
+
+.lab-qam .param-value {
   font-size: 14px;
 }
 

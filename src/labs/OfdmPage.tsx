@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react'
 
 import { MAX_CP, MAX_DELAY, SUBCARRIERS, runOfdm } from '../core/ofdm.ts'
 import { OfdmSpectrumChart } from './OfdmSpectrumChart.tsx'
+import { ParamSlider } from './ParamSlider.tsx'
 import { OfdmTimeChart } from './OfdmTimeChart.tsx'
 import { FromQuestionNote } from './FromQuestionNote.tsx'
 import { ShortFilm } from './ShortFilm'
@@ -115,56 +116,40 @@ export function OfdmPage() {
       </section>
 
       <section className="ofdm-bar" aria-label="OFDM 参数与两条支路的读数">
-        <div className="ofdm-bar-item">
-          <label className="ofdm-bar-label" htmlFor="cp-len">
-            <span>循环前缀长度 CP</span>
-            <strong>{cpLen} 个采样</strong>
-          </label>
-          <input
-            id="cp-len"
-            type="range"
-            min={0}
-            max={MAX_CP}
-            step={1}
-            value={cpLen}
-            onChange={(event) => setCpLen(Number(event.target.value))}
-          />
-        </div>
+        <ParamSlider
+          layout="bar"
+          label="循环前缀长度 CP"
+          value={cpLen}
+          min={0}
+          max={MAX_CP}
+          step={1}
+          unit=" 个采样"
+          onChange={setCpLen}
+        />
 
-        <div className="ofdm-bar-item">
-          <label className="ofdm-bar-label" htmlFor="delay">
-            <span>延时径的延时</span>
-            <strong>{delay} 个采样</strong>
-          </label>
-          <input
-            id="delay"
-            type="range"
-            min={0}
-            max={MAX_DELAY}
-            step={1}
-            value={delay}
-            onChange={(event) => setDelay(Number(event.target.value))}
-          />
-        </div>
+        <ParamSlider
+          layout="bar"
+          label="延时径的延时"
+          value={delay}
+          min={0}
+          max={MAX_DELAY}
+          step={1}
+          unit=" 个采样"
+          onChange={setDelay}
+        />
 
-        <div className="ofdm-bar-item ofdm-bar-num">
-          <label className="ofdm-bar-label" htmlFor="symbol-count">
-            <span>统计符号数</span>
-            <strong>{symbolCount} 个</strong>
-          </label>
-          <input
-            id="symbol-count"
-            type="number"
-            min={1}
-            max={OFDM_MAX_SYMBOLS}
-            step={1}
-            value={symbolCount}
-            onChange={(event) => {
-              const next = Number(event.target.value)
-              if (Number.isInteger(next) && next >= 1 && next <= OFDM_MAX_SYMBOLS) setSymbolCount(next)
-            }}
-          />
-        </div>
+        <ParamSlider
+          layout="bar"
+          withRange={false}
+          className="ofdm-bar-num"
+          label="统计符号数"
+          value={symbolCount}
+          min={1}
+          max={OFDM_MAX_SYMBOLS}
+          step={1}
+          unit=" 个"
+          onChange={setSymbolCount}
+        />
 
         <div className="ofdm-bar-item ofdm-bar-seed">
           <label className="ofdm-bar-label" htmlFor="seed">

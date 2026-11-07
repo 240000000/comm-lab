@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react'
 import { BerCurveChart } from './BerCurveChart'
 import { ConstellationChart } from './ConstellationChart'
+import { ParamSlider } from './ParamSlider'
 import { sweepBer } from '../core/curve'
 import { simulateAwgn } from '../core/metrics'
 import { QAM_ORDERS, bitsPerSymbol, orderLabel } from '../core/qam'
@@ -218,23 +219,17 @@ export function QamPage() {
             </details>
           </div>
 
-          <label className="control">
-            <span className="control-label">
-              信噪比 Es/N0
-              <strong>{snrDb.toFixed(1)} dB</strong>
-            </span>
-            <input
-              type="range"
-              min={FROM_DB}
-              max={TO_DB}
-              step={0.5}
-              value={snrDb}
-              onChange={(event) => setSnrDb(Number(event.target.value))}
-            />
-            <span className="control-hint">
-              0 dB：噪声和信号差不多大，点几乎认不出原来是谁。20 dB：几乎贴着理想点。
-            </span>
-          </label>
+          <ParamSlider
+            label="信噪比 Es/N0"
+            value={snrDb}
+            min={FROM_DB}
+            max={TO_DB}
+            step={0.5}
+            decimals={1}
+            unit=" dB"
+            hint="0 dB：噪声和信号差不多大，点几乎认不出原来是谁。20 dB：几乎贴着理想点。"
+            onChange={setSnrDb}
+          />
 
           <div className="control">
             <label className="control-label" htmlFor="qam-seed">

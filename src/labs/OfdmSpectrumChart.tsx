@@ -5,6 +5,7 @@
  *
  * 空心方框是理想位置（QPSK 的四个角），实心点是接收到的点。
  */
+import { syncCanvasSize } from './canvasSize'
 import { useEffect, useRef } from 'react'
 
 import type { Complex } from '../core/dft.ts'
@@ -37,8 +38,7 @@ export function OfdmSpectrumChart({
     const canvas = canvasRef.current
     if (!canvas) return
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
-    canvas.width = Math.round(SIZE * dpr)
-    canvas.height = Math.round(SIZE * dpr)
+    syncCanvasSize(canvas, SIZE, SIZE, dpr)
     canvas.style.width = `${SIZE}px`
     canvas.style.height = `${SIZE}px`
     const ctx = canvas.getContext('2d')

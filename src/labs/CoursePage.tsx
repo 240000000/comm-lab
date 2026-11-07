@@ -15,6 +15,7 @@ import {
   type CourseView,
 } from '../core/course.ts'
 import { CourseChart } from './CourseChart.tsx'
+import { ParamSlider } from './ParamSlider.tsx'
 
 const START_CHAPTER = 2
 
@@ -120,23 +121,15 @@ function Control({
   }
 
   return (
-    <label className="control">
-      <span className="control-label">
-        {param.label}
-        <b>
-          {value}
-          {param.unit}
-        </b>
-      </span>
-      <input
-        type="range"
-        min={param.min}
-        max={param.max}
-        step={param.step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-    </label>
+    <ParamSlider
+      label={param.label}
+      value={value}
+      min={param.min}
+      max={param.max}
+      step={param.step}
+      unit={param.unit}
+      onChange={onChange}
+    />
   )
 }
 

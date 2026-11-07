@@ -8,6 +8,7 @@
  * 第 7 章起多两个开关：logY 把纵轴换成对数刻度（误码率跨好几个数量级），
  * marker 让某条 series 只画散点（蒙特卡洛实测点，不连成线）。
  */
+import { syncCanvasSize } from './canvasSize'
 import { useEffect, useRef } from 'react'
 import type { CourseSeries } from '../core/course.ts'
 
@@ -53,8 +54,7 @@ export function CourseChart({
 
     const width = canvas.clientWidth || 720
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
-    canvas.width = Math.round(width * dpr)
-    canvas.height = Math.round(HEIGHT * dpr)
+    syncCanvasSize(canvas, width, HEIGHT, dpr)
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return

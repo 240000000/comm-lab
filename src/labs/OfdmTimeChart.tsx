@@ -8,6 +8,7 @@
  *
  * 画的是实部。链路用复基带算，虚部同样存在，只是两条线画在一张图上看不出更多信息。
  */
+import { syncCanvasSize } from './canvasSize'
 import { useEffect, useRef } from 'react'
 
 import type { WaveformView } from '../core/ofdm.ts'
@@ -38,8 +39,7 @@ export function OfdmTimeChart({ wave }: { wave: WaveformView }) {
     const canvas = canvasRef.current
     if (!canvas) return
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
-    canvas.width = Math.round(WIDTH * dpr)
-    canvas.height = Math.round(HEIGHT * dpr)
+    syncCanvasSize(canvas, WIDTH, HEIGHT, dpr)
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)

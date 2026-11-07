@@ -9,6 +9,7 @@
  */
 import { useMemo, useState } from 'react'
 import { ConvCurveChart } from './ConvCurveChart'
+import { ParamSlider } from './ParamSlider'
 import { sweepConv } from '../core/convCurve'
 import { createRng } from '../core/rng'
 import {
@@ -237,23 +238,17 @@ export function ConvPage() {
         </section>
 
         <aside className="controls conv-side" aria-label="实验参数">
-          <label className="control">
-            <span className="control-label">
-              每信息比特信噪比 Eb/N0
-              <strong>{ebN0.toFixed(1)} dB</strong>
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={TO_DB}
-              step={0.5}
-              value={ebN0}
-              onChange={(event) => setEbN0(Number(event.target.value))}
-            />
-            <span className="control-hint">
-              码率 1/2 的那 3.01 dB 折算已经算进内部，这里填的就是每信息比特的信噪比。
-            </span>
-          </label>
+          <ParamSlider
+            label="每信息比特信噪比 Eb/N0"
+            value={ebN0}
+            min={0}
+            max={TO_DB}
+            step={0.5}
+            decimals={1}
+            unit=" dB"
+            hint="码率 1/2 的那 3.01 dB 折算已经算进内部，这里填的就是每信息比特的信噪比。"
+            onChange={setEbN0}
+          />
 
           <div className="control">
             <span className="control-label">噪声</span>

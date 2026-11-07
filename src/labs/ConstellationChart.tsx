@@ -10,6 +10,7 @@
  * 字号缩到 11px，文字先描一圈底色再填字（halo），并且标签只在理想点上画一次，
  * 不会跟着几百个接收点一起冒出来。
  */
+import { syncCanvasSize } from './canvasSize'
 import { useEffect, useRef } from 'react'
 import { bitsPerSymbol, buildConstellation } from '../core/qam'
 import type { Sample } from '../core/metrics'
@@ -58,8 +59,7 @@ export function ConstellationChart({ order, received, snrDb }: Props) {
     const toX = (i: number) => PAD + ((i + span) / (2 * span)) * (SIZE - 2 * PAD)
     const toY = (q: number) => SIZE - PAD - ((q + span) / (2 * span)) * (SIZE - 2 * PAD)
 
-    canvas.width = Math.round(SIZE * dpr)
-    canvas.height = Math.round(SIZE * dpr)
+    syncCanvasSize(canvas, SIZE, SIZE, dpr)
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return

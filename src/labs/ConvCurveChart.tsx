@@ -5,6 +5,7 @@
  * 三条线都来自同一批信噪比、同一规模样本；零错误点画空心圈，
  * 位置摆在这批样本能分辨的最低位 1/比特数 上，不硬连线。
  */
+import { syncCanvasSize } from './canvasSize'
 import { useEffect, useRef } from 'react'
 import type { ConvCurvePoint } from '../core/convCurve'
 
@@ -56,8 +57,7 @@ export function ConvCurveChart({ points, fromDb, toDb }: Props) {
     if (!canvas) return
 
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
-    canvas.width = Math.round(WIDTH * dpr)
-    canvas.height = Math.round(HEIGHT * dpr)
+    syncCanvasSize(canvas, WIDTH, HEIGHT, dpr)
     canvas.style.width = `${WIDTH}px`
     canvas.style.height = `${HEIGHT}px`
 

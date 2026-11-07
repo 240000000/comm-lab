@@ -6,6 +6,7 @@
  * 空心点表示一个错都没有——那种位置不能用 log(0) 画，也不该硬连成一条线，
  * 所以只画一个空心圈，摆在「这批样本能分辨到的最低位」上（1 / 比对过的比特数）。
  */
+import { syncCanvasSize } from './canvasSize'
 import { useEffect, useRef } from 'react'
 import type { CurvePoint } from '../core/curve'
 import { orderLabel } from '../core/qam'
@@ -44,8 +45,7 @@ export function BerCurveChart({ points, fromDb, toDb, order }: Props) {
     if (!canvas) return
 
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
-    canvas.width = Math.round(WIDTH * dpr)
-    canvas.height = Math.round(HEIGHT * dpr)
+    syncCanvasSize(canvas, WIDTH, HEIGHT, dpr)
     canvas.style.width = `${WIDTH}px`
     canvas.style.height = `${HEIGHT}px`
 
