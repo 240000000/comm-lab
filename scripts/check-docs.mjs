@@ -28,7 +28,7 @@ import { runOfdm, SUBCARRIERS } from '../src/core/ofdm.ts';
 import { chapterByNo, COURSE_CHAPTERS } from '../src/core/course.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const FILES = ['README.md', 'docs/preview.md', 'docs/tech-report.md', 'docs/works-intro.md'];
+const FILES = ['README.md', 'docs/preview.md', 'docs/tech-report.md', 'docs/works-intro.md', 'docs/提交说明.md'];
 
 const SEED = 20261027; // 三个实验台的默认种子
 const PAGE_BITS = 20000; // QAM 页默认统计样本（按比特取整）
@@ -671,6 +671,52 @@ let introLine = '';
   introLine = `  作品介绍锚定 tag ${anchorTag || '（缺）'}（tag 名逐个对照 git tag -l），不写会漂的 tag 总数。`;
 }
 
+// 提交说明（docs/提交说明.md）：正文一个具体数字都不许写，只许占位符。
+// 这份文件打包时由 scripts/pack.mjs 替换成包根的 提交说明.txt；写死数字就会随轮次过期，
+// 又会变出第二个没人知道怎么来的 提交说明.txt。
+let noteLine = '';
+{
+  const noteFile = 'docs/提交说明.md';
+  const PLACEHOLDERS = [
+    '{{TAG}}',
+    '{{TESTS}}',
+    '{{ASSERTIONS}}',
+    '{{PAGES_REPORT}}',
+    '{{PAGES_INTRO}}',
+    '{{FILES}}',
+  ];
+  const lines = readFileSync(join(ROOT, noteFile), 'utf8').split(/\r?\n/);
+  for (const holder of PLACEHOLDERS) {
+    // 六个占位符各算一条：缺哪个就报哪个，打包时会当场替换成实数。
+    checked += 1;
+    perFile.set(noteFile, (perFile.get(noteFile) ?? 0) + 1);
+    if (!lines.some((line) => line.includes(holder))) {
+      failures.push({
+        file: noteFile,
+        line: 1,
+        label: `缺占位符 ${holder}`,
+        written: '（正文里没有）',
+        actual: `正文里要有 ${holder}，打包时替换成当场算出来的值`,
+      });
+    }
+  }
+  // 正文不许出现阿拉伯数字：「Node 20 以上」是运行环境要求，不是包里的数，放行。
+  checked += 1;
+  perFile.set(noteFile, (perFile.get(noteFile) ?? 0) + 1);
+  lines.forEach((line, i) => {
+    const rest = line.replace(/Node 20/g, '');
+    if (!/\d/.test(rest)) return;
+    failures.push({
+      file: noteFile,
+      line: i + 1,
+      label: '具体数字（只许占位符）',
+      written: line.trim(),
+      actual: '数字改成 {{...}} 占位符，由 scripts/pack.mjs 打包时替换',
+    });
+  });
+  noteLine = `  提交说明只写占位符（${PLACEHOLDERS.length} 个占位符齐全，正文没有具体数字）。`;
+}
+
 console.log(`check-docs：用 src/core 重算文档数字（种子 ${SEED}）`);
 console.log(
   `  测试 ${testCount} 条 / ${testFileCount} 个文件；页面默认 ${PAGE_BITS} 比特，16QAM 12 dB 为 ${p12(16).symbolCount} 个符号、${p12(16).bitCount} 个比特`,
@@ -680,6 +726,7 @@ console.log(captionLine);
 console.log(courseLine);
 console.log(introLine);
 console.log(selfRefLine);
+console.log(noteLine);
 console.log(
   `  本机耗时：单次 20,000 符号 ${singleSim.ms.toFixed(1)} ms；16QAM 21 点 ${berSweep.ms.toFixed(1)} ms；卷积 11 点 ${convSweep.ms.toFixed(1)} ms；OFDM 200 符号 ${ofdm.ms.toFixed(1)} ms`,
 );
