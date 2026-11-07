@@ -562,6 +562,41 @@ let courseLine = '';
   }
 }
 
+// 自指硬数：技术报告正文里不许再出现「这张表 N 行」「一共 N 个 tag」这类跟着 tag 走的写法。
+// 每打一个 tag 就复发一次的错，靠人记是记不住的，所以让脚本每次数一遍。
+let selfRefLine = '';
+{
+  const SELF_REF = [
+    { re: /这张表\s*\d+\s*行/, label: '「这张表 N 行」' },
+    { re: /一共\s*\d+\s*个\s*tag/, label: '「一共 N 个 tag」' },
+    { re: /\d+\s*个\s*tag\s*一一对应/, label: '「N 个 tag 一一对应」' },
+    { re: /\d+\s*行\s*[，,]\s*与\s*\d+\s*个\s*tag/, label: '「N 行，与 N 个 tag」' },
+    { re: /rev-list\s+--count\s+HEAD[^。\n]*?\d+\s*次提交/, label: '「数 HEAD 得 N 次提交」' },
+  ];
+  const reportFile = 'docs/tech-report.md';
+  const lines = readFileSync(join(ROOT, reportFile), 'utf8').split(/\r?\n/);
+  let hits = 0;
+  for (const { re, label } of SELF_REF) {
+    // 五种写法各算一条断言：扫过就算跑过，命中才算不符。
+    checked += 1;
+    perFile.set(reportFile, (perFile.get(reportFile) ?? 0) + 1);
+    lines.forEach((line, i) => {
+      if (line.startsWith('|')) return; // 轮次表的数据行由上面那条「表行数 = tag 数」管着
+      const m = line.match(re);
+      if (!m) return;
+      hits += 1;
+      failures.push({
+        file: reportFile,
+        line: i + 1,
+        label: `自指硬数：${label}`,
+        written: m[0],
+        actual: '不写数字：改成「这张表里」或「表有几行，git tag -l 就有几行」',
+      });
+    });
+  }
+  selfRefLine = `  正文里没有跟着 tag 走的自指硬数（${SELF_REF.length} 种写法逐个扫，命中 ${hits} 处）。`;
+}
+
 console.log(`check-docs：用 src/core 重算文档数字（种子 ${SEED}）`);
 console.log(
   `  测试 ${testCount} 条 / ${testFileCount} 个文件；页面默认 ${PAGE_BITS} 比特，16QAM 12 dB 为 ${p12(16).symbolCount} 个符号、${p12(16).bitCount} 个比特`,
@@ -569,6 +604,7 @@ console.log(
 console.log(structuralLine);
 console.log(captionLine);
 console.log(courseLine);
+console.log(selfRefLine);
 console.log(
   `  本机耗时：单次 20,000 符号 ${singleSim.ms.toFixed(1)} ms；16QAM 21 点 ${berSweep.ms.toFixed(1)} ms；卷积 11 点 ${convSweep.ms.toFixed(1)} ms；OFDM 200 符号 ${ofdm.ms.toFixed(1)} ms`,
 );

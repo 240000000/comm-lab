@@ -1,6 +1,6 @@
 # 作品介绍 · 通信原理交互实验室
 
-本文件对应仓库最新 tag `R47`。截至这一版，仓库一共 49 个 tag、225 条测试，这些数不是抄来的：`npm run check:docs` 每次都会把本文件里的数字用 `src/core/` 的同一套函数重算一遍，对不上就退出码 1，并打印文件名、行号、文档写的值和实际值。在线地址 `https://240000000.github.io/comm-lab/`，仓库 `https://github.com/240000000/comm-lab`，回看某一版用 `git show R47`。
+本文件对应仓库最新 tag `R48`。截至这一版，仓库一共 50 个 tag、225 条测试，这些数不是抄来的：`npm run check:docs` 每次都会把本文件里的数字用 `src/core/` 的同一套函数重算一遍，对不上就退出码 1，并打印文件名、行号、文档写的值和实际值。在线地址 `https://240000000.github.io/comm-lab/`，仓库 `https://github.com/240000000/comm-lab`，回看某一版用 `git show R48`。
 
 ## 一、这个项目是干什么的
 
