@@ -55,6 +55,8 @@ export function CourseChart({
     let yMin = Infinity
     let yMax = -Infinity
     for (const s of series) {
+      ctx.globalAlpha = s.quiet ? 0.18 : 1
+      ctx.lineWidth = s.quiet ? 0.8 : s.dashed ? 1.1 : 1.4
       for (const [x, y] of s.points) {
         if (!Number.isFinite(x) || !Number.isFinite(y)) continue
         xMin = Math.min(xMin, x)
@@ -127,10 +129,11 @@ export function CourseChart({
     ctx.fillText(yLabel, 0, 0)
     ctx.restore()
 
-    // 线：每一条各自连点，虚线仍是虚线。
+    // 线：每一条各自连点，虚线仍是虚线；迹线淡画，不抢包络。
     for (const s of series) {
+      ctx.globalAlpha = s.quiet ? 0.18 : 1
       ctx.strokeStyle = s.color
-      ctx.lineWidth = s.name === '解调输出' ? 1.8 : 1.2
+      ctx.lineWidth = s.quiet ? 0.8 : s.name === '解调输出' ? 1.8 : 1.2
       if (s.dashed) ctx.setLineDash([4, 4])
       else ctx.setLineDash([])
       ctx.beginPath()
@@ -147,6 +150,7 @@ export function CourseChart({
       ctx.stroke()
       ctx.setLineDash([])
     }
+    ctx.globalAlpha = 1
 
     // 图例放右上角，压在网格上，不动轴。
     ctx.textAlign = 'right'
@@ -154,6 +158,7 @@ export function CourseChart({
     ctx.font = '12px "Noto Sans SC", "Microsoft YaHei", sans-serif'
     let legendY = PAD.top + 8
     for (const s of series) {
+      if (s.quiet) continue
       ctx.strokeStyle = s.color
       ctx.lineWidth = s.dashed ? 1.2 : 1.8
       ctx.setLineDash(s.dashed ? [4, 4] : [])

@@ -31,6 +31,7 @@ export type CourseSeries = {
   name: string
   color: string
   dashed?: boolean
+  quiet?: boolean
   points: Array<[number, number]>
 }
 
@@ -500,6 +501,7 @@ function computeSource(params: Record<string, number>): CourseView {
 
 const alphaParam: CourseParam = { key: 'alpha', label: '滚降系数 α', min: 0.05, max: 1, step: 0.05, unit: '' }
 const eyeSnrParam: CourseParam = { key: 'eyeSnrDb', label: '信噪比 Eb/N0', min: 0, max: 30, step: 1, unit: 'dB' }
+const timingParam: CourseParam = { key: 'timing', label: '定时误差', min: 0, max: 0.5, step: 0.05, unit: 'Ts' }
 const multipathParam: CourseParam = { key: 'multipath', label: '多径', min: 0, max: 1, step: 1, unit: '', options: ['关', '开'] }
 
 const EYE_SEED = 20261027
@@ -507,7 +509,6 @@ const EYE_SYMBOLS = 400
 const EYE_GRID = 32
 const EYE_SPAN = 6
 /** 采样时钟偏差，单位是一个码元周期：真实接收机对不上点，正是眼图要防的事。 */
-const EYE_PHASE = 0.2
 
 /**
  * 升余弦脉冲的时域值，t 以码元周期为单位。
@@ -538,7 +539,8 @@ function computeEye(params: Record<string, number>): CourseView {
   const alpha = params.alpha
   const snrDb = params.eyeSnrDb
   const echo = params.multipath === 1 ? 0.5 : 0
-  const seed = EYE_SEED + Math.round(alpha * 100) * 7 + Math.round(snrDb) * 3 + Math.round(echo * 10)
+  const timing = Math.min(0.5, Math.max(0, params.timing ?? 0))
+  const seed = EYE_SEED + Math.round(alpha * 100) * 7 + Math.round(snrDb) * 3 + Math.round(echo * 10) + Math.round(timing * 100) * 11
   const rng = createRng(seed)
   const ebN0 = 10 ** (snrDb / 10)
   const sigma = Math.sqrt(1 / (2 * ebN0))
@@ -555,7 +557,7 @@ function computeEye(params: Record<string, number>): CourseView {
 
   for (let m = 10; m < EYE_SYMBOLS - 10; m += 1) {
     for (let i = 0; i < phases.length; i += 1) {
-      const value = eyeSample(m + EYE_PHASE + phases[i], symbols, alpha, echo) + sigma * rng.gauss()
+      const value = eyeSample(m + timing + phases[i], symbols, alpha, echo) + sigma * rng.gauss()
       columns[i].push(value)
       if (i === EYE_GRID) {
         center.push(value)
@@ -568,8 +570,8 @@ function computeEye(params: Record<string, number>): CourseView {
   // 峰值 ISI：同一时刻所有别的码元尾巴（含回波）绝对值的和，可以在纸上算。
   let isi = 0
   for (let k = -EYE_SPAN; k <= EYE_SPAN; k += 1) {
-    if (k !== 0) isi += Math.abs(raisedCosine(k + EYE_PHASE, alpha))
-    if (echo > 0) isi += echo * Math.abs(raisedCosine(k + EYE_PHASE - 0.5, alpha))
+    if (k !== 0) isi += Math.abs(raisedCosine(k + timing, alpha))
+    if (echo > 0) isi += echo * Math.abs(raisedCosine(k + timing - 0.5, alpha))
   }
 
   // 取 2% / 98% 分位而不是极值：极值由 380 条轨迹里最倒霉的那几条噪声决定，
@@ -592,7 +594,17 @@ function computeEye(params: Record<string, number>): CourseView {
   // 采样偏 0.2 个码元时，峰值 ISI 一旦逼近 1，判决点上的余量就被尾巴吃光了。
   const failed = isi > 0.85 || eyeHeight < 0.6 || snrDb <= 8 || (ber > theoryBer * 10 && ber > 0)
 
+  const traces: CourseSeries[] = []
+  for (let t = 0; t < 40; t += 1) {
+    traces.push({
+      name: '迹线',
+      color: '#5d7f95',
+      quiet: true,
+      points: phases.map((p) => [p, eyeSample(40 + t + timing + p, symbols, alpha, echo)] as [number, number]),
+    })
+  }
   const series: CourseSeries[] = [
+    ...traces,
     { name: '上包络（最坏的那个码元）', color: '#3ce3c6', points: phases.map((p, i) => [p, upper[i]] as [number, number]) },
     { name: '下包络（最坏的那个码元）', color: '#8f7fd4', points: phases.map((p, i) => [p, lower[i]] as [number, number]) },
   ]
@@ -611,9 +623,9 @@ function computeEye(params: Record<string, number>): CourseView {
         warn: eyeHeight < 0.6,
       },
       {
-        label: '峰值 ISI（理论）',
+        label: `峰值 ISI（采样偏 ${timing.toFixed(2)}Ts）`,
         value: isi.toFixed(3),
-        hint: `截断到 ±${EYE_SPAN} 个码元、采样偏 ${EYE_PHASE} 个码元；超过 0.85 就闭上`,
+        hint: `截断到 ±${EYE_SPAN} 个码元、采样偏 ${timing.toFixed(2)} 个码元；超过 0.85 就闭上`,
         warn: isi > 0.85,
       },
       {
@@ -631,7 +643,9 @@ function computeEye(params: Record<string, number>): CourseView {
           : echo > 0
             ? '多径把同一个码元的能量拖到半个码元之后，判决点上的开口被回波吃掉了。'
             : '眼图快闭上了，先查采样相位。'
-      : '采样偏了 0.2 个码元，眼图仍然张着：升余弦把码元间的干扰压在了判决点附近。',
+      : timing <= 0.01
+        ? '采样正好落在判决点上，升余弦的 ISI 理论上是 0；把定时误差拖开，才看得出滚降系数在兜底。'
+        : `采样偏了 ${timing.toFixed(2)} 个码元，眼图仍然张着：升余弦把码元间的干扰压在了判决点附近。`,
     failed,
   }
 }
@@ -716,9 +730,9 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     implemented: true,
     reason: '',
     question: '滚降系数压到很小、采样又偏了一点，眼图为什么就闭上了？',
-    params: [alphaParam, eyeSnrParam, multipathParam],
-    defaults: { alpha: 0.35, eyeSnrDb: 20, multipath: 0 },
-    failPreset: { alpha: 0.05, eyeSnrDb: 20, multipath: 0 },
+    params: [alphaParam, eyeSnrParam, multipathParam, timingParam],
+    defaults: { alpha: 0.35, eyeSnrDb: 20, multipath: 0, timing: 0 },
+    failPreset: { alpha: 0.05, eyeSnrDb: 20, multipath: 0, timing: 0.45 },
     compute: computeEye,
   },
   {

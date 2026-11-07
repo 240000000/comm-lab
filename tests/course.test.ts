@@ -118,6 +118,7 @@ test('第 6 章眼图：默认张着、反例闭上，两个读数带理论对�
   const eye = Number(base.readouts[0].value)
   assert.ok(eye > 0 && eye <= 2, `眼高应落在 (0, 2]，实际 ${eye}`)
   assert.ok(base.readouts.some((item) => item.hint.includes('理论')))
+  assert.equal(base.readouts[1].value, '0.000', '采样落在判决点上时，升余弦的 ISI 应为 0')
 
   const failed = chapter.compute(chapter.failPreset)
   assert.equal(failed.failed, true)
@@ -129,9 +130,16 @@ test('第 6 章眼图：默认张着、反例闭上，两个读数带理论对�
 test('第 6 章：滚降系数越小，峰值 ISI 越大', () => {
   const chapter = chapterByNo(6)
   const isi = (alpha: number): number =>
-    Number(chapter.compute({ alpha, eyeSnrDb: 20, multipath: 0 }).readouts[1].value)
+    Number(chapter.compute({ alpha, eyeSnrDb: 20, multipath: 0, timing: 0.2 }).readouts[1].value)
   assert.ok(isi(0.05) > isi(0.35))
   assert.ok(isi(0.35) > isi(0.99))
+  // 单调性之外钉一个绝对值：采样偏 0.2Ts、α=0.05 时峰值 ISI 应为 0.917。
+  assert.ok(Math.abs(isi(0.05) - 0.917) < 0.002, `α=0.05、偏 0.2Ts 的 ISI 应约 0.917，实际 ${isi(0.05)}`)
+  assert.equal(
+    chapter.compute({ alpha: 0.05, eyeSnrDb: 20, multipath: 0, timing: 0 }).readouts[1].value,
+    '0.000',
+    'α 再小，采样对准判决点时 ISI 也应为 0',
+  )
 })
 
 test('第 6 章同参重跑结果一致', () => {

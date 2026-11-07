@@ -25,6 +25,7 @@ import { sweepBer } from '../src/core/curve.ts';
 import { sweepConv } from '../src/core/convCurve.ts';
 import { freeDistance, correctionCapability } from '../src/core/conv.ts';
 import { runOfdm, SUBCARRIERS } from '../src/core/ofdm.ts';
+import { chapterByNo } from '../src/core/course.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const FILES = ['README.md', 'docs/preview.md', 'docs/tech-report.md'];
@@ -395,6 +396,70 @@ let captionLine = '';
 
 // 课程视图：13 章表逐行与 src/core/course.ts 对齐。参数个数、有没有深度实验台都由代码算，
 // 文档里写错一个数字，这里就报哪一行、哪一列。
+
+// 1.6 正文里手写的数字（第 2/6/10 章的反例读数）也从 course.ts 的失败预设重算，
+// 免得「数字必须现算」那一节自己手抄。
+{
+  const reportLines = readFileSync(join(ROOT, 'docs/tech-report.md'), 'utf8').split('\n')
+  const ch2 = chapterByNo(2)
+  const ch6 = chapterByNo(6)
+  const ch10 = chapterByNo(10)
+  const eyeAt = (alpha, timing) =>
+    Number(ch6.compute({ ...ch6.defaults, alpha, timing }).readouts[1].value)
+  const cases = [
+    {
+      label: '第 2 章对偶偏差',
+      re: /对偶偏差从机器精度跳到 ([\d.]+)/,
+      values: [Number(ch2.compute(ch2.failPreset).readouts[1].value)],
+    },
+    {
+      label: '第 6 章反例峰值 ISI',
+      re: /峰值 ISI ([\d.]+)/,
+      values: [Number(ch6.compute(ch6.failPreset).readouts[1].value)],
+    },
+    {
+      label: '第 6 章三档滚降 ISI',
+      re: /ISI 是 ([\d.]+) \/ ([\d.]+) \/ ([\d.]+)/,
+      values: [eyeAt(0.05, 0.2), eyeAt(0.35, 0.2), eyeAt(0.99, 0.2)],
+    },
+    {
+      label: '第 10 章混叠误差',
+      re: /混叠误差 ([\d.]+)%/,
+      values: [Number.parseFloat(ch10.compute(ch10.failPreset).readouts[0].value)],
+    },
+  ]
+  for (const item of cases) {
+    checked += item.values.length
+    perFile.set('docs/tech-report.md', perFile.get('docs/tech-report.md') + item.values.length)
+    const idx = reportLines.findIndex((line) => item.re.test(line))
+    if (idx < 0) {
+      failures.push({
+        file: 'docs/tech-report.md',
+        line: 0,
+        label: item.label,
+        written: '（正文里这一条找不到）',
+        actual: item.values.join(' / '),
+        hint: '改正文或改这里',
+      })
+      continue
+    }
+    const m = reportLines[idx].match(item.re)
+    for (let i = 0; i < item.values.length; i += 1) {
+      const written = Number(m[i + 1])
+      const actual = item.values[i]
+      if (Math.abs(written - actual) > 0.0015) {
+        failures.push({
+          file: 'docs/tech-report.md',
+          line: idx + 1,
+          label: `${item.label}（第 ${i + 1} 个值）`,
+          written: String(written),
+          actual: String(actual),
+        })
+      }
+    }
+  }
+}
+
 let courseLine = '';
 {
   const { COURSE_CHAPTERS } = await import(pathToFileURL(join(ROOT, 'src/core/course.ts')).href);
