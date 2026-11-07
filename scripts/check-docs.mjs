@@ -25,10 +25,10 @@ import { sweepBer } from '../src/core/curve.ts';
 import { sweepConv } from '../src/core/convCurve.ts';
 import { freeDistance, correctionCapability } from '../src/core/conv.ts';
 import { runOfdm, SUBCARRIERS } from '../src/core/ofdm.ts';
-import { chapterByNo } from '../src/core/course.ts';
+import { chapterByNo, COURSE_CHAPTERS } from '../src/core/course.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const FILES = ['README.md', 'docs/preview.md', 'docs/tech-report.md'];
+const FILES = ['README.md', 'docs/preview.md', 'docs/tech-report.md', 'docs/works-intro.md'];
 
 const SEED = 20261027; // 三个实验台的默认种子
 const PAGE_BITS = 20000; // QAM 页默认统计样本（按比特取整）
@@ -37,6 +37,10 @@ const EXACT = { abs: 0 };
 const PRINTED = { rel: 0.01 }; // 三位有效数字
 const EVM = { abs: 0.01 };
 const TIMING = { band: 10 };
+
+// tag 列表：文档里写的 tag 个数与轮次表行数都跟它比
+const tagRun = spawnSync('git', ['tag', '-l'], { cwd: ROOT, encoding: 'utf8' });
+const tagList = tagRun.status === 0 ? tagRun.stdout.split('\n').map((s) => s.trim()).filter(Boolean) : [];
 
 const now = () => Number(process.hrtime.bigint()) / 1e6;
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
@@ -196,6 +200,42 @@ add(
   [EVM, EVM],
 );
 
+// 作品介绍（docs/works-intro.md）：tag 数、测试条数、课程视图章数，以及正文引用的实测数字，
+// 全部与上面同一套函数算出来的值比对——介绍里的数一个都不许手抄。
+const ch13 = chapterByNo(13);
+const ch13Fail = ch13.compute({ ...ch13.defaults, ...ch13.failPreset });
+const pllResidual = Number(String(ch13Fail.readouts[0].value).split('/')[0].trim());
+
+add('docs/works-intro.md', 'tag 个数', /一共 (\d+) 个 tag/, [tagList.length], [EXACT]);
+add('docs/works-intro.md', '测试条数', /([\d,]+) 条测试/, [testCount], [EXACT]);
+add('docs/works-intro.md', '课程视图章数', /课程视图 (\d+) 章/, [COURSE_CHAPTERS.length], [EXACT]);
+add(
+  'docs/works-intro.md',
+  '16QAM 12 dB 的误码率与分母',
+  /16QAM 的误码率 ([\d.e+-]+)，旁注 ([\d,]+) \/ ([\d,]+)/,
+  [p12(16).ber, p12(16).bitErrors, p12(16).bitCount],
+  [PRINTED, EXACT, EXACT],
+);
+add('docs/works-intro.md', '64QAM 12 dB 的误码率', /64QAM 是 ([\d.e+-]+)/, [p12(64).ber], [PRINTED]);
+add('docs/works-intro.md', '四档 EVM', /EVM 都是 ([\d.]+)%/, [p12(16).evmPercent], [EVM]);
+add('docs/works-intro.md', '自由距离与纠错能力', /自由距离 (\d+)，能纠 (\d+) 位/, [dFree.distance, capability], [EXACT, EXACT]);
+add(
+  'docs/works-intro.md',
+  '4 dB 的三条线（硬 / 软 / 不编码）',
+  /硬判决错 ([\d,]+) 个、软判决错 ([\d,]+) 个，不编码要错 ([\d,]+) 个/,
+  [conv4.hardErrors, conv4.softErrors, conv4.uncodedErrors],
+  [EXACT, EXACT, EXACT],
+);
+add('docs/works-intro.md', 'OFDM 子载波数', /([\d,]+) 个子载波/, [SUBCARRIERS], [EXACT]);
+add('docs/works-intro.md', '锁相环反例读数', /读数变成「([\d.]+) \/ 0\.000」/, [pllResidual], [PRINTED]);
+add(
+  'docs/works-intro.md',
+  '四条耗时',
+  /单次 20,000 符号 ([\d.]+) ms，16QAM 一条 21 点曲线 ([\d.]+) ms，卷积 11 点 ([\d.]+) ms，OFDM 200 符号 ([\d.]+) ms/,
+  [singleSim.ms, berSweep.ms, convSweep.ms, ofdm.ms],
+  [TIMING, TIMING, TIMING, TIMING],
+);
+
 // ── 4. 逐行比对 ────────────────────────────────────────────────────────────
 const failures = [];
 let checked = 0;
@@ -247,8 +287,6 @@ for (const rule of rules) {
 // 结构性断言：轮次表与 tag 列表一一对应；正文提到的 tag 必须真实存在。
 // 这两条不涉及数字，但同样会过期（表只写到 R10、正文写了一个不存在的 tag）。
 let structuralLine = '';
-const tagRun = spawnSync('git', ['tag', '-l'], { cwd: ROOT, encoding: 'utf8' });
-const tagList = tagRun.status === 0 ? tagRun.stdout.split('\n').map((s) => s.trim()).filter(Boolean) : [];
 
 if (tagRun.status !== 0) {
   failures.push({
