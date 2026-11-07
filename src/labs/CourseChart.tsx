@@ -87,6 +87,16 @@ export function CourseChart({
         yMax = Math.max(yMax, yv)
       }
     }
+    // 参考虚线也是图的一部分：±4σ_T 这种带子常常比数据本身还宽，
+    // 不并进取值范围的话，虚线会画到坐标区外面去，读者以为它被裁掉了。
+    if (guides) {
+      for (const g of guides) {
+        if (!Number.isFinite(g.y)) continue
+        const gv = ty(g.y)
+        yMin = Math.min(yMin, gv)
+        yMax = Math.max(yMax, gv)
+      }
+    }
     // 堆叠柱的高度是同一 x 上各段之和；取值范围必须按总高算，否则最上面那一段会顶出绘图区。
     if (stack) {
       const totals = new Map<number, number>()
@@ -226,10 +236,17 @@ export function CourseChart({
         ctx.lineTo(PAD.left + plotW, gy)
         ctx.stroke()
         ctx.setLineDash([])
-        ctx.fillStyle = '#8fa7b8'
+        // 贴着上沿的那条线没有地方写字，标注改放到线下方，免得被裁掉。
+        const above = gy - 4 > PAD.top + 10
         ctx.textAlign = 'left'
-        ctx.textBaseline = 'bottom'
-        ctx.fillText(g.label, PAD.left + 6, gy - 4)
+        ctx.textBaseline = above ? 'bottom' : 'top'
+        // 标注底下垫一层底色：数据点常常正好压在这条线上，不垫就看不清字。
+        const labelW = ctx.measureText(g.label).width
+        const labelY = above ? gy - 4 : gy + 4
+        ctx.fillStyle = 'rgba(9, 15, 22, 0.78)'
+        ctx.fillRect(PAD.left + 3, above ? labelY - 11 : labelY - 1, labelW + 6, 13)
+        ctx.fillStyle = '#8fa7b8'
+        ctx.fillText(g.label, PAD.left + 6, labelY)
       }
     }
 

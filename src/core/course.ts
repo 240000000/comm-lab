@@ -1679,6 +1679,186 @@ function computeInfo(params: Record<string, number>): CourseView {
 }
 
 
+/* ---------- 第 3 章：从一条曲线到一个集合 ---------- */
+
+const PROC_KINDS = ['白噪声', '一阶低通（τ = 1 ms）', '非平稳（均值漂移）'] as const
+/** 采样率固定 10 kHz：观测时长决定样本数，样本数决定时间平均的涨落。 */
+const PROC_FS = 10000
+/** 一阶低通的相关时间，固定 1 ms。 */
+const PROC_CORR_MS = 1
+/** 观测时长的对数档：10 ms 到 1 s。 */
+export const PROC_TIMES_MS = [10, 20, 50, 100, 200, 500, 1000] as const
+const PROC_TIME_LABELS = PROC_TIMES_MS.map((t) => `${t} ms`)
+const PROC_SEED = 20261111
+/** 非平稳档的漂移斜率（1/s）：每 100 ms 均值往外漂 0.2。 */
+const PROC_DRIFT = 2
+
+const procKindParam: CourseParam = {
+  key: 'kind',
+  label: '过程类型',
+  min: 0,
+  max: PROC_KINDS.length - 1,
+  step: 1,
+  unit: '',
+  options: [...PROC_KINDS],
+}
+const procTimeParam: CourseParam = {
+  key: 'timeIndex',
+  label: '观测时长 T',
+  min: 0,
+  max: PROC_TIMES_MS.length - 1,
+  step: 1,
+  unit: '',
+  options: [...PROC_TIME_LABELS],
+}
+const procCountParam: CourseParam = {
+  key: 'k',
+  label: '样本条数 K',
+  min: 20,
+  max: 200,
+  step: 10,
+  unit: '条',
+}
+
+/** AR(1) 的系数 ρ = exp(−1/(τ·fs))：一阶低通里相邻两个采样的相关程度。 */
+export function arCoefficient(corrMs: number, fs: number): number {
+  return Math.exp(-1 / ((corrMs / 1000) * fs))
+}
+
+/**
+ * 时间平均的涨落 σ_T：平稳过程的解析值。
+ * 白噪声 1/√N；一阶低通 √((1+ρ)/((1−ρ)N))，等价于 √(2τ/T)。
+ */
+export function processSigmaTheory(kind: number, timeMs: number): number {
+  const n = Math.max(1, Math.round((timeMs / 1000) * PROC_FS))
+  if (kind === 1) {
+    const rho = arCoefficient(PROC_CORR_MS, PROC_FS)
+    return Math.sqrt((1 + rho) / (1 - rho) / n)
+  }
+  return 1 / Math.sqrt(n)
+}
+
+export type ProcessStats = {
+  /** K 条曲线的时间平均。 */
+  averages: number[]
+  /** 这 K 个平均值的均值。 */
+  mean: number
+  /** 这 K 个平均值的标准差，也就是实测的 σ_T。 */
+  sigma: number
+  /** 落在 ±4σ_T（理论）之外的条数比例。 */
+  outside: number
+  /** 同样条件下、若过程平稳时的理论 σ_T。 */
+  sigmaTheory: number
+}
+
+/**
+ * 跑 K 条曲线：每条各截一段观测，算它自己的时间平均；
+ * 再把这 K 个平均值当成一个集合，统计均值、标准差与带外比例。
+ */
+export function processStats(kind: number, timeMs: number, k: number): ProcessStats {
+  const n = Math.max(1, Math.round((timeMs / 1000) * PROC_FS))
+  const rng = createRng(PROC_SEED + kind * 977 + Math.round(timeMs) * 13 + k * 7)
+  const rho = arCoefficient(PROC_CORR_MS, PROC_FS)
+  const drive = Math.sqrt(1 - rho * rho)
+  const averages: number[] = []
+  for (let c = 0; c < k; c += 1) {
+    let acc = 0
+    if (kind === 1) {
+      // x[n] = ρ·x[n−1] + √(1−ρ²)·w[n]：方差稳在 1，相关时间由 ρ 定。
+      let prev = rng.gauss()
+      acc += prev
+      for (let i = 1; i < n; i += 1) {
+        prev = rho * prev + drive * rng.gauss()
+        acc += prev
+      }
+    } else if (kind === 2) {
+      // 每条曲线从各自的随机偏置出发，再以固定斜率线性漂移：
+      // 集合平均 E[x(t)] = c·t 随时间变，所以它不平稳，时间平均也就不认 0。
+      const offset = rng.gauss()
+      for (let i = 0; i < n; i += 1) {
+        acc += offset + (PROC_DRIFT * i) / PROC_FS + rng.gauss()
+      }
+    } else {
+      for (let i = 0; i < n; i += 1) acc += rng.gauss()
+    }
+    averages.push(acc / n)
+  }
+  const mean = averages.reduce((sum, v) => sum + v, 0) / k
+  const variance = averages.reduce((sum, v) => sum + (v - mean) ** 2, 0) / Math.max(1, k - 1)
+  const sigmaTheory = processSigmaTheory(kind, timeMs)
+  const outside = averages.filter((v) => Math.abs(v) > 4 * sigmaTheory).length / k
+  return { averages, mean, sigma: Math.sqrt(variance), outside, sigmaTheory }
+}
+
+function computeProcess(params: Record<string, number>): CourseView {
+  const kind = Math.min(PROC_KINDS.length - 1, Math.max(0, Math.round(params.kind ?? 0)))
+  const timeIndex = Math.min(PROC_TIMES_MS.length - 1, Math.max(0, Math.round(params.timeIndex ?? 3)))
+  const k = Math.min(200, Math.max(20, Math.round((params.k ?? 100) / 10) * 10))
+  const timeMs = PROC_TIMES_MS[timeIndex]
+  const stats = processStats(kind, timeMs, k)
+  const band = 4 * stats.sigmaTheory
+  // 比较基准是同样观测时长下白噪声的 σ_T：低通档「慢多少倍」就是跟它比。
+  const whiteSigma = processSigmaTheory(0, timeMs)
+
+  const inBand: Array<[number, number]> = []
+  const outBand: Array<[number, number]> = []
+  stats.averages.forEach((value, i) => {
+    const point: [number, number] = [i + 1, value]
+    if (Math.abs(value) > band) outBand.push(point)
+    else inBand.push(point)
+  })
+
+  const series: CourseSeries[] = [
+    { name: '带内的时间平均', color: '#5ad1a5', marker: true, points: inBand },
+    { name: '带外的时间平均', color: '#e0a45c', marker: true, points: outBand },
+  ]
+
+  const failByDrift = kind === 2
+  const readouts: CourseReadout[] = [
+    {
+      label: '理论统计平均',
+      value: '0.000',
+      hint: '集合平均 E[x(t)]；三种过程都按 0 画参考线，时间平均该不该收敛到它，正是这一屏要验的事。',
+      warn: false,
+    },
+    {
+      label: '时间平均的实测标准差 σ_T',
+      value: `${stats.sigma.toFixed(3)}`,
+      hint: `把 ${k} 条曲线各自的时间平均当成一个集合算标准差；这一档的解析值是 ${stats.sigmaTheory.toFixed(3)}（同条件下白噪声只有 ${whiteSigma.toFixed(3)}），实测与解析值比 ${(stats.sigma / stats.sigmaTheory).toFixed(2)}。`,
+      warn: stats.sigma > stats.sigmaTheory * 3,
+    },
+    {
+      label: '带外比例（±4σ_T 之外）',
+      value: `${(stats.outside * 100).toFixed(1)} %`,
+      hint: `容许带取理论的 ±4·σ_T = ±${band.toFixed(3)}；比例高说明这些曲线的平均值根本不围着 0 转。`,
+      warn: stats.outside > 0.5,
+    },
+  ]
+
+  let conclusion: string
+  if (kind === 2) {
+    conclusion = `均值在漂的时候，时间平均不再指向 0：${k} 条曲线各自偏在不同的地方，带外比例 ${(stats.outside * 100).toFixed(1)} %。时间平均能当统计平均用，前提是过程平稳；一旦均值在漂，抓一条曲线算出来的东西只属于那一段时间，换一条就不一样了。`
+  } else if (kind === 1) {
+    conclusion = `相关时间 ${PROC_CORR_MS} ms 的低通过程，${timeMs} ms 里只装得下约 ${Math.round((timeMs / 2) / PROC_CORR_MS)} 个独立样本，σ_T 涨到 ${stats.sigma.toFixed(3)}，是白噪声的 ${(stats.sigma / whiteSigma).toFixed(1)} 倍：相关时间越长，时间平均收敛越慢，一条曲线要观测得更久才顶用。`
+  } else {
+    conclusion = `白噪声在 ${timeMs} ms 里落进 ${Math.round((timeMs / 1000) * PROC_FS)} 个独立样本，时间平均的标准差是 1/√${Math.round((timeMs / 1000) * PROC_FS)} ≈ ${stats.sigmaTheory.toFixed(3)}；${k} 条曲线的时间平均全挤在 0 附近（带外 ${(stats.outside * 100).toFixed(1)} %），所以抓一条曲线算时间平均，就等于算集合平均——这就是各态历经。`
+  }
+
+  return {
+    series,
+    guides: [
+      { y: 0, label: '统计平均 0' },
+      { y: band, label: `+4σ_T = ${band.toFixed(3)}` },
+      { y: -band, label: `−4σ_T = ${(-band).toFixed(3)}` },
+    ],
+    xLabel: `样本编号（1…${k}）`,
+    yLabel: '时间平均',
+    readouts,
+    conclusion,
+    failed: failByDrift && stats.outside > 0.5,
+  }
+}
+
 /* ---------- 第 4 章：香农公式与带宽的天花板 ---------- */
 
 /** 对数步进的带宽档，每档之间是 2 倍或 2.5 倍，滑杆上按对数均匀分布。 */
@@ -1806,12 +1986,13 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 3,
     title: '随机过程',
-    implemented: false,
-    reason: '需要大量独立样本才能看出统计量收敛，一屏里的图容易变成噪声云，收益不如直接去 QAM 页看。',
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    implemented: true,
+    reason: '',
+    question: '随手抓一条曲线，凭什么代表整个过程？',
+    params: [procKindParam, procTimeParam, procCountParam],
+    defaults: { kind: 0, timeIndex: 3, k: 100 },
+    failPreset: { kind: 2, timeIndex: 3, k: 100 },
+    compute: computeProcess,
   },
   {
     no: 4,

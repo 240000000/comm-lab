@@ -14,6 +14,8 @@ import {
   channelCapacity,
   channelLimit,
   chapterByNo,
+  processSigmaTheory,
+  processStats,
   selfInfo,
 } from '../src/core/course.ts'
 import { parseHash } from '../src/router.ts'
@@ -27,9 +29,9 @@ test('左树 13 章，章号 1 到 13 连续', () => {
   })
 })
 
-test('本轮只实现第 1、2、4、5、6、7、8、9、10、11、12 章', () => {
+test('本轮只实现第 1、2、3、4、5、6、7、8、9、10、11、12 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+  assert.deepEqual(done, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -530,4 +532,37 @@ test('第 4 章：默认档不报红、1000 kHz 档改口并标红', () => {
   assert.equal(wide.readouts[0].value, '137.50 kbit/s')
   assert.equal(wide.readouts[2].warn, true)
   assert.ok(wide.conclusion.includes('天花板'))
+})
+
+test('第 3 章：白噪声 100 ms 的 σ_T 落在 1/√1000 的 ±15% 内', () => {
+  const stats = processStats(0, 100, 100)
+  const theory = 1 / Math.sqrt(1000)
+  assert.ok(Math.abs(theory - 0.0316) < 1e-3)
+  assert.ok(Math.abs(stats.sigma - theory) / theory < 0.15, `实测 ${stats.sigma} 偏离 0.0316 超过 15%`)
+})
+
+test('第 3 章：一阶低通的 σ_T 至少是白噪声的 3 倍', () => {
+  const white = processStats(0, 100, 100).sigma
+  const lowpass = processStats(1, 100, 100).sigma
+  assert.ok(lowpass >= white * 3, `低通 ${lowpass} 不到白噪声 ${white} 的 3 倍`)
+  // 解析值 √(2τ/T)：τ=1 ms、T=100 ms 时是 0.1414。
+  assert.ok(Math.abs(processSigmaTheory(1, 100) - 0.1414) < 1e-3)
+})
+
+test('第 3 章：非平稳档的带外比例超过 90%', () => {
+  const stats = processStats(2, 100, 100)
+  assert.ok(stats.outside > 0.9, `带外比例只有 ${stats.outside}`)
+  const view = chapterByNo(3)!.compute({ kind: 2, timeIndex: 3, k: 100 })
+  assert.equal(view.failed, true)
+  assert.equal(view.readouts[2].warn, true)
+  assert.ok(view.conclusion.includes('平稳'))
+})
+
+test('第 3 章：σ_T 随观测时长按 1/√T 收窄', () => {
+  // 10 ms 对 100 ms、100 ms 对 1 s，两段都该是 √10 ≈ 3.16 倍。
+  const ratioA = processStats(0, 10, 200).sigma / processStats(0, 100, 200).sigma
+  const ratioB = processStats(0, 100, 200).sigma / processStats(0, 1000, 200).sigma
+  for (const ratio of [ratioA, ratioB]) {
+    assert.ok(Math.abs(ratio - Math.sqrt(10)) / Math.sqrt(10) < 0.15, `实测比值 ${ratio} 偏离 √10 超过 15%`)
+  }
 })
