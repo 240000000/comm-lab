@@ -9,7 +9,7 @@
  * marker 让某条 series 只画散点（蒙特卡洛实测点，不连成线）。
  */
 import { syncCanvasSize } from './canvasSize'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { CourseSeries } from '../core/course.ts'
 
 const HEIGHT = 320
@@ -47,12 +47,15 @@ export function CourseChart({
   guides?: Array<{ y: number; label: string }>
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  // 宽度只量一次、之后读缓存：clientWidth 会强制浏览器同步重排，
+  // 原来每次渲染都在这里读一遍，拖动时就是每帧一次重排。
+  const widthRef = useRef(720)
 
-  useEffect(() => {
+  const draw = useCallback(() => {
     const canvas = ref.current
     if (!canvas) return
 
-    const width = canvas.clientWidth || 720
+    const width = widthRef.current
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     syncCanvasSize(canvas, width, HEIGHT, dpr)
 
@@ -376,6 +379,37 @@ export function CourseChart({
       legendY += 18
     }
   }, [series, xLabel, yLabel, logX, logY, bars, stack, guides])
+
+  // 画的时候用的是最新的 draw，所以尺寸回调里不必重建 observer。
+  const drawRef = useRef(draw)
+  useEffect(() => {
+    drawRef.current = draw
+    draw()
+  }, [draw])
+
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas) return
+    const host = canvas.parentElement ?? canvas
+    const measure = () => Math.round(canvas.clientWidth || 720)
+
+    // 挂载时先拿真实宽度补画一版；量不到（宽 0）就留 720 那版，
+    // 等 observer 回调再补，不会出现空白图。
+    const initial = measure()
+    if (initial > 0 && initial !== widthRef.current) {
+      widthRef.current = initial
+      drawRef.current()
+    }
+
+    const observer = new ResizeObserver(() => {
+      const next = measure()
+      if (next === widthRef.current) return
+      widthRef.current = next
+      drawRef.current()
+    })
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
 
   return <canvas className="course-canvas" ref={ref} style={{ height: HEIGHT }} />
 }

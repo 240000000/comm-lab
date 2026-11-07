@@ -5,7 +5,7 @@
  * 一句话问题、两三个滑块、一张图、三个读数、一句话结论。
  * 每章的计算都在 src/core/course.ts 里，页面只负责把参数递进去、把结果摆出来。
  */
-import { useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import {
   COURSE_CHAPTERS,
   DEEP_LAB_CHAPTERS,
@@ -26,82 +26,47 @@ function initialChapter(): number {
   return chapterByNo(no) ? no : START_CHAPTER
 }
 
-export function CoursePage() {
-  const [no, setNo] = useState(initialChapter)
-  const chapter = chapterByNo(no) ?? chapterByNo(START_CHAPTER)!
-  const [params, setParams] = useState<Record<string, number>>(chapter.defaults)
-
-  const view = useMemo(
-    () => (chapter.compute ? chapter.compute(params) : null),
-    [chapter, params],
-  )
-
-  function pick(next: number) {
-    const target = chapterByNo(next)
-    if (!target) return
-    setNo(next)
-    setParams(target.defaults)
-  }
-
+/** 目录 13 项与拖动无关，单独拿出来 memo，切参数时不跟着重渲染。 */
+const CourseTree = memo(function CourseTree({
+  current,
+  onPick,
+}: {
+  current: number
+  onPick: (no: number) => void
+}) {
   return (
-    <main className="lab course">
-      <a className="back" href="#/">
-        ← 返回首页
-      </a>
-      <header className="lab-head">
-        <p className="eyebrow">课程视图 · 13 章</p>
-        <h1>把整本书摊成 13 格，一次只看一格</h1>
-        <p className="lede">
-          左边是目录，点一章，右边给一屏：一句话问题、两三个滑块、一张图、三个读数、一句话结论。
-          13 章全部能拖，每章都是一屏：一句话问题、两三个参数、一张图、三个读数、一句结论；点第 4、8、11 章能跳到对应的实验台。
-        </p>
-      </header>
-
-      <div className="course-layout">
-        <nav className="course-tree" aria-label="课程目录">
-          {COURSE_CHAPTERS.map((item) => (
-            <button
-              key={item.no}
-              type="button"
-              className={`course-item${item.no === no ? ' active' : ''}`}
-              onClick={() => pick(item.no)}
-            >
-              <span className={`course-mark${item.implemented ? ' done' : ''}`}>
-                {DEEP_LAB_CHAPTERS.includes(item.no) ? '●' : '○'}
-              </span>
-              <span className="course-no">{String(item.no).padStart(2, '0')}</span>
-              <span className="course-title">{item.title}</span>
-            </button>
-          ))}
-        </nav>
-
-        <section className="course-main">
-          {view ? (
-            <ChapterScreen
-              chapter={chapter}
-              params={params}
-              onChange={(key, value) => setParams((prev) => ({ ...prev, [key]: value }))}
-              onFail={() => setParams(chapter.failPreset)}
-              onReset={() => setParams(chapter.defaults)}
-              view={view}
-            />
-          ) : (
-            <TodoScreen chapter={chapter} />
-          )}
-        </section>
-      </div>
-    </main>
+    <nav className="course-tree" aria-label="课程目录">
+      {COURSE_CHAPTERS.map((item) => (
+        <button
+          key={item.no}
+          type="button"
+          className={`course-item${item.no === current ? ' active' : ''}`}
+          onClick={() => onPick(item.no)}
+        >
+          <span className={`course-mark${item.implemented ? ' done' : ''}`}>
+            {DEEP_LAB_CHAPTERS.includes(item.no) ? '●' : '○'}
+          </span>
+          <span className="course-no">{String(item.no).padStart(2, '0')}</span>
+          <span className="course-title">{item.title}</span>
+        </button>
+      ))}
+    </nav>
   )
+})
 
-function Control({
+const Control = memo(function Control({
+  paramKey,
   param,
   value,
   onChange,
 }: {
+  paramKey: string
   param: CourseParam
   value: number
-  onChange: (value: number) => void
+  onChange: (key: string, value: number) => void
 }) {
+  const handleChange = useCallback((next: number) => onChange(paramKey, next), [onChange, paramKey])
+
   if (param.options) {
     return (
       <label className="control">
@@ -109,7 +74,7 @@ function Control({
           {param.label}
           <b>{param.options[value]}</b>
         </span>
-        <select value={value} onChange={(event) => onChange(Number(event.target.value))}>
+        <select value={value} onChange={(event) => handleChange(Number(event.target.value))}>
           {param.options.map((option, index) => (
             <option key={option} value={index}>
               {option}
@@ -128,12 +93,12 @@ function Control({
       max={param.max}
       step={param.step}
       unit={param.unit}
-      onChange={onChange}
+      onChange={handleChange}
     />
   )
-}
+})
 
-function ChapterScreen({
+const ChapterScreen = memo(function ChapterScreen({
   chapter,
   params,
   onChange,
@@ -156,9 +121,10 @@ function ChapterScreen({
         {chapter.params.map((param) => (
           <Control
             key={param.key}
+            paramKey={param.key}
             param={param}
             value={params[param.key]}
-            onChange={(value) => onChange(param.key, value)}
+            onChange={onChange}
           />
         ))}
       </div>
@@ -201,7 +167,68 @@ function ChapterScreen({
       </section>
     </>
   )
-}
+})
+
+export function CoursePage() {
+  const [no, setNo] = useState(initialChapter)
+  const chapter = chapterByNo(no) ?? chapterByNo(START_CHAPTER)!
+  const [params, setParams] = useState<Record<string, number>>(chapter.defaults)
+
+  const view = useMemo(
+    () => (chapter.compute ? chapter.compute(params) : null),
+    [chapter, params],
+  )
+
+  // 三个回调都固定住引用：不改的话每次渲染都是新闭包，
+  // 下面 memo 过的目录和控件每帧都会跟着重渲染。
+  const pick = useCallback((next: number) => {
+    const target = chapterByNo(next)
+    if (!target) return
+    setNo(next)
+    setParams(target.defaults)
+  }, [])
+
+  const setParam = useCallback((key: string, value: number) => {
+    setParams((prev) => ({ ...prev, [key]: value }))
+  }, [])
+
+  const onFail = useCallback(() => setParams(chapter.failPreset), [chapter])
+  const onReset = useCallback(() => setParams(chapter.defaults), [chapter])
+
+  return (
+    <main className="lab course">
+      <a className="back" href="#/">
+        ← 返回首页
+      </a>
+      <header className="lab-head">
+        <p className="eyebrow">课程视图 · 13 章</p>
+        <h1>把整本书摊成 13 格，一次只看一格</h1>
+        <p className="lede">
+          左边是目录，点一章，右边给一屏：一句话问题、两三个滑块、一张图、三个读数、一句话结论。
+          13 章全部能拖，每章都是一屏：一句话问题、两三个参数、一张图、三个读数、一句结论；点第 4、8、11 章能跳到对应的实验台。
+        </p>
+      </header>
+
+      <div className="course-layout">
+        <CourseTree current={no} onPick={pick} />
+
+        <section className="course-main">
+          {view ? (
+            <ChapterScreen
+              chapter={chapter}
+              params={params}
+              onChange={setParam}
+              onFail={onFail}
+              onReset={onReset}
+              view={view}
+            />
+          ) : (
+            <TodoScreen chapter={chapter} />
+          )}
+        </section>
+      </div>
+    </main>
+  )
 
 function TodoScreen({ chapter }: { chapter: CourseChapter }) {
   return (
