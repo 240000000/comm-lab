@@ -200,13 +200,13 @@ add(
   [EVM, EVM],
 );
 
-// 作品介绍（docs/works-intro.md）：tag 数、测试条数、课程视图章数，以及正文引用的实测数字，
+// 作品介绍（docs/works-intro.md）：测试条数、课程视图章数，以及正文引用的实测数字。
+// 版本锚点不在这里比数——这个文件是一次性快照，冻结在某个 tag，见文件末尾那段扫描。
 // 全部与上面同一套函数算出来的值比对——介绍里的数一个都不许手抄。
 const ch13 = chapterByNo(13);
 const ch13Fail = ch13.compute({ ...ch13.defaults, ...ch13.failPreset });
 const pllResidual = Number(String(ch13Fail.readouts[0].value).split('/')[0].trim());
 
-add('docs/works-intro.md', 'tag 个数', /一共 (\d+) 个 tag/, [tagList.length], [EXACT]);
 add('docs/works-intro.md', '测试条数', /([\d,]+) 条测试/, [testCount], [EXACT]);
 add('docs/works-intro.md', '课程视图章数', /课程视图 (\d+) 章/, [COURSE_CHAPTERS.length], [EXACT]);
 add(
@@ -597,6 +597,80 @@ let selfRefLine = '';
   selfRefLine = `  正文里没有跟着 tag 走的自指硬数（${SELF_REF.length} 种写法逐个扫，命中 ${hits} 处）。`;
 }
 
+// 作品介绍是一次性快照：版本锚点冻结在某个 tag，不跟着仓库往前走。
+// 所以这里不校「tag 数相等」——那个数一发新版就该变，冻不住；
+// 只校两件事：写的 tag 真的存在；不写「一共 N 个 tag」这种会漂的数。
+let introLine = '';
+{
+  const introFile = 'docs/works-intro.md';
+  const tagSet = new Set(tagList);
+  const lines = readFileSync(join(ROOT, introFile), 'utf8').split(/\r?\n/);
+  let anchors = 0;
+  let anchorTag = '';
+  let drift = 0;
+
+  // 一、锚点句式：恰好一处，且指向真实存在的 tag。
+  checked += 1;
+  perFile.set(introFile, (perFile.get(introFile) ?? 0) + 1);
+  lines.forEach((line) => {
+    const m = line.match(/本文件对应仓库 tag `(R\d+[a-z]?)`/);
+    if (!m) return;
+    anchors += 1;
+    anchorTag = m[1];
+  });
+  if (anchors !== 1) {
+    failures.push({
+      file: introFile,
+      line: 3,
+      label: '版本锚点句式',
+      written: `${anchors} 处版本锚点句`,
+      actual: '恰好 1 处',
+    });
+  } else if (!tagSet.has(anchorTag)) {
+    failures.push({
+      file: introFile,
+      line: 3,
+      label: `版本锚点写了 ${anchorTag}，但 git tag -l 里没有这个 tag`,
+      written: anchorTag,
+      actual: 'git tag -l 里没有',
+    });
+  }
+
+  // 二、正文里出现的每一个 tag 名都必须真实存在（不要求最新，也不要求数量对齐）。
+  checked += 1;
+  perFile.set(introFile, (perFile.get(introFile) ?? 0) + 1);
+  lines.forEach((line, i) => {
+    for (const m of line.matchAll(/(?<![\w])R\d+[a-z]?(?![\w])/g)) {
+      if (tagSet.has(m[0])) continue;
+      failures.push({
+        file: introFile,
+        line: i + 1,
+        label: `介绍里写了 ${m[0]}，但 git tag -l 里没有这个 tag`,
+        written: m[0],
+        actual: 'git tag -l 里没有',
+      });
+    }
+  });
+
+  // 三、不许写「一共 N 个 tag」这种一发新版就过期的总数。
+  checked += 1;
+  perFile.set(introFile, (perFile.get(introFile) ?? 0) + 1);
+  lines.forEach((line, i) => {
+    const m = line.match(/(?:一共|截至这一版，仓库一共)\s*\d+\s*个\s*tag/);
+    if (!m) return;
+    drift += 1;
+    failures.push({
+      file: introFile,
+      line: i + 1,
+      label: '介绍里写了会漂的 tag 总数',
+      written: m[0],
+      actual: '不写总数：只锚一个 tag，数由轮次表那边跟 git tag -l 对齐',
+    });
+  });
+
+  introLine = `  作品介绍锚定 tag ${anchorTag || '（缺）'}（tag 名逐个对照 git tag -l），不写会漂的 tag 总数。`;
+}
+
 console.log(`check-docs：用 src/core 重算文档数字（种子 ${SEED}）`);
 console.log(
   `  测试 ${testCount} 条 / ${testFileCount} 个文件；页面默认 ${PAGE_BITS} 比特，16QAM 12 dB 为 ${p12(16).symbolCount} 个符号、${p12(16).bitCount} 个比特`,
@@ -604,6 +678,7 @@ console.log(
 console.log(structuralLine);
 console.log(captionLine);
 console.log(courseLine);
+console.log(introLine);
 console.log(selfRefLine);
 console.log(
   `  本机耗时：单次 20,000 符号 ${singleSim.ms.toFixed(1)} ms；16QAM 21 点 ${berSweep.ms.toFixed(1)} ms；卷积 11 点 ${convSweep.ms.toFixed(1)} ms；OFDM 200 符号 ${ofdm.ms.toFixed(1)} ms`,
