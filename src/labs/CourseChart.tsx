@@ -31,11 +31,15 @@ export function CourseChart({
   xLabel,
   yLabel,
   logY = false,
+  bars = false,
+  guides,
 }: {
   series: CourseSeries[]
   xLabel: string
   yLabel: string
   logY?: boolean
+  bars?: boolean
+  guides?: Array<{ y: number; label: string }>
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
 
@@ -161,8 +165,48 @@ export function CourseChart({
     ctx.fillText(yLabel, 0, 0)
     ctx.restore()
 
+    // 参考线：第 12 章用它把 −1/N 标出来，证明「只有两个值」不是画得糙。
+    if (guides) {
+      ctx.lineWidth = 1
+      for (const g of guides) {
+        const gy = py(g.y)
+        ctx.setLineDash([5, 4])
+        ctx.strokeStyle = '#5c7f96'
+        ctx.beginPath()
+        ctx.moveTo(PAD.left, gy)
+        ctx.lineTo(PAD.left + plotW, gy)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.fillStyle = '#8fa7b8'
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'bottom'
+        ctx.fillText(g.label, PAD.left + 6, gy - 4)
+      }
+    }
+
+    // 柱：从 0 基线一根根拉出来，比折线更能看出「除了 τ=0 全压在同一条线上」。
+    if (bars) {
+      ctx.setLineDash([])
+      ctx.lineWidth = 1.4
+      for (const s of series) {
+        ctx.strokeStyle = s.color
+        const base = py(0)
+        for (const [x, y] of s.points) {
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+          // 旁瓣只有 1/N 那么矮，按真实高度画会看不见；至少留 2 像素，让它「确实存在」。
+          const top = py(y)
+          const tip = Math.abs(top - base) < 2 ? base - Math.sign(top - base || 1) * 2 : top
+          ctx.beginPath()
+          ctx.moveTo(px(x), base)
+          ctx.lineTo(px(x), tip)
+          ctx.stroke()
+        }
+      }
+    }
+
     // 线：每一条各自连点，虚线仍是虚线；迹线淡画，不抢包络；marker 只画点不连线。
     for (const s of series) {
+      if (bars) break
       ctx.globalAlpha = s.quiet ? 0.18 : 1
       ctx.strokeStyle = s.color
       ctx.fillStyle = s.color
@@ -224,7 +268,7 @@ export function CourseChart({
       ctx.fillText(s.name, PAD.left + plotW, legendY)
       legendY += 18
     }
-  }, [series, xLabel, yLabel, logY])
+  }, [series, xLabel, yLabel, logY, bars, guides])
 
   return <canvas className="course-canvas" ref={ref} style={{ height: HEIGHT }} />
 }

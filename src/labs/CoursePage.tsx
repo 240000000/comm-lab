@@ -171,7 +171,14 @@ function ChapterScreen({
       </div>
 
       <div className="course-chart">
-        <CourseChart series={view.series} xLabel={view.xLabel} yLabel={view.yLabel} logY={view.logY} />
+        <CourseChart
+          series={view.series}
+          xLabel={view.xLabel}
+          yLabel={view.yLabel}
+          logY={view.logY}
+          bars={view.bars}
+          guides={view.guides}
+        />
       </div>
 
       <div className="readouts course-readouts">

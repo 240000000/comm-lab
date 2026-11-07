@@ -54,6 +54,10 @@ export type CourseView = {
   failed: boolean
   /** 纵轴取对数（第 7 章的误码率曲线）。 */
   logY?: boolean
+  /** 画成从 0 基线拉出来的柱（第 12 章的自相关）。 */
+  bars?: boolean
+  /** 参考线：虚线横线加一行标注（第 12 章的 −1/N）。 */
+  guides?: Array<{ y: number; label: string }>
 }
 
 export type CourseChapter = {
@@ -1199,6 +1203,171 @@ function computeMatch(params: Record<string, number>): CourseView {
   }
 }
 
+/* ---------- 第 12 章：m 序列的自相关为什么只有 1 和 −1/N ---------- */
+
+/** 四档级数，各配一个本原多项式（抽头写成 x 的幂次，含最高次）。 */
+const MSEO_TAPS: Record<number, number[]> = {
+  4: [4, 1],
+  5: [5, 2],
+  6: [6, 1],
+  7: [7, 3],
+}
+/** 反例抽头：n=7 换成 1 + x + x³ + x⁴ + x⁷，周期从 127 掉到 35。 */
+const MSEO_BAD_TAPS: Record<number, number[]> = {
+  4: [4, 1],
+  5: [5, 2],
+  6: [6, 1],
+  7: [1, 3, 4, 7],
+}
+const MSEO_LEVELS = [4, 5, 6, 7]
+/** 初始状态三档，默认全 1。 */
+const MSEO_INITS: number[][] = [
+  [1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0, 0, 0],
+  [1, 0, 1, 0, 1, 0, 1],
+]
+
+const mseqLevelParam: CourseParam = {
+  key: 'level',
+  label: '级数 n',
+  min: 0,
+  max: 3,
+  step: 1,
+  unit: '',
+  options: MSEO_LEVELS.map((n) => `n=${n}（N=${2 ** n - 1}）`),
+}
+const mseqTauParam: CourseParam = {
+  key: 'tau',
+  label: '延迟 τ',
+  min: 0,
+  max: 126,
+  step: 1,
+  unit: '',
+}
+const mseqInitParam: CourseParam = {
+  key: 'initOpt',
+  label: '初始状态',
+  min: 0,
+  max: 2,
+  step: 1,
+  unit: '',
+  options: ['全 1', '1 后接全 0', '交替 1/0'],
+}
+
+/** 线性反馈移位寄存器：a[i] = ⊕ a[i−t]，t 取抽头。 */
+function mseqBits(level: number, taps: number[], init: number[], length: number): number[] {
+  const a = init.slice(0, level)
+  for (let i = level; i < length; i += 1) {
+    let bit = 0
+    for (const t of taps) bit ^= a[i - t]
+    a.push(bit)
+  }
+  return a
+}
+
+/** 在一段序列上找出最小的周期 p；找不到就退回上限。 */
+function mseqPeriod(bits: number[], limit: number): number {
+  for (let p = 1; p <= limit; p += 1) {
+    let ok = true
+    for (let i = 0; i + p < bits.length; i += 1) {
+      if (bits[i] !== bits[i + p]) {
+        ok = false
+        break
+      }
+    }
+    if (ok) return p
+  }
+  return limit
+}
+
+/** 循环自相关：R(τ) = (1/N)·Σ s[i]·s[(i+τ) mod N]，s 由 0/1 转成 ±1。 */
+function mseqAuto(bits: number[]): number[] {
+  const n = bits.length
+  const s = bits.map((b) => 1 - 2 * b)
+  return Array.from({ length: n }, (_, tau) => {
+    let sum = 0
+    for (let i = 0; i < n; i += 1) sum += s[i] * s[(i + tau) % n]
+    return sum / n
+  })
+}
+
+function computeMseq(params: Record<string, number>): CourseView {
+  const levelIdx = Math.min(3, Math.max(0, Math.round(params.level ?? 3)))
+  const level = MSEO_LEVELS[levelIdx]
+  const initIdx = Math.min(2, Math.max(0, Math.round(params.initOpt ?? 0)))
+  const init = MSEO_INITS[initIdx].slice(0, level)
+  const bad = (params.bad ?? 0) >= 1
+  const taps = (bad ? MSEO_BAD_TAPS : MSEO_TAPS)[level]
+  const full = 2 ** level - 1
+  const tau = Math.min(full - 1, Math.max(0, Math.round(params.tau ?? 0)))
+
+  const raw = mseqBits(level, taps, init, 4 * full)
+  const period = mseqPeriod(raw, full)
+  const bits = raw.slice(0, period)
+  const auto = mseqAuto(bits)
+  const peak = auto[0]
+  let sidelobe = -Infinity
+  for (let i = 1; i < auto.length; i += 1) sidelobe = Math.max(sidelobe, auto[i])
+  const ones = bits.filter((b) => b === 1).length
+  const balance = 2 * ones - period
+  const theorySide = -1 / period
+  const distinct = [...new Set(auto.map((v) => v.toFixed(9)))].length
+  const failed = period !== full
+
+  const series: CourseSeries[] = [
+    {
+      name: 'R(τ)',
+      color: '#5ad1a5',
+      points: auto.map((v, i) => [i, v] as [number, number]),
+    },
+  ]
+
+  const readouts: CourseReadout[] = [
+    {
+      label: '周期 N',
+      value: `${period}`,
+      hint: `2^${level} − 1 = ${full}；整条序列一个周期正好 ${period} 个码元。`,
+      warn: failed,
+    },
+    {
+      label: '峰值自相关',
+      value: peak.toFixed(4),
+      hint: `R(0) = 1：能量归一化之后，自己和自己对齐必然是满值；当前延迟 τ = ${tau}，R(τ) = ${auto[tau].toFixed(4)}。`,
+      warn: Math.abs(peak - 1) > 1e-9,
+    },
+    {
+      label: '最大旁瓣',
+      value: sidelobe.toFixed(4),
+      hint: `理论 −1/N = ${theorySide.toFixed(5)}；${period - 1} 个非零延迟应当全落在这条线上。`,
+      warn: Math.abs(sidelobe - theorySide) > 1e-6,
+    },
+    {
+      label: '平衡性（1 的个数 − 0 的个数）',
+      value: `${balance}`,
+      hint: `一个周期里 ${ones} 个 1、${period - ones} 个 0；m 序列的平衡性正好差 1。`,
+      warn: balance !== 1,
+    },
+  ]
+
+  let conclusion: string
+  if (failed) {
+    conclusion = `抽头一换，周期从 ${full} 掉到 ${period}：序列还是 0/1 序列，但自相关不再是双值——屏上一共 ${distinct} 个值，最大旁瓣 ${sidelobe.toFixed(4)} 也离开了 −1/N。拿去做扩频，就分不清「同相」和「错一位」。`
+  } else {
+    conclusion = `${period} 个延迟里，自相关只有两个值：τ=0 处 1，其余 ${period - 1} 个全是 −1/${period} = ${theorySide.toFixed(5)}。这就是扩频能抗多址干扰的底：别人错开一个码元，相关输出就掉到噪声量级。`
+  }
+
+  return {
+    series,
+    xLabel: '延迟 τ（码元）',
+    yLabel: '归一化自相关',
+    readouts,
+    conclusion,
+    failed,
+    bars: true,
+    guides: [{ y: theorySide, label: `−1/N = ${theorySide.toFixed(5)}：其余 ${period - 1} 根柱都在这条线上` }],
+  }
+}
+
 export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 1,
@@ -1326,12 +1495,13 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 12,
     title: '正交编码与伪随机序列',
-    implemented: false,
-    reason: 'm 序列与 Walsh 码需要码序列发生器，和现有四个实验台的数据形状都不同，下一轮单独做。',
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    implemented: true,
+    reason: '',
+    question: 'm 序列的自相关，为什么只有 1 和 −1/N 两个值？',
+    params: [mseqLevelParam, mseqTauParam, mseqInitParam],
+    defaults: { level: 3, tau: 0, initOpt: 0 },
+    failPreset: { level: 3, tau: 0, initOpt: 0, bad: 1 },
+    compute: computeMseq,
   },
   {
     no: 13,

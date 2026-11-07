@@ -19,9 +19,9 @@ test('左树 13 章，章号 1 到 13 连续', () => {
   })
 })
 
-test('本轮只实现第 2、5、6、7、8、9、10 章', () => {
+test('本轮只实现第 2、5、6、7、8、9、10、12 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [2, 5, 6, 7, 8, 9, 10])
+  assert.deepEqual(done, [2, 5, 6, 7, 8, 9, 10, 12])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -58,11 +58,11 @@ test('每屏参数 2 到 4 个，默认值都落在滑杆范围内', () => {
   }
 })
 
-test('默认态：三个读数、一张图、一句话结论，且不报红', () => {
+test('默认态：三到四个读数、一张图、一句话结论，且不报红', () => {
   for (const chapter of COURSE_CHAPTERS) {
     if (!chapter.compute) continue
     const view = chapter.compute(chapter.defaults)
-    assert.equal(view.readouts.length, 3)
+    assert.ok(view.readouts.length >= 3 && view.readouts.length <= 4, `第 ${chapter.no} 章读数 ${view.readouts.length} 个`)
     assert.ok(view.series.length >= 1)
     assert.ok(view.series[0].points.length > 10)
     assert.ok(view.conclusion.length > 10)
@@ -328,4 +328,47 @@ test('第 9 章：实测误码率落在理论值的十分之一到十倍之间',
   assert.ok(match, `读数 hint 里要有实测值，实际：${hint}`)
   const measured = Number(match![1])
   assert.ok(measured > theory / 10 && measured < theory * 10, `实测 ${measured} 与理论 ${theory} 差得太远`)
+})
+
+test('第 12 章：四档级数的周期都等于 2^n−1', () => {
+  const chapter = chapterByNo(12)
+  for (const [index, n] of [4, 5, 6, 7].entries()) {
+    const view = chapter.compute({ ...chapter.defaults, level: index })
+    assert.equal(Number(view.readouts[0].value), 2 ** n - 1, `n=${n} 的周期不对：${view.readouts[0].value}`)
+  }
+})
+
+test('第 12 章：非零延迟的自相关全等于 −1/N，整条曲线只有两个值', () => {
+  const chapter = chapterByNo(12)
+  const view = chapter.compute(chapter.defaults)
+  const points = view.series[0].points
+  const period = Number(view.readouts[0].value)
+  assert.equal(points.length, period)
+  assert.equal(points[0][1], 1)
+  for (const [tau, value] of points.slice(1)) {
+    assert.ok(Math.abs(value - -1 / period) < 1e-12, `τ=${tau} 的自相关是 ${value}，应为 ${-1 / period}`)
+  }
+  const distinct = new Set(points.map(([, v]) => v.toFixed(12)))
+  assert.equal(distinct.size, 2, `自相关只该有两个值，实际 ${distinct.size} 个`)
+})
+
+test('第 12 章：换初始状态只搬相移，自相关序列一模一样', () => {
+  const chapter = chapterByNo(12)
+  const base = chapter.compute({ ...chapter.defaults, initOpt: 0 }).series[0].points.map(([, v]) => v)
+  for (const initOpt of [1, 2]) {
+    const other = chapter.compute({ ...chapter.defaults, initOpt }).series[0].points.map(([, v]) => v)
+    assert.equal(other.length, base.length)
+    for (let i = 0; i < base.length; i += 1) assert.ok(Math.abs(other[i] - base[i]) < 1e-12, `initOpt=${initOpt} 第 ${i} 个延迟对不上`)
+  }
+})
+
+test('第 12 章：非本原抽头让周期掉下来，自相关冒出第三个值', () => {
+  const chapter = chapterByNo(12)
+  const view = chapter.compute(chapter.failPreset)
+  const period = Number(view.readouts[0].value)
+  assert.ok(period < 127, `失效抽头的周期应短于 127，实际 ${period}`)
+  const distinct = new Set(view.series[0].points.map(([, v]) => v.toFixed(9)))
+  assert.ok(distinct.size > 2, `自相关的值种类应多于两个，实际 ${distinct.size}`)
+  assert.equal(view.failed, true)
+  assert.equal(view.readouts[0].warn, true)
 })
