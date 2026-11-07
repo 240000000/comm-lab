@@ -2272,6 +2272,11 @@ video::-webkit-media-controls-overlay-play-button {
   margin: 0 0 16px;
 }
 
+/* 四个读数时按 2×2 排，避免第四张被挤到单独一行。 */
+.course-readouts:has(> :nth-child(4)) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .course-conclusion {
   margin-bottom: 24px;
   padding: 16px 18px;

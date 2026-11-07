@@ -19,9 +19,9 @@ test('左树 13 章，章号 1 到 13 连续', () => {
   })
 })
 
-test('本轮只实现第 2、5、6、7、8、9、10、12 章', () => {
+test('本轮只实现第 2、5、6、7、8、9、10、11、12 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [2, 5, 6, 7, 8, 9, 10, 12])
+  assert.deepEqual(done, [2, 5, 6, 7, 8, 9, 10, 11, 12])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -64,7 +64,7 @@ test('默认态：三到四个读数、一张图、一句话结论，且不报�
     const view = chapter.compute(chapter.defaults)
     assert.ok(view.readouts.length >= 3 && view.readouts.length <= 4, `第 ${chapter.no} 章读数 ${view.readouts.length} 个`)
     assert.ok(view.series.length >= 1)
-    assert.ok(view.series[0].points.length > 10)
+    assert.ok(view.stack ? view.series[0].points.length >= 4 : view.series[0].points.length > 10, `第 ${chapter.no} 章点数太少`)
     assert.ok(view.conclusion.length > 10)
     assert.equal(view.failed, false, `第 ${chapter.no} 章默认态就报红了`)
     assert.equal(view.readouts.some((r) => r.warn), false)
@@ -371,4 +371,62 @@ test('第 12 章：非本原抽头让周期掉下来，自相关冒出第三个�
   assert.ok(distinct.size > 2, `自相关的值种类应多于两个，实际 ${distinct.size}`)
   assert.equal(view.failed, true)
   assert.equal(view.readouts[0].warn, true)
+})
+
+test('第 11 章：(7,4) 的最小距离为 3、可纠 1 位，d 由码字枚举复核', () => {
+  const chapter = chapterByNo(11)
+  const view = chapter.compute({ ...chapter.defaults, level: 0 })
+  assert.equal(view.readouts[0].value, '3')
+  assert.equal(view.readouts[1].value, '1')
+  // 独立复核：枚举 2^7 个 7 位字，留下校正子为零的码字，两两算汉明距离。
+  const words: number[][] = []
+  for (let w = 0; w < 1 << 7; w += 1) {
+    const bits = Array.from({ length: 7 }, (_, i) => (w >> i) & 1)
+    let syndrome = 0
+    for (let bit = 0; bit < 3; bit += 1) {
+      let acc = 0
+      for (let i = 0; i < 7; i += 1) acc ^= bits[i] & ((i + 1 >> bit) & 1)
+      syndrome |= acc << bit
+    }
+    if (syndrome === 0) words.push(bits)
+  }
+  assert.equal(words.length, 16)
+  let min = 7
+  for (let i = 0; i < words.length; i += 1) {
+    for (let j = i + 1; j < words.length; j += 1) {
+      let dist = 0
+      for (let b = 0; b < 7; b += 1) if (words[i][b] !== words[j][b]) dist += 1
+      if (dist < min) min = dist
+    }
+  }
+  assert.equal(min, 3)
+})
+
+test('第 11 章：e ≤ 1 时三档的正确率都是 100%', () => {
+  const chapter = chapterByNo(11)
+  for (const level of [0, 1, 2]) {
+    for (const errors of [0, 1]) {
+      const view = chapter.compute({ ...chapter.defaults, level, errors })
+      assert.equal(view.readouts[2].value, '100.0%', `level=${level} e=${errors} 正确率不对`)
+      assert.equal(view.readouts[2].warn, false)
+    }
+  }
+})
+
+test('第 11 章：e = 2 时全被误纠、没有一个静默放行', () => {
+  const chapter = chapterByNo(11)
+  const view = chapter.compute({ ...chapter.defaults, errors: 2 })
+  const hint = view.readouts[2].hint
+  assert.match(hint, /误纠 (\d+)（100\.0%）/)
+  assert.match(hint, /静默放行 0/)
+  assert.equal(view.failed, true)
+  assert.equal(view.readouts[2].warn, true)
+})
+
+test('第 11 章：校正子桶大小是 2^k，取值只有 2^(n−k) 种', () => {
+  const chapter = chapterByNo(11)
+  for (const [level, bucket] of [[0, 16], [1, 2048], [2, 67108864]] as const) {
+    const view = chapter.compute({ ...chapter.defaults, level, errors: 1 })
+    assert.ok(view.readouts[2].hint.includes(`每种对应 ${bucket} 个错误模式`), `level=${level} 桶大小不对：${view.readouts[2].hint}`)
+  }
 })

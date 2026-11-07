@@ -52,7 +52,7 @@ export function CoursePage() {
         <h1>把整本书摊成 13 格，一次只看一格</h1>
         <p className="lede">
           左边是目录，点一章，右边给一屏：一句话问题、两三个滑块、一张图、三个读数、一句话结论。
-          第 2、5、10 章已经能拖；其余十章先写着未实现和原因，点第 4、8、11 章能跳到对应的实验台。
+          第 2、5、6、7、8、9、10、11、12 章已经能拖；其余十章先写着未实现和原因，点第 4、8、11 章能跳到对应的实验台。
         </p>
       </header>
 
@@ -177,6 +177,7 @@ function ChapterScreen({
           yLabel={view.yLabel}
           logY={view.logY}
           bars={view.bars}
+          stack={view.stack}
           guides={view.guides}
         />
       </div>

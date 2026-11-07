@@ -56,6 +56,8 @@ export type CourseView = {
   logY?: boolean
   /** 画成从 0 基线拉出来的柱（第 12 章的自相关）。 */
   bars?: boolean
+  /** 画成堆叠柱（第 11 章：每档按结局分段）。 */
+  stack?: boolean
   /** 参考线：虚线横线加一行标注（第 12 章的 −1/N）。 */
   guides?: Array<{ y: number; label: string }>
 }
@@ -1368,6 +1370,177 @@ function computeMseq(params: Record<string, number>): CourseView {
   }
 }
 
+/* ---------- 第 11 章：汉明码的纠错边界，e=2 为什么反而更糟 ---------- */
+
+/** 三档汉明码：(n, k)，校验位 m = n − k。 */
+const HAMMING_CODES = [
+  { n: 7, k: 4 },
+  { n: 15, k: 11 },
+  { n: 31, k: 26 },
+] as const
+const HAMMING_RESULT_COLORS = ['#5ad1a5', '#e0a45c', '#c58bf0']
+
+const hamLevelParam: CourseParam = {
+  key: 'level',
+  label: '码长档',
+  min: 0,
+  max: 2,
+  step: 1,
+  unit: '',
+  options: ['(7,4)', '(15,11)', '(31,26)'],
+}
+const hamErrorsParam: CourseParam = {
+  key: 'errors',
+  label: '错误个数 e',
+  min: 0,
+  max: 3,
+  step: 1,
+  unit: '',
+}
+
+/** 校验矩阵第 i 列就是 i 的二进制（第 1 列在最左）。 */
+function hammingColumn(index: number, m: number): number[] {
+  return Array.from({ length: m }, (_, bit) => (index >> bit) & 1)
+}
+
+/** H·r 的模 2 结果，按二进制读成一个整数，正好等于列号。 */
+function hammingSyndrome(bits: number[], m: number): number {
+  let syndrome = 0
+  for (let bit = 0; bit < m; bit += 1) {
+    let acc = 0
+    for (let i = 0; i < bits.length; i += 1) acc ^= bits[i] & hammingColumn(i + 1, m)[bit]
+    syndrome |= acc << bit
+  }
+  return syndrome
+}
+
+/** 枚举全部重量不超过 w 的错误模式；用来量最小距离，避免枚举 2^k 个码字。 */
+function hammingMinDistance(n: number, m: number): number {
+  const bits = new Array<number>(n).fill(0)
+  for (let weight = 1; weight <= 3; weight += 1) {
+    const walk = (start: number, left: number): boolean => {
+      if (left === 0) return hammingSyndrome(bits, m) === 0
+      for (let i = start; i < n; i += 1) {
+        bits[i] = 1
+        if (walk(i + 1, left - 1)) return true
+        bits[i] = 0
+      }
+      return false
+    }
+    if (walk(0, weight)) return weight
+  }
+  return 4
+}
+
+function combinations<T>(items: T[], pick: number): T[][] {
+  const out: T[][] = []
+  const walk = (start: number, acc: T[]) => {
+    if (acc.length === pick) {
+      out.push([...acc])
+      return
+    }
+    for (let i = start; i < items.length; i += 1) {
+      acc.push(items[i])
+      walk(i + 1, acc)
+      acc.pop()
+    }
+  }
+  walk(0, [])
+  return out
+}
+
+interface HammingTally {
+  corrected: number
+  miscorrected: number
+  silent: number
+  total: number
+}
+
+function hammingTally(n: number, m: number, errors: number): HammingTally {
+  const tally = { corrected: 0, miscorrected: 0, silent: 0, total: 0 }
+  for (const pattern of combinations([...Array(n).keys()], errors)) {
+    const bits = new Array<number>(n).fill(0)
+    for (const index of pattern) bits[index] = 1
+    const syndrome = hammingSyndrome(bits, m)
+    tally.total += 1
+    if (syndrome === 0) {
+      // 一个错都没有时，原样通过就是答对了；有权重的多错才是静默放行。
+      if (errors === 0) tally.corrected += 1
+      else tally.silent += 1
+      continue
+    }
+    const flipped = [...bits]
+    flipped[syndrome - 1] ^= 1
+    if (flipped.every((b) => b === 0)) tally.corrected += 1
+    else tally.miscorrected += 1
+  }
+  return tally
+}
+
+function computeHamming(params: Record<string, number>): CourseView {
+  const level = Math.min(2, Math.max(0, Math.round(params.level ?? 0)))
+  const errors = Math.min(3, Math.max(0, Math.round(params.errors ?? 1)))
+  const { n, k } = HAMMING_CODES[level]
+  const m = n - k
+  const distance = hammingMinDistance(n, m)
+  const correctable = Math.floor((distance - 1) / 2)
+  const current = hammingTally(n, m, errors)
+  const correctRate = current.total === 0 ? 0 : (current.corrected / current.total) * 100
+  const miscorrectRate = current.total === 0 ? 0 : (current.miscorrected / current.total) * 100
+  const bucket = 2 ** k
+
+  const counts = [0, 1, 2, 3].map((e) => ({ e, ...hammingTally(n, m, e) }))
+  const series: CourseSeries[] = [
+    { name: '正确纠回', color: HAMMING_RESULT_COLORS[0], points: counts.map((c) => [c.e, c.corrected] as [number, number]) },
+    { name: '误纠成别的码字', color: HAMMING_RESULT_COLORS[1], points: counts.map((c) => [c.e, c.miscorrected] as [number, number]) },
+    { name: '静默放行', color: HAMMING_RESULT_COLORS[2], points: counts.map((c) => [c.e, c.silent] as [number, number]) },
+  ]
+
+  const failed = current.miscorrected > 0
+  const readouts: CourseReadout[] = [
+    {
+      label: '最小距离 d',
+      value: String(distance),
+      hint: `校验矩阵的 ${n} 列两两不同且没有零列，所以最小重量不超过 ${distance}；重量 ≤ 3 的模式里确实有一个落在零校正子上，d = ${distance} 是枚举出来的。`,
+      warn: false,
+    },
+    {
+      label: '可纠位数 t',
+      value: String(correctable),
+      hint: `理论上 t = ⌊(d−1)/2⌋ = ${correctable}：距离 ${distance} 只能保证纠 ${correctable} 位，再多就分不清是哪个码字出错。`,
+      warn: false,
+    },
+    {
+      label: `正确率（e = ${errors}）`,
+      value: `${correctRate.toFixed(1)}%`,
+      hint: `这一档 ${current.total} 个错误模式：纠回 ${current.corrected}、误纠 ${current.miscorrected}（${miscorrectRate.toFixed(1)}%）、静默放行 ${current.silent}。校正子只有 ${2 ** (n - k)} 种取值，每种对应 ${bucket} 个错误模式。`,
+      warn: current.miscorrected > 0,
+    },
+  ]
+
+  let conclusion: string
+  if (errors <= correctable) {
+    conclusion =
+      errors === 0
+        ? `没错的时候原样通过：零校正子这个桶里装着 ${bucket} 个错误模式，只有一个是真的没错（权重 0），其余都是被顺手纠成别的东西的多错。`
+        : `${n} 种单错各对应一个非零校正子；加上零校正子一共 ${2 ** (n - k)} 个桶，每个桶装着 2^${k} = ${bucket} 个错误模式。所以「纠 ${correctable} 位」的意思不是多错也能救，而是每个桶里只保证有一个是真该救的。`
+  } else if (current.miscorrected > 0 && current.silent === 0) {
+    conclusion = `e = ${errors} 的 ${current.total} 个模式一个也没落在零校正子上——距离 ${distance} 的码里不存在距离 ${errors} 的相邻码字，于是它们全被「纠」成别的码字，纠完离原码字还差 ${errors + 1} 位。错 ${correctable} 位能救，错 ${errors} 位会被救到更远的地方去；这时候该做的是检错重传，不是纠错。`
+  } else {
+    conclusion = `e = ${errors} 时有 ${current.silent} 个模式本身就是合法码字，解码器看不出任何异常；另有 ${current.miscorrected} 个被纠到别的码字上。校正子只能指出「哪个桶」，指不回「几个错」，这就是汉明码的边界。`
+  }
+
+  return {
+    series,
+    xLabel: '错误个数 e',
+    yLabel: '错误模式个数',
+    stack: true,
+    readouts,
+    conclusion,
+    failed,
+  }
+}
+
 export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 1,
@@ -1484,13 +1657,14 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 11,
     title: '差错控制编码',
-    implemented: false,
-    reason: '卷积码与 Viterbi 的完整实验台已经存在，这里只放入口。',
+    implemented: true,
+    reason: '',
     labs: [{ label: '卷积码实验台', href: '#/conv' }],
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    question: '多传 3 个校验位，为什么只能纠 1 位错？——而且错 2 位比不纠还糟？',
+    params: [hamLevelParam, hamErrorsParam],
+    defaults: { level: 0, errors: 1 },
+    failPreset: { level: 0, errors: 2 },
+    compute: computeHamming,
   },
   {
     no: 12,

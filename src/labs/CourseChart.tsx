@@ -32,6 +32,7 @@ export function CourseChart({
   yLabel,
   logY = false,
   bars = false,
+  stack = false,
   guides,
 }: {
   series: CourseSeries[]
@@ -39,6 +40,7 @@ export function CourseChart({
   yLabel: string
   logY?: boolean
   bars?: boolean
+  stack?: boolean
   guides?: Array<{ y: number; label: string }>
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -81,6 +83,18 @@ export function CourseChart({
         yMax = Math.max(yMax, yv)
       }
     }
+    // 堆叠柱的高度是同一 x 上各段之和；取值范围必须按总高算，否则最上面那一段会顶出绘图区。
+    if (stack) {
+      const totals = new Map<number, number>()
+      for (const s of series) {
+        for (const [x, y] of s.points) {
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+          totals.set(x, (totals.get(x) ?? 0) + y)
+        }
+      }
+      for (const total of totals.values()) yMax = Math.max(yMax, total)
+    }
+
     // 上面扫范围时改过 globalAlpha，画坐标轴和刻度之前必须复位，
     // 否则以后调整 series 顺序，坐标轴会变成 18% 透明度。
     ctx.globalAlpha = 1
@@ -93,6 +107,8 @@ export function CourseChart({
     const yPad = (yMax - yMin) * (logY ? 0.05 : 0.08)
     yMin -= yPad
     yMax += yPad
+    // 堆叠柱数的是个数，纵轴下界必须落在 0：否则柱子从负数处往上长，看着像有负计数。
+    if (stack) yMin = 0
 
     const px = (x: number) => PAD.left + ((x - xMin) / (xMax - xMin)) * plotW
     const py = (y: number) => PAD.top + (1 - (ty(y) - yMin) / (yMax - yMin)) * plotH
@@ -143,9 +159,17 @@ export function CourseChart({
     ctx.font = AXIS_FONT
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    for (let i = 0; i <= 4; i++) {
-      const value = xMin + ((xMax - xMin) / 4) * i
-      ctx.fillText(formatTick(value), PAD.left + (plotW / 4) * i, PAD.top + plotH + 8)
+    if (stack) {
+      // 堆叠柱的横轴是错误个数，刻度必须是整数；标 0.750 这种小数只会让人以为能拖半位错。
+      const step = Math.max(1, Math.round((xMax - xMin) / 8))
+      for (let v = Math.ceil(xMin); v <= Math.floor(xMax); v += step) {
+        ctx.fillText(String(v), px(v), PAD.top + plotH + 8)
+      }
+    } else {
+      for (let i = 0; i <= 4; i++) {
+        const value = xMin + ((xMax - xMin) / 4) * i
+        ctx.fillText(formatTick(value), PAD.left + (plotW / 4) * i, PAD.top + plotH + 8)
+      }
     }
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
@@ -204,9 +228,40 @@ export function CourseChart({
       }
     }
 
+    // 堆叠柱：横轴只有几档时，每档一根柱按结局分段，段内直接写计数。
+    if (stack) {
+      ctx.setLineDash([])
+      const xs = [...new Set(series.flatMap((s) => s.points.map(([x]) => x)))].sort((a, b) => a - b)
+      const totals = new Map<number, number>()
+      for (const s of series) {
+        for (const [x, y] of s.points) totals.set(x, (totals.get(x) ?? 0) + y)
+      }
+      const span = xs.length > 1 ? px(xs[1]) - px(xs[0]) : plotW / 2
+      const barW = Math.max(18, Math.min(56, span * 0.45))
+      for (const x of xs) {
+        let acc = 0
+        for (const s of series) {
+          const point = s.points.find(([px0]) => px0 === x)
+          if (!point) continue
+          const y0 = py(acc)
+          acc += point[1]
+          const y1 = py(acc)
+          ctx.fillStyle = s.color
+          ctx.fillRect(px(x) - barW / 2, Math.min(y0, y1), barW, Math.abs(y0 - y1))
+          if (Math.abs(y0 - y1) > 15 && point[1] > 0) {
+            ctx.fillStyle = '#08121a'
+            ctx.font = AXIS_FONT
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(String(point[1]), px(x), (y0 + y1) / 2)
+          }
+        }
+      }
+    }
+
     // 线：每一条各自连点，虚线仍是虚线；迹线淡画，不抢包络；marker 只画点不连线。
     for (const s of series) {
-      if (bars) break
+      if (bars || stack) break
       ctx.globalAlpha = s.quiet ? 0.18 : 1
       ctx.strokeStyle = s.color
       ctx.fillStyle = s.color
@@ -240,11 +295,16 @@ export function CourseChart({
 
     // 图例放右上角，压在网格上，不动轴；先铺一块半透明底，曲线穿过去也不糊。
     const legendItems = series.filter((s) => !s.quiet)
+    // 堆叠柱的柱子顶到绘图区上沿，图例放右上会压住最后一根；柱状图统一挪到左上角。
+    const legendX = stack ? PAD.left + 12 : PAD.left + plotW - 112
+    const legendLine = stack ? PAD.left + 28 : PAD.left + plotW - 96
+    const legendDot = stack ? PAD.left + 44 : PAD.left + plotW - 80
+    const legendText = stack ? PAD.left + 76 : PAD.left + plotW
     if (legendItems.length > 0) {
       ctx.fillStyle = 'rgba(9, 15, 22, 0.82)'
-      ctx.fillRect(PAD.left + plotW - 112, PAD.top + 2, 112, legendItems.length * 18 + 6)
+      ctx.fillRect(legendX, PAD.top + 2, stack ? 120 : 112, legendItems.length * 18 + 6)
     }
-    ctx.textAlign = 'right'
+    ctx.textAlign = stack ? 'left' : 'right'
     ctx.textBaseline = 'middle'
     ctx.font = '12px "Noto Sans SC", "Microsoft YaHei", sans-serif'
     let legendY = PAD.top + 11
@@ -253,22 +313,22 @@ export function CourseChart({
       ctx.strokeStyle = s.color
       if (s.marker) {
         ctx.beginPath()
-        ctx.arc(PAD.left + plotW - 80, legendY, 3.5, 0, Math.PI * 2)
+        ctx.arc(legendDot, legendY, 3.5, 0, Math.PI * 2)
         ctx.fill()
       } else {
         ctx.lineWidth = s.dashed ? 1.2 : 1.8
         ctx.setLineDash(s.dashed ? [4, 4] : [])
         ctx.beginPath()
-        ctx.moveTo(PAD.left + plotW - 96, legendY)
-        ctx.lineTo(PAD.left + plotW - 64, legendY)
+        ctx.moveTo(legendLine, legendY)
+        ctx.lineTo(legendLine + 32, legendY)
         ctx.stroke()
         ctx.setLineDash([])
       }
       ctx.fillStyle = COLOR.axisText
-      ctx.fillText(s.name, PAD.left + plotW, legendY)
+      ctx.fillText(s.name, legendText, legendY)
       legendY += 18
     }
-  }, [series, xLabel, yLabel, logY, bars, guides])
+  }, [series, xLabel, yLabel, logY, bars, stack, guides])
 
   return <canvas className="course-canvas" ref={ref} style={{ height: HEIGHT }} />
 }
