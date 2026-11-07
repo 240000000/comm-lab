@@ -15,7 +15,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 import { simulateAwgn } from '../src/core/metrics.ts';
@@ -336,7 +336,7 @@ if (tagRun.status !== 0) {
 }
 
 // 表题与图题：md2docx 认「表题：」前缀，看不到就不给表编号，PDF 与仓库源稿就漂了。
-// 规则：表题恰好 7 条；每张表（连续 | 开头的行）上一行必须紧贴表题；图恰好 3 张且 alt 就是图题。
+// 规则：表题恰好 8 条；每张表（连续 | 开头的行）上一行必须紧贴表题；图恰好 3 张且 alt 就是图题。
 let captionLine = '';
 {
   const reportLines = readFileSync(join(ROOT, 'docs/tech-report.md'), 'utf8').split(/\r?\n/);
@@ -350,13 +350,13 @@ let captionLine = '';
     if (m) figures.push({ line: i + 1, alt: m[1] });
   });
 
-  if (captions.length !== 7) {
+  if (captions.length !== 8) {
     failures.push({
       file: 'docs/tech-report.md',
       line: captions[0] ?? 0,
-      label: '「表题：」行数不是 7',
+      label: '「表题：」行数不是 8',
       written: `${captions.length} 条`,
-      actual: '7 条',
+      actual: '8 条',
     });
   }
   for (const at of tables) {
@@ -392,12 +392,75 @@ let captionLine = '';
   captionLine = `  表题 ${captions.length} 条（表格 ${tables.length} 张）、图题 ${figures.length} 条。`;
 }
 
+
+// 课程视图：13 章表逐行与 src/core/course.ts 对齐。参数个数、有没有深度实验台都由代码算，
+// 文档里写错一个数字，这里就报哪一行、哪一列。
+let courseLine = '';
+{
+  const { COURSE_CHAPTERS } = await import(pathToFileURL(join(ROOT, 'src/core/course.ts')).href);
+  const reportLines = readFileSync(join(ROOT, 'docs/tech-report.md'), 'utf8').split(/\r?\n/);
+  const headAt = reportLines.findIndex((line) => line.startsWith('| 章 | 标题 | 一屏 |'));
+  const rows = [];
+  if (headAt >= 0) {
+    for (let i = headAt + 1; i < reportLines.length; i++) {
+      const line = reportLines[i];
+      if (!line.startsWith('|')) break;
+      if (/^\|\s*-/.test(line)) continue;
+      rows.push({
+        line: i + 1,
+        cells: line.split('|').slice(1, -1).map((cell) => cell.trim()),
+      });
+    }
+  }
+  if (headAt < 0) {
+    failures.push({
+      file: 'docs/tech-report.md',
+      line: 0,
+      label: '找不到课程视图的 13 章表',
+      written: '没有这张表',
+      actual: '| 章 | 标题 | 一屏 | 参数 | 深度实验台 |',
+    });
+  } else if (rows.length !== COURSE_CHAPTERS.length) {
+    failures.push({
+      file: 'docs/tech-report.md',
+      line: headAt + 1,
+      label: '课程视图表行数与 course.ts 不一致',
+      written: `${rows.length} 行`,
+      actual: `${COURSE_CHAPTERS.length} 行`,
+    });
+  } else {
+    for (const chapter of COURSE_CHAPTERS) {
+      const row = rows[chapter.no - 1];
+      const want = [
+        String(chapter.no),
+        chapter.title,
+        chapter.implemented ? '是' : '未实现',
+        String(chapter.params.length),
+        chapter.lab ? '有' : '—',
+      ];
+      want.forEach((value, col) => {
+        const got = row.cells[col] ?? '';
+        if (got === value) return;
+        failures.push({
+          file: 'docs/tech-report.md',
+          line: row.line,
+          label: `课程视图表第 ${chapter.no} 章第 ${col + 1} 列`,
+          written: got === '' ? '空' : got,
+          actual: value,
+        });
+      });
+    }
+    courseLine = `  课程视图 ${rows.length} 章逐个对上（参数个数与实验台入口由 course.ts 复算）。`;
+  }
+}
+
 console.log(`check-docs：用 src/core 重算文档数字（种子 ${SEED}）`);
 console.log(
   `  测试 ${testCount} 条 / ${testFileCount} 个文件；页面默认 ${PAGE_BITS} 比特，16QAM 12 dB 为 ${p12(16).symbolCount} 个符号、${p12(16).bitCount} 个比特`,
 );
 console.log(structuralLine);
 console.log(captionLine);
+console.log(courseLine);
 console.log(
   `  本机耗时：单次 20,000 符号 ${singleSim.ms.toFixed(1)} ms；16QAM 21 点 ${berSweep.ms.toFixed(1)} ms；卷积 11 点 ${convSweep.ms.toFixed(1)} ms；OFDM 200 符号 ${ofdm.ms.toFixed(1)} ms`,
 );

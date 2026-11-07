@@ -5,6 +5,7 @@ import { QamPage } from './labs/QamPage'
 import { ConvPage } from './labs/ConvPage'
 import { OfdmPage } from './labs/OfdmPage'
 import { MissionPage } from './labs/MissionPage'
+import { CoursePage } from './labs/CoursePage'
 import { HomeBackdrop } from './labs/HomeBackdrop'
 
 const modules = [
@@ -63,6 +64,10 @@ export default function App() {
     return <MissionPage />
   }
 
+  if (route === 'course') {
+    return <CoursePage />
+  }
+
   return (
     <div className="home">
       <HomeBackdrop />
@@ -77,7 +82,8 @@ export default function App() {
           最后用五道小题把这三页串起来，答案都要回实验台上自己读出来。
         </p>
         <div className="cta">
-          <span className="badge">v0.10 · 三个实验台与任务模式</span>
+          <span className="badge">v0.11 · 三个实验台、任务模式与课程视图</span>
+          <a href="#/course">课程视图 →</a>
           <a href="https://github.com/240000000/comm-lab" target="_blank" rel="noreferrer">
             源码仓库
           </a>
