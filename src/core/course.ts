@@ -727,10 +727,11 @@ function coherentLoss(phaseDeg: number): number {
 /** 四种调制的理论误码率；全部现算，不抄教材上的数。 */
 function bandTheory(scheme: number, ebn0Db: number, phaseDeg: number): number {
   const gamma = 10 ** (ebn0Db / 10)
+  const loss = coherentLoss(phaseDeg)
+  if (scheme === 0) return qFunction(Math.sqrt(gamma * loss)) // 2ASK 单极性 OOK
   if (scheme === 1) return qFunction(Math.sqrt(gamma)) // 2FSK 相干
   if (scheme === 3) return 0.5 * Math.exp(-gamma) // 2DPSK 差分相干
-  const loss = coherentLoss(phaseDeg)
-  return qFunction(Math.sqrt(2 * gamma * loss)) // 2ASK / 2PSK 相干
+  return qFunction(Math.sqrt(2 * gamma * loss)) // 2PSK 相干
 }
 
 /**
@@ -766,6 +767,12 @@ function shootBits(scheme: number, ebn0Db: number, phaseDeg: number): number {
       const r2 = (bit === 1 ? a : -a) + rng.gauss()
       const product = r1 * r2
       wrong = bit === 1 ? product < 0 : product > 0
+    } else if (scheme === 0) {
+      // 单极性 OOK：σ=1 时 Eb = 2γ，峰值幅度取 A = 2√(γ·loss)，
+      // 判决门限摆在 A/2 = √(γ·loss) 上，这样噪声才正好落在 Q(√(γ·loss)) 这条线上。
+      const a = 2 * Math.sqrt(gamma * coherentLoss(phaseDeg))
+      const z = (bit === 1 ? a : 0) + rng.gauss()
+      wrong = bit === 1 ? z < a / 2 : z > a / 2
     } else {
       const z = (bit === 1 ? amp : -amp) + rng.gauss()
       wrong = bit === 1 ? z < 0 : z > 0
@@ -811,11 +818,13 @@ function computeBandpass(params: Record<string, number>): CourseView {
       label: `${label} 理论误码率`,
       value: exponent(theoryBer),
       hint:
-        scheme === 1
-          ? 'Q(√(Eb/N0))：2FSK 两路正交，同样的 Eb 只有一路能量在起作用。'
-          : scheme === 3
-            ? '0.5·exp(−Eb/N0)：差分相干不恢复载波，代价是比相干 2PSK 差一截。'
-            : `Q(√(2Eb/N0·cos²φ))：相位误差 ${phaseDeg}° 先把有效能量打下 ${phaseLostDb.toFixed(2)} dB。`,
+        scheme === 0
+          ? `Q(√(Eb/N0·cos²φ))：单极性 OOK 要付的代价——平均每比特能量只有峰值幅度的一半，同样的峰值就白丢 3 dB。${phaseDeg > 0 ? `相位误差 ${phaseDeg}° 再打下 ${phaseLostDb.toFixed(2)} dB。` : ''}`
+          : scheme === 1
+            ? 'Q(√(Eb/N0))：2FSK 两路正交，同样的 Eb 只有一路能量在起作用。'
+            : scheme === 3
+              ? '0.5·exp(−Eb/N0)：差分相干不恢复载波，代价是比相干 2PSK 差一截。'
+              : `Q(√(2Eb/N0·cos²φ))：相位误差 ${phaseDeg}° 先把有效能量打下 ${phaseLostDb.toFixed(2)} dB。`,
       warn: false,
     },
     {
@@ -842,7 +851,7 @@ function computeBandpass(params: Record<string, number>): CourseView {
   } else if (phaseDeg > 0) {
     conclusion = `相位误差 ${phaseDeg} 度先吃掉 ${phaseLostDb.toFixed(2)} dB，剩下的才是 ${label} 相对 2FSK 的净增益 ${gainDb.toFixed(1)} dB。`
   } else {
-    conclusion = `2PSK 的曲线整体比 2FSK 往左移 3.01 dB：同样的误码率，2PSK 用 ${ebn0Db} dB，2FSK 要 ${(ebn0Db + gainDb).toFixed(1)} dB。这一条在图上就是两条曲线之间的水平间距。`
+    conclusion = `2PSK 的曲线整体比 2FSK 往左移 3.01 dB：同样的误码率，2FSK 要 ${(ebn0Db + gainDb).toFixed(1)} dB，2PSK 只要 ${(ebn0Db + gainDb - 3.01).toFixed(1)} dB。这 3 dB 相对 2ASK 和 2FSK 两条线都成立——它俩都落在 Q(√γ) 上，图上重合，所以参照的不是唯一一条线。`
   }
 
   return {

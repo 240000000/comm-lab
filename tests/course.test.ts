@@ -174,7 +174,7 @@ test('第 7 章：四种调制在 8 dB 的理论误码率由 qFunction 现算', 
   const chapter = chapterByNo(7)
   const gamma = 10 ** 0.8
   const expected = [
-    qFunction(Math.sqrt(2 * gamma)), // 2ASK
+    qFunction(Math.sqrt(gamma)), // 2ASK 单极性 OOK
     qFunction(Math.sqrt(gamma)), // 2FSK
     qFunction(Math.sqrt(2 * gamma)), // 2PSK
     0.5 * Math.exp(-gamma), // 2DPSK
@@ -207,6 +207,31 @@ test('第 7 章：φ=45 的 2PSK 与 φ=0 的 2FSK 落在同一个量级（那 3
   const ratio = psk45 / fsk0
   assert.ok(ratio > 0.1 && ratio < 10, `两者相差应不到一个数量级，实际比值 ${ratio}`)
   assert.ok(Math.abs(ratio - 1) < 0.01, `cos²45° 把 2PSK 的 3 dB 优势全吃掉，比值应约 1，实际 ${ratio}`)
+})
+
+test('第 7 章：2ASK 与 2FSK 在 8 dB 打平，2PSK 比它们低约 3 dB（2 到 2.5 倍）', () => {
+  const chapter = chapterByNo(7)
+  const ask = Number(chapter.compute({ ...chapter.defaults, scheme: 0 }).readouts[0].value)
+  const fsk = Number(chapter.compute({ ...chapter.defaults, scheme: 1 }).readouts[0].value)
+  const psk = Number(chapter.compute({ ...chapter.defaults, scheme: 2 }).readouts[0].value)
+  assert.equal(ask, fsk, `2ASK 与 2FSK 的单极性模型应当相等，实际 ${ask} 与 ${fsk}`)
+  // 3 dB 优势按达到同一误码率所需的线性信噪比折算：10^(3.01/10) = 2.00 倍。
+  const gainDb = Number(chapter.compute({ ...chapter.defaults, scheme: 2 }).readouts[2].value.replace(' dB', ''))
+  const gammaRatio = Number((10 ** (gainDb / 10)).toFixed(2))
+  assert.ok(gammaRatio >= 2 && gammaRatio <= 2.5, `2PSK 相对 2FSK 的线性增益应为 2–2.5 倍，实际 ${gammaRatio}`)
+  assert.ok(psk < fsk, `2PSK ${psk} 的误码率必须低于 2FSK ${fsk}`)
+  const askView = chapter.compute({ ...chapter.defaults, scheme: 0 })
+  assert.equal(askView.readouts[2].value, '0.0 dB', '2ASK 相对 2FSK 的增益应当是 0.0 dB')
+  assert.equal(askView.readouts[2].warn, true, '打平时增益读数要标红')
+})
+
+test('第 7 章：2ASK 的蒙特卡洛实测落在理论值的十分之一到十倍之间', () => {
+  const chapter = chapterByNo(7)
+  const view = chapter.compute({ ...chapter.defaults, scheme: 0 })
+  const theory = Number(view.readouts[0].value)
+  const measured = Number(view.readouts[1].value)
+  assert.ok(measured > theory / 10 && measured < theory * 10, `实测 ${measured} 与理论 ${theory} 差得太远`)
+  assert.equal(view.series[4].marker, true)
 })
 
 test('第 7 章失效档：增益 0.0 dB 标红、结论改口；默认档 3.0 dB 不报红', () => {
