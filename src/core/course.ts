@@ -1541,16 +1541,153 @@ function computeHamming(params: Record<string, number>): CourseView {
   }
 }
 
+/* ---------- 第 1 章：信息量看单次，熵看平均 ---------- */
+
+const INFO_SAMPLES = [1000, 10000, 100000, 200000]
+const INFO_SAMPLE_NAMES = ['1 千', '1 万', '10 万', '20 万']
+const INFO_SEED = 20261110
+/** p 从 0.01 扫到 0.99，每 0.01 一个点。 */
+const INFO_POINTS = 99
+
+const infoProbParam: CourseParam = {
+  key: 'p',
+  label: '事件概率 p',
+  min: 0.01,
+  max: 0.99,
+  step: 0.01,
+  unit: '',
+}
+const infoSampleParam: CourseParam = {
+  key: 'sample',
+  label: '观测样本数 n',
+  min: 0,
+  max: 3,
+  step: 1,
+  unit: '',
+  options: [...INFO_SAMPLE_NAMES],
+}
+
+function log2(x: number): number {
+  return Math.log(x) / Math.LN2
+}
+
+/**
+ * 单次信息量：真正值钱的是「稀罕的那件事」。
+ * p 是某件事发生的概率，取 p 与 1−p 中较小的那个——p=0.99 时是「没发生」那 1% 的意外，
+ * p=0.01 时是「发生了」那 1% 的意外，两端都冲到 6.64 bit，p=0.5 正好 1 bit。
+ */
+export function selfInfo(p: number): number {
+  return -log2(Math.min(p, 1 - p))
+}
+
+/** 二元信源的熵：平均每次观测给多少比特。 */
+export function binaryEntropy(p: number): number {
+  return -p * log2(p) - (1 - p) * log2(1 - p)
+}
+
+/** 按 p 抽 n 个 0/1，累计 −log2(抽到那个符号的概率) 再平均；纯抽样，不套公式。 */
+function sampleInfo(p: number, n: number): number {
+  const rng = createRng(INFO_SEED + n)
+  let total = 0
+  for (let i = 0; i < n; i += 1) {
+    const hit = rng.next() < p
+    total += hit ? -log2(p) : -log2(1 - p)
+  }
+  return total / n
+}
+
+function computeInfo(params: Record<string, number>): CourseView {
+  const p = Math.min(0.99, Math.max(0.01, Math.round((params.p ?? 0.5) * 100) / 100))
+  const sampleIndex = Math.min(INFO_SAMPLES.length - 1, Math.max(0, Math.round(params.sample ?? 3)))
+  const n = INFO_SAMPLES[sampleIndex]
+  const info = selfInfo(p)
+  const entropy = binaryEntropy(p)
+  const measured = sampleInfo(p, n)
+  const grid = Array.from({ length: INFO_POINTS }, (_, i) => (i + 1) / 100)
+
+  const series: CourseSeries[] = [
+    {
+      name: '单次信息量 I(p)',
+      color: '#7fb3d5',
+      points: grid.map((x) => [x, selfInfo(x)] as [number, number]),
+    },
+    {
+      name: '熵 H(p)',
+      color: '#5ad1a5',
+      points: grid.map((x) => [x, binaryEntropy(x)] as [number, number]),
+    },
+    {
+      name: '当前 p',
+      color: '#e0a45c',
+      marker: true,
+      points: [
+        [p, info],
+        [p, entropy],
+      ],
+    },
+    {
+      name: '当前 p 的竖线',
+      color: '#3a5568',
+      dashed: true,
+      quiet: true,
+      points: [
+        [p, 0],
+        [p, 7.2],
+      ],
+    },
+  ]
+
+  const readouts: CourseReadout[] = [
+    {
+      label: '单次信息量 I(p)',
+      value: `${info.toFixed(2)} bit`,
+      hint: `−log2 min(p, 1−p) = ${info.toFixed(3)}；值钱的是稀罕的那一侧。这一条是单次的理论值，下一条才是平均。`,
+      warn: p >= 0.9,
+    },
+    {
+      label: '熵 H(p)',
+      value: `${entropy.toFixed(3)} bit`,
+      hint: `−p·log2 p − (1−p)·log2(1−p)；一串观测平均每次给多少，才是熵。`,
+      warn: false,
+    },
+    {
+      label: '实测平均信息量',
+      value: `${measured.toFixed(3)} bit`,
+      hint: `抽 ${n.toLocaleString('en-US')} 个 0/1 样本，累计 −log2(该符号的概率) 再除以 n；理论上是 H(p) = ${entropy.toFixed(3)} bit，实测与它比 ${(measured / entropy).toFixed(3)} 倍。`,
+      warn: Math.abs(measured - entropy) > 0.05,
+    },
+  ]
+
+  let conclusion: string
+  if (p >= 0.9) {
+    conclusion = `p = ${p.toFixed(2)}：单次信息量 ${info.toFixed(2)} bit，一条「几乎不会发生的事发生了」确实值钱；可它几乎不发生，熵只剩 ${entropy.toFixed(3)} bit。平均下来每符号就这点信息，把这条源压缩到极限也压不出更多——「信息量大」和「信息量多」是两回事。`
+  } else if (Math.abs(p - 0.5) < 0.02) {
+    conclusion = `等概时每次观测正好 ${info.toFixed(2)} bit，熵也到顶 ${entropy.toFixed(3)} bit；所以「是/否两个等概答案」是衡量一切的 1 bit 标尺。`
+  } else {
+    conclusion = `p = ${p.toFixed(2)}：单次 ${info.toFixed(2)} bit、熵 ${entropy.toFixed(3)} bit。小概率的一端单次很贵但很少发生，等概的一端每次便宜却平均给得最多，两者的交叉点就在 0.5。`
+  }
+
+  return {
+    series,
+    xLabel: '事件概率 p',
+    yLabel: '比特',
+    readouts,
+    conclusion,
+    failed: p >= 0.9,
+  }
+}
+
 export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 1,
     title: '绪论',
-    implemented: false,
-    reason: '这一章只有概念与历史，没有可拖的参量；硬做一屏只会变成一段文字。',
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    implemented: true,
+    reason: '',
+    question: '一个几乎必然发生的事件，告诉你的信息为什么几乎为零？',
+    params: [infoProbParam, infoSampleParam],
+    defaults: { p: 0.5, sample: 3 },
+    failPreset: { p: 0.99, sample: 3 },
+    compute: computeInfo,
   },
   {
     no: 2,

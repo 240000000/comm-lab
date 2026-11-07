@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { COURSE_CHAPTERS, DEEP_LAB_CHAPTERS, chapterByNo } from '../src/core/course.ts'
+import { COURSE_CHAPTERS, DEEP_LAB_CHAPTERS, binaryEntropy, chapterByNo, selfInfo } from '../src/core/course.ts'
 import { parseHash } from '../src/router.ts'
 import { qFunction } from '../src/core/ber.ts'
 
@@ -19,9 +19,9 @@ test('左树 13 章，章号 1 到 13 连续', () => {
   })
 })
 
-test('本轮只实现第 2、5、6、7、8、9、10、11、12 章', () => {
+test('本轮只实现第 1、2、5、6、7、8、9、10、11、12 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [2, 5, 6, 7, 8, 9, 10, 11, 12])
+  assert.deepEqual(done, [1, 2, 5, 6, 7, 8, 9, 10, 11, 12])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -429,4 +429,52 @@ test('第 11 章：校正子桶大小是 2^k，取值只有 2^(n−k) 种', () =
     const view = chapter.compute({ ...chapter.defaults, level, errors: 1 })
     assert.ok(view.readouts[2].hint.includes(`每种对应 ${bucket} 个错误模式`), `level=${level} 桶大小不对：${view.readouts[2].hint}`)
   }
+})
+
+test('第 1 章：p = 0.5 时单次信息量与熵都精确等于 1 bit', () => {
+  assert.ok(Math.abs(selfInfo(0.5) - 1) < 1e-12)
+  assert.ok(Math.abs(binaryEntropy(0.5) - 1) < 1e-12)
+  const chapter = chapterByNo(1)
+  const view = chapter.compute({ ...chapter.defaults })
+  assert.equal(view.readouts[0].value, '1.00 bit')
+  assert.equal(view.readouts[1].value, '1.000 bit')
+  assert.equal(view.failed, false)
+})
+
+test('第 1 章：熵在 p = 0.5 处取最大，扫 0.01–0.99 全区间验证', () => {
+  const peak = binaryEntropy(0.5)
+  for (let i = 1; i <= 99; i += 1) {
+    const p = i / 100
+    assert.ok(binaryEntropy(p) <= peak + 1e-12, `p=${p} 的熵 ${binaryEntropy(p)} 超过 0.5 处的 ${peak}`)
+    if (i !== 50) assert.ok(binaryEntropy(p) < peak - 1e-6, `p=${p} 不该和峰值一样高`)
+  }
+})
+
+test('第 1 章：p = 0.99 时单次 6.644 bit、熵 0.0808 bit', () => {
+  assert.ok(Math.abs(selfInfo(0.99) - 6.644) < 1e-3)
+  assert.ok(Math.abs(binaryEntropy(0.99) - 0.0808) < 1e-3)
+  const chapter = chapterByNo(1)
+  const view = chapter.compute({ ...chapter.defaults, p: 0.99 })
+  assert.equal(view.failed, true)
+  assert.equal(view.readouts[0].value, '6.64 bit')
+  assert.equal(view.readouts[1].value, '0.081 bit')
+  assert.match(view.conclusion, /信息量大.*信息量多/)
+})
+
+test('第 1 章：实测平均信息量贴近熵（n = 20 万、p = 0.3）', () => {
+  const chapter = chapterByNo(1)
+  const view = chapter.compute({ ...chapter.defaults, p: 0.3, sample: 3 })
+  const measured = Number(view.readouts[2].value.replace(' bit', ''))
+  assert.ok(Math.abs(measured - binaryEntropy(0.3)) < 0.02, `实测 ${measured} 与 H(0.3)=${binaryEntropy(0.3)} 差太远`)
+  assert.equal(view.readouts[2].warn, false)
+})
+
+test('第 11 章：e = 0 那根柱归正确纠回，静默放行只留多错模式', () => {
+  const chapter = chapterByNo(11)
+  const view = chapter.compute({ ...chapter.defaults, errors: 0 })
+  const corrected = view.series.find((s) => s.name === '正确纠回')
+  const silent = view.series.find((s) => s.name === '静默放行')
+  assert.equal(corrected?.points[0][1], 1)
+  assert.equal(silent?.points[0][1], 0)
+  assert.equal(view.readouts[2].value, '100.0%')
 })

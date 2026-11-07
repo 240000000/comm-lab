@@ -104,9 +104,12 @@ export function CourseChart({
       yMin -= 1
       yMax += 1
     }
+    const dataMin = yMin
     const yPad = (yMax - yMin) * (logY ? 0.05 : 0.08)
     yMin -= yPad
     yMax += yPad
+    // 数据本身没有负值（比特、误码率、个数），下界就别留负刻度，免得读者以为存在负信息量。
+    if (dataMin >= 0) yMin = 0
     // 堆叠柱数的是个数，纵轴下界必须落在 0：否则柱子从负数处往上长，看着像有负计数。
     if (stack) yMin = 0
 
@@ -246,8 +249,11 @@ export function CourseChart({
           const y0 = py(acc)
           acc += point[1]
           const y1 = py(acc)
+          if (point[1] <= 0) continue
           ctx.fillStyle = s.color
-          ctx.fillRect(px(x) - barW / 2, Math.min(y0, y1), barW, Math.abs(y0 - y1))
+          // 只有 1 个计数的那一段按真实高度只有 2 像素，补到 3 像素，让「这一段存在」看得见。
+          const height = Math.max(3, Math.abs(y0 - y1))
+          ctx.fillRect(px(x) - barW / 2, Math.min(y0, y1) - (height - Math.abs(y0 - y1)), barW, height)
           if (Math.abs(y0 - y1) > 15 && point[1] > 0) {
             ctx.fillStyle = '#08121a'
             ctx.font = AXIS_FONT
