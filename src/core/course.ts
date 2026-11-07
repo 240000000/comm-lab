@@ -54,6 +54,7 @@ export type CourseView = {
   failed: boolean
   /** 纵轴取对数（第 7 章的误码率曲线）。 */
   logY?: boolean
+  logX?: boolean
   /** 画成从 0 基线拉出来的柱（第 12 章的自相关）。 */
   bars?: boolean
   /** 画成堆叠柱（第 11 章：每档按结局分段）。 */
@@ -1677,6 +1678,108 @@ function computeInfo(params: Record<string, number>): CourseView {
   }
 }
 
+
+/* ---------- 第 4 章：香农公式与带宽的天花板 ---------- */
+
+/** 对数步进的带宽档，每档之间是 2 倍或 2.5 倍，滑杆上按对数均匀分布。 */
+export const CHANNEL_BANDS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000] as const
+const CHANNEL_BAND_LABELS = CHANNEL_BANDS.map((b) => (b >= 1000 ? '1000 kHz' : `${b} kHz`))
+const CHANNEL_POINTS = 121
+/** 参考带宽：SNR₀ 是在 1 kHz 下测的，所以 S/N0 的单位是 kHz 乘功率。 */
+const CHANNEL_REF_KHZ = 1
+
+const channelSnrParam: CourseParam = {
+  key: 'snr0Db',
+  label: '参考带宽下的信噪比 SNR₀（1 kHz 下测得）',
+  min: 0,
+  max: 30,
+  step: 1,
+  unit: 'dB',
+}
+const channelBandParam: CourseParam = {
+  key: 'bandIndex',
+  label: '带宽 B（对数档）',
+  min: 0,
+  max: CHANNEL_BANDS.length - 1,
+  step: 1,
+  unit: '',
+  options: [...CHANNEL_BAND_LABELS],
+}
+
+/** 香农容量 C(B) = B·log2(1 + S/(N0·B))，B 用 kHz，结果换算成 kbit/s。 */
+export function channelCapacity(bandKhz: number, snr0Db: number): number {
+  const density = 10 ** (snr0Db / 10) * CHANNEL_REF_KHZ
+  return bandKhz * Math.log2(1 + density / bandKhz)
+}
+
+/** 无限带宽极限 C∞ = S/N0 · log2(e) ≈ 1.4427·S/N0。 */
+export function channelLimit(snr0Db: number): number {
+  return (10 ** (snr0Db / 10)) * Math.log2(Math.E)
+}
+
+function computeChannel(params: Record<string, number>): CourseView {
+  const snr0Db = Math.min(30, Math.max(0, Math.round(params.snr0Db ?? 20)))
+  const bandIndex = Math.min(CHANNEL_BANDS.length - 1, Math.max(0, Math.round(params.bandIndex ?? 3)))
+  const band = CHANNEL_BANDS[bandIndex]
+  const limit = channelLimit(snr0Db)
+
+  const curve: Array<[number, number]> = []
+  for (let i = 0; i < CHANNEL_POINTS; i += 1) {
+    // 横轴按 log10 均匀取点，0.1 kHz 到 1000 kHz 共四个数量级。
+    const b = 0.1 * 10 ** ((4 * i) / (CHANNEL_POINTS - 1))
+    curve.push([b, channelCapacity(b, snr0Db)])
+  }
+
+  const capacity = channelCapacity(band, snr0Db)
+  const efficiency = capacity / band
+  const share = (capacity / limit) * 100
+  const failed = band >= 1000
+
+  const readouts: CourseReadout[] = [
+    {
+      label: '容量 C（kbit/s）',
+      value: `${capacity.toFixed(2)} kbit/s`,
+      hint: `理论上 C = B·log2(1 + S/(N0·B))，B = ${band} kHz；SNR₀ = ${snr0Db} dB 折算成 S/N0 = ${(10 ** (snr0Db / 10)).toFixed(0)} kHz。`,
+      warn: false,
+    },
+    {
+      label: '频谱效率 C/B（bit/s/Hz）',
+      value: `${efficiency.toFixed(3)} bit/s/Hz`,
+      hint: '每赫兹每秒搬多少比特；带宽越大，这个数掉得越狠。',
+      warn: false,
+    },
+    {
+      label: '占无限带宽极限',
+      value: `${share.toFixed(1)} %`,
+      hint: `极限 C∞ = 1.4427·S/N0 = ${limit.toFixed(1)} kbit/s；百分比越接近 100%，越说明再宽的带宽也换不来更多容量。`,
+      warn: failed,
+    },
+  ]
+
+  let conclusion: string
+  if (failed) {
+    conclusion = `带宽不是免费的：SNR₀ 固定时容量有硬天花板 ${limit.toFixed(1)} kbit/s（1.4427·S/N0），再宽的带宽也只是逼近它。想真涨容量，只能提信噪比或者多点几根天线。`
+  } else if (band <= 1) {
+    conclusion = `1 kHz 下容量 ${capacity.toFixed(2)} kbit/s、频谱效率 ${efficiency.toFixed(2)} bit/s/Hz；把带宽放大一千倍到 1 MHz，容量只到 ${channelCapacity(1000, snr0Db).toFixed(1)} kbit/s，离天花板 ${limit.toFixed(1)} kbit/s 还差一点，频谱效率只剩 ${(channelCapacity(1000, snr0Db) / 1000).toFixed(2)}——宽带宽的每一赫兹都在打折。`
+  } else {
+    conclusion = `带宽拉到 ${band} kHz，容量 ${capacity.toFixed(1)} kbit/s，只占极限的 ${share.toFixed(1)}%；频谱效率已经掉到 ${efficiency.toFixed(3)} bit/s/Hz。`
+  }
+
+  return {
+    series: [
+      { name: '容量 C(B)', color: '#5ad1a5', points: curve },
+      { name: '当前带宽', color: '#e0a45c', marker: true, points: [[band, capacity]] },
+    ],
+    guides: [{ y: limit, label: `C∞ = ${limit.toFixed(1)} kbit/s：带宽再大也超不过它` }],
+    xLabel: '带宽 B（kHz，对数刻度）',
+    yLabel: '容量 C（kbit/s）',
+    logX: true,
+    readouts,
+    conclusion,
+    failed,
+  }
+}
+
 export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 1,
@@ -1713,13 +1816,14 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 4,
     title: '信道',
-    implemented: false,
-    reason: '多径与 CP 的完整链路已经在 OFDM 实验台里，重复做一屏只会更浅。',
+    implemented: true,
+    reason: '',
     labs: [{ label: 'OFDM 实验台', href: '#/ofdm' }],
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    question: '带宽翻十倍，信道容量为什么翻不了十倍？',
+    params: [channelSnrParam, channelBandParam],
+    defaults: { snr0Db: 20, bandIndex: 3 },
+    failPreset: { snr0Db: 20, bandIndex: 12 },
+    compute: computeChannel,
   },
   {
     no: 5,

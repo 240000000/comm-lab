@@ -31,6 +31,7 @@ export function CourseChart({
   xLabel,
   yLabel,
   logY = false,
+  logX = false,
   bars = false,
   stack = false,
   guides,
@@ -39,6 +40,7 @@ export function CourseChart({
   xLabel: string
   yLabel: string
   logY?: boolean
+  logX?: boolean
   bars?: boolean
   stack?: boolean
   guides?: Array<{ y: number; label: string }>
@@ -65,6 +67,8 @@ export function CourseChart({
 
     // 纵坐标先过一遍 log10，后面所有映射都按变换后的值算。
     const ty = (value: number) => (logY ? Math.log10(Math.max(value, LOG_FLOOR)) : value)
+    // 第 4 章起横轴也要对数：带宽从 0.1 kHz 跨到 1000 kHz，线性轴会把低带宽段压成一团。
+    const tx = (value: number) => (logX ? Math.log10(Math.max(value, LOG_FLOOR)) : value)
 
     // 先扫一遍所有点，定出两个轴的取值范围；y 轴上下各留一点余量，免得线贴边。
     let xMin = Infinity
@@ -76,8 +80,8 @@ export function CourseChart({
       ctx.lineWidth = s.quiet ? 0.8 : s.dashed ? 1.1 : 1.4
       for (const [x, y] of s.points) {
         if (!Number.isFinite(x) || !Number.isFinite(y)) continue
-        xMin = Math.min(xMin, x)
-        xMax = Math.max(xMax, x)
+        xMin = Math.min(xMin, tx(x))
+        xMax = Math.max(xMax, tx(x))
         const yv = ty(y)
         yMin = Math.min(yMin, yv)
         yMax = Math.max(yMax, yv)
@@ -113,7 +117,7 @@ export function CourseChart({
     // 堆叠柱数的是个数，纵轴下界必须落在 0：否则柱子从负数处往上长，看着像有负计数。
     if (stack) yMin = 0
 
-    const px = (x: number) => PAD.left + ((x - xMin) / (xMax - xMin)) * plotW
+    const px = (x: number) => PAD.left + ((tx(x) - xMin) / (xMax - xMin)) * plotW
     const py = (y: number) => PAD.top + (1 - (ty(y) - yMin) / (yMax - yMin)) * plotH
 
     // 对数轴把上下界对齐到整十次幂，刻度落在 10^k 上，读起来才是 1e-2、1e-4 这种整档。
@@ -121,6 +125,19 @@ export function CourseChart({
       yMin = Math.floor(yMin) - 0.15
       yMax = Math.ceil(yMax) + 0.15
       if (yMax - yMin < 2) yMax = yMin + 2
+    }
+    if (logX) {
+      xMin = Math.floor(xMin) - 0.15
+      xMax = Math.ceil(xMax) + 0.15
+      if (xMax - xMin < 2) xMax = xMin + 2
+    }
+    // 横向刻度值：线性轴 5 档等分；对数轴按整十次幂走。
+    const xTicks: number[] = []
+    if (logX) {
+      const step = Math.ceil((xMax - xMin) / 8)
+      for (let k = Math.ceil(xMin); k <= Math.floor(xMax); k += step) xTicks.push(k)
+    } else {
+      for (let i = 0; i <= 4; i++) xTicks.push(xMin + ((xMax - xMin) / 4) * i)
     }
     // 纵向刻度值：线性轴 5 档等分；对数轴每十倍一档，太密时隔档画。
     const yTicks: number[] = []
@@ -141,8 +158,8 @@ export function CourseChart({
       ctx.lineTo(PAD.left + plotW, y)
       ctx.stroke()
     }
-    for (let i = 0; i <= 4; i++) {
-      const x = PAD.left + (plotW / 4) * i
+    for (const value of xTicks) {
+      const x = PAD.left + ((value - xMin) / (xMax - xMin)) * plotW
       ctx.beginPath()
       ctx.moveTo(x, PAD.top)
       ctx.lineTo(x, PAD.top + plotH)
@@ -168,10 +185,15 @@ export function CourseChart({
       for (let v = Math.ceil(xMin); v <= Math.floor(xMax); v += step) {
         ctx.fillText(String(v), px(v), PAD.top + plotH + 8)
       }
+    } else if (logX) {
+      for (const value of xTicks) {
+        const x = PAD.left + ((value - xMin) / (xMax - xMin)) * plotW
+        ctx.fillText(formatPower(value), x, PAD.top + plotH + 8)
+      }
     } else {
-      for (let i = 0; i <= 4; i++) {
-        const value = xMin + ((xMax - xMin) / 4) * i
-        ctx.fillText(formatTick(value), PAD.left + (plotW / 4) * i, PAD.top + plotH + 8)
+      for (const value of xTicks) {
+        const x = PAD.left + ((value - xMin) / (xMax - xMin)) * plotW
+        ctx.fillText(formatTick(value), x, PAD.top + plotH + 8)
       }
     }
     ctx.textAlign = 'right'

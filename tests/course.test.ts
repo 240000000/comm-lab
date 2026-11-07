@@ -7,7 +7,15 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { COURSE_CHAPTERS, DEEP_LAB_CHAPTERS, binaryEntropy, chapterByNo, selfInfo } from '../src/core/course.ts'
+import {
+  COURSE_CHAPTERS,
+  DEEP_LAB_CHAPTERS,
+  binaryEntropy,
+  channelCapacity,
+  channelLimit,
+  chapterByNo,
+  selfInfo,
+} from '../src/core/course.ts'
 import { parseHash } from '../src/router.ts'
 import { qFunction } from '../src/core/ber.ts'
 
@@ -19,9 +27,9 @@ test('左树 13 章，章号 1 到 13 连续', () => {
   })
 })
 
-test('本轮只实现第 1、2、5、6、7、8、9、10、11、12 章', () => {
+test('本轮只实现第 1、2、4、5、6、7、8、9、10、11、12 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [1, 2, 5, 6, 7, 8, 9, 10, 11, 12])
+  assert.deepEqual(done, [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -477,4 +485,49 @@ test('第 11 章：e = 0 那根柱归正确纠回，静默放行只留多错模�
   assert.equal(corrected?.points[0][1], 1)
   assert.equal(silent?.points[0][1], 0)
   assert.equal(view.readouts[2].value, '100.0%')
+})
+
+test('第 4 章：香农容量在 1 kHz、20 dB 下等于 6.658 kbit/s', () => {
+  assert.ok(Math.abs(channelCapacity(1, 20) - 6.658) < 1e-3)
+})
+
+test('第 4 章：对数带宽网格上容量严格递增、频谱效率严格递减', () => {
+  let prevC = -Infinity
+  let prevEff = Infinity
+  for (let i = 0; i <= 80; i += 1) {
+    const b = 0.1 * 10 ** ((4 * i) / 80)
+    const c = channelCapacity(b, 20)
+    assert.ok(c > prevC)
+    assert.ok(c / b < prevEff)
+    prevC = c
+    prevEff = c / b
+  }
+})
+
+test('第 4 章：带宽无穷大时容量趋近 1.4427·S/N0', () => {
+  const limit = channelLimit(20)
+  assert.ok(Math.abs(limit - 144.27) < 0.05)
+  assert.ok(Math.abs(channelCapacity(1e7, 20) - limit) / limit < 0.01)
+})
+
+test('第 4 章：信噪比从 0 到 30 dB，容量恒正且单调增', () => {
+  let prev = -Infinity
+  for (let snr = 0; snr <= 30; snr += 1) {
+    const c = channelCapacity(1, snr)
+    assert.ok(c > 0)
+    assert.ok(c > prev)
+    prev = c
+  }
+})
+
+test('第 4 章：默认档不报红、1000 kHz 档改口并标红', () => {
+  const small = chapterByNo(4)!.compute({ snr0Db: 20, bandIndex: 3 })
+  assert.equal(small.failed, false)
+  assert.equal(small.readouts[0].value, '6.66 kbit/s')
+  assert.ok(small.conclusion.includes('打折'))
+  const wide = chapterByNo(4)!.compute({ snr0Db: 20, bandIndex: 12 })
+  assert.equal(wide.failed, true)
+  assert.equal(wide.readouts[0].value, '137.50 kbit/s')
+  assert.equal(wide.readouts[2].warn, true)
+  assert.ok(wide.conclusion.includes('天花板'))
 })
