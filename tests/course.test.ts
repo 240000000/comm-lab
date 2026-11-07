@@ -19,9 +19,9 @@ test('左树 13 章，章号 1 到 13 连续', () => {
   })
 })
 
-test('本轮只实现第 2、5、6、7、10 章', () => {
+test('本轮只实现第 2、5、6、7、8、10 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [2, 5, 6, 7, 10])
+  assert.deepEqual(done, [2, 5, 6, 7, 8, 10])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -247,4 +247,47 @@ test('第 7 章失效档：增益 0.0 dB 标红、结论改口；默认档 3.0 d
   assert.equal(good.readouts[2].value, '3.0 dB')
   assert.equal(good.readouts[2].warn, false)
   assert.match(good.conclusion, /往左移/)
+})
+
+test('第 8 章：M=4 退化成 2PSK，与第 7 章的数字完全对上', () => {
+  const qam = chapterByNo(8)
+  const qpsk = qam.compute({ ...qam.defaults, mod: 0 })
+  const theory = Number(qpsk.readouts[1].value)
+  const psk = chapterByNo(7).compute({ scheme: 2, ebn0Db: 12, phaseDeg: 0 })
+  const pskBer = Number(psk.readouts[0].value)
+  assert.equal(theory, pskBer, `QPSK ${theory} 必须等于 2PSK ${pskBer}`)
+  const gamma = 10 ** (12 / 10)
+  assert.ok(Math.abs(theory - qFunction(Math.sqrt(2 * gamma))) / theory < 0.01, 'M=4 要落在 Q(√(2Eb/N0)) 上')
+})
+
+test('第 8 章：12 dB 下四档理论误码率严格递减', () => {
+  const qam = chapterByNo(8)
+  const values = [0, 1, 2, 3].map((mod) => Number(qam.compute({ ...qam.defaults, mod }).readouts[1].value))
+  for (let i = 1; i < values.length; i += 1) assert.ok(values[i] > values[i - 1], `第 ${i} 档 ${values[i]} 应大于前一档 ${values[i - 1]}`)
+  assert.ok(values[0] < 1e-8 && values[1] > 1e-5 && values[1] < 1e-3, `QPSK ${values[0]} / 16QAM ${values[1]} 的量级不对`)
+  assert.ok(values[2] > 5e-3 && values[2] < 2e-2, `64QAM ${values[2]} 应落在 1e-2 量级`)
+  assert.ok(values[3] > 2e-2 && values[3] < 1e-1, `256QAM ${values[3]} 应落在 5e-2 量级`)
+})
+
+test('第 8 章：16QAM 与 64QAM 达同一误码率的 Eb/N0 差落在 4 到 7 dB 之间', () => {
+  const qam = chapterByNo(8)
+  const view = qam.compute({ ...qam.defaults, mod: 2 })
+  const match = /多花 ([\d.]+) dB/.exec(view.conclusion)
+  assert.ok(match, `结论里要有「多花 X dB」，实际：${view.conclusion}`)
+  const extra = Number(match![1])
+  assert.ok(extra >= 4 && extra <= 7, `16QAM 到 64QAM 的代价应在 4–7 dB，实际 ${extra}`)
+})
+
+test('第 8 章：四档蒙特卡洛实测都落在理论值的十分之一到十倍之间', () => {
+  const qam = chapterByNo(8)
+  for (const mod of [0, 1, 2, 3]) {
+    const view = qam.compute({ ...qam.defaults, mod, ebn0Db: 4 })
+    const theory = Number(view.readouts[1].value)
+    const measured = Number(view.readouts[2].value)
+    assert.ok(measured > theory / 10 && measured < theory * 10, `M=${[4, 16, 64, 256][mod]} 实测 ${measured} 与理论 ${theory} 差得太远`)
+  }
+  const bad = qam.compute(qam.failPreset)
+  assert.equal(bad.failed, true)
+  assert.equal(bad.readouts[2].warn, true, '失效档的实测读数要标红')
+  assert.match(bad.conclusion, /每传 20 个符号就错一个/)
 })

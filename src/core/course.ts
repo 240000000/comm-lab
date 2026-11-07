@@ -865,6 +865,174 @@ function computeBandpass(params: Record<string, number>): CourseView {
   }
 }
 
+/* ---------- 第 8 章：方形 QAM，多传的那点比特要用多少 dB 换 ---------- */
+
+const QAM_ORDERS = [4, 16, 64, 256] as const
+const QAM_LABELS = ['QPSK', '16QAM', '64QAM', '256QAM'] as const
+const QAM_COLORS = ['#7fb3d5', '#e0a45c', '#5ad1a5', '#c58bf0']
+/** 蒙特卡洛符号数；固定种子，同一档每次重跑逐位相同。 */
+const QAM_SAMPLES = 20000
+const QAM_SEED = 20261108
+/** 曲线横轴 0…20 dB，每 1 dB 一个点。 */
+const QAM_POINTS = 21
+
+const qamModParam: CourseParam = {
+  key: 'mod',
+  label: '调制阶数 M',
+  min: 0,
+  max: 3,
+  step: 1,
+  unit: '',
+  options: QAM_LABELS.map((name, index) => `${name}（M=${QAM_ORDERS[index]}）`),
+}
+const qamEbn0Param: CourseParam = {
+  key: 'ebn0Db',
+  label: 'Eb/N0',
+  min: 0,
+  max: 20,
+  step: 1,
+  unit: 'dB',
+}
+const qamAlphaParam: CourseParam = {
+  key: 'alpha',
+  label: '滚降系数 α',
+  min: 0,
+  max: 1,
+  step: 0.05,
+  unit: '',
+}
+
+/** 方形星座的标准近似：Pb ≈ (4/k)(1 − 1/√M)·Q(√(3k·Eb/((M−1)N0)))。 */
+function qamTheory(order: number, ebn0Db: number): number {
+  const k = Math.log2(order)
+  const gamma = 10 ** (ebn0Db / 10)
+  const arg = Math.sqrt((3 * k * gamma) / (order - 1))
+  return (4 / k) * (1 - 1 / Math.sqrt(order)) * qFunction(arg)
+}
+
+/** 反解「达到某个误码率要多少 Eb/N0」：Q 单调，二分即可。 */
+function qamGammaFor(order: number, ber: number): number {
+  let lo = 1e-6
+  let hi = 1e6
+  for (let i = 0; i < 200; i += 1) {
+    const mid = (lo + hi) / 2
+    if (qamTheory(order, 10 * Math.log10(mid)) > ber) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+/** 格雷码：相邻星座点只差一位，这样按位异或数出来的错比特不会虚高。 */
+function grayOf(index: number): number {
+  return index ^ (index >> 1)
+}
+
+/** 蒙特卡洛：每符号送 k 个比特，逐符号判 I/Q，再按格雷映射数错比特。 */
+function shootQam(order: number, ebn0Db: number): { ber: number; errors: number; bits: number } {
+  const rng = createRng(QAM_SEED + order * 131 + Math.round(ebn0Db) * 7)
+  const gamma = 10 ** (ebn0Db / 10)
+  const k = Math.log2(order)
+  const side = Math.round(Math.sqrt(order))
+  // 每维噪声方差取 1（即 N0 = 2），电平间隔 d 由平均符号能量 Es = k·Eb 定出。
+  const d = Math.sqrt((3 * k * gamma) / (order - 1))
+  let errors = 0
+  for (let s = 0; s < QAM_SAMPLES; s += 1) {
+    const sent = Math.floor(rng.next() * order)
+    const iIdx = sent % side
+    const qIdx = Math.floor(sent / side)
+    const ri = (2 * iIdx - (side - 1)) * d + rng.gauss()
+    const rq = (2 * qIdx - (side - 1)) * d + rng.gauss()
+    const di = Math.min(side - 1, Math.max(0, Math.round((ri / d + (side - 1)) / 2)))
+    const dq = Math.min(side - 1, Math.max(0, Math.round((rq / d + (side - 1)) / 2)))
+    const decided = dq * side + di
+    if (decided !== sent) {
+      let diff = grayOf(sent) ^ grayOf(decided)
+      while (diff > 0) {
+        errors += diff & 1
+        diff >>= 1
+      }
+    }
+  }
+  const bits = QAM_SAMPLES * k
+  return { ber: errors / bits, errors, bits }
+}
+
+function computeQam(params: Record<string, number>): CourseView {
+  const mod = Math.min(3, Math.max(0, Math.round(params.mod ?? 1)))
+  const ebn0Db = Math.min(20, Math.max(0, Math.round(params.ebn0Db ?? 12)))
+  const alpha = Math.min(1, Math.max(0, Math.round((params.alpha ?? 0.35) * 20) / 20))
+  const order = QAM_ORDERS[mod]
+  const label = QAM_LABELS[mod]
+  const k = Math.log2(order)
+
+  const series: CourseSeries[] = QAM_ORDERS.map((value, index) => ({
+    name: QAM_LABELS[index],
+    color: QAM_COLORS[index],
+    points: Array.from({ length: QAM_POINTS }, (_, i) => [i, qamTheory(value, i)] as [number, number]),
+  }))
+
+  const theoryBer = qamTheory(order, ebn0Db)
+  const shot = shootQam(order, ebn0Db)
+  const measuredBer = shot.ber
+  series.push({
+    name: `${label} 实测`,
+    color: QAM_COLORS[mod],
+    marker: true,
+    points: [[ebn0Db, measuredBer]],
+  })
+
+  const efficiency = k / (1 + alpha)
+  const moreBits = ((k - 4) / 4) * 100
+  const gammaNow = 10 ** (ebn0Db / 10)
+  const gammaSameBer = qamGammaFor(16, theoryBer)
+  const extraDb = 10 * Math.log10(gammaNow / gammaSameBer)
+  const extra64 = 10 * Math.log10(qamGammaFor(64, theoryBer) / gammaSameBer)
+  const deviate = measuredBer > 0 && (measuredBer > theoryBer * 3 || measuredBer < theoryBer / 3)
+  const failed = mod === 3 && theoryBer > 0.01
+
+  const readouts: CourseReadout[] = [
+    {
+      label: '谱效率',
+      value: `${efficiency.toFixed(2)} bit/s/Hz`,
+      hint: `log₂M/(1+α) = ${k}/(1+${alpha.toFixed(2)})；滚降越小，同样带宽里塞的比特越多。`,
+      warn: false,
+    },
+    {
+      label: '理论误码率',
+      value: exponent(theoryBer),
+      hint: `(4/k)(1−1/√M)·Q(√(3k·Eb/((M−1)N0)))，k = ${k}；M=4 时退化成 2PSK 的 Q(√(2Eb/N0))。`,
+      warn: failed,
+    },
+    {
+      label: '实测误码率',
+      value: measuredBer === 0 ? '0（本批没出错）' : exponent(measuredBer),
+      hint: `${shot.errors} / ${shot.bits} 比特判错；与理论比 ${measuredBer === 0 ? '本批没出错' : `${(measuredBer / theoryBer).toFixed(2)} 倍`}`,
+      warn: deviate || failed,
+    },
+  ]
+
+  let conclusion: string
+  if (failed) {
+    conclusion = `同样这 ${ebn0Db} dB，256QAM 每传 20 个符号就错一个：理论 ${exponent(theoryBer)}、实测 ${exponent(measuredBer)}。多传的那一倍比特全赔进去了，这个信噪比下它没用。`
+  } else if (mod === 1) {
+    conclusion = `16QAM 每赫兹传 ${efficiency.toFixed(2)} bit，${ebn0Db} dB 下理论 ${exponent(theoryBer)}。同样这条误码率，64QAM 要多花 ${extra64.toFixed(1)} dB，换来多传 50% 的比特；256QAM 多传一倍，贵得也更多。`
+  } else if (moreBits > 0) {
+    conclusion = `${label} 比 16QAM 多传 ${moreBits.toFixed(0)}% 的比特（每赫兹 ${efficiency.toFixed(2)} bit），代价是同一条误码率下多花 ${extraDb.toFixed(1)} dB。`
+  } else {
+    conclusion = `${label} 每赫兹只传 ${efficiency.toFixed(2)} bit，比 16QAM 少 ${Math.abs(moreBits).toFixed(0)}% 的比特，省下 ${Math.abs(extraDb).toFixed(1)} dB。`
+  }
+
+  return {
+    series,
+    xLabel: 'Eb/N0（dB）',
+    yLabel: '误码率 Pb',
+    logY: true,
+    readouts,
+    conclusion,
+    failed,
+  }
+}
+
 export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 1,
@@ -944,16 +1112,17 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 8,
     title: '新型数字带通调制',
-    implemented: false,
-    reason: 'QAM 与 OFDM 的完整实验台已经在第 4、7 章的位置之外单独存在，这里只放入口。',
+    implemented: true,
+    question: '同样的带宽，为什么 64QAM 能多传 50% 的比特，却要多花 6 dB？',
+    reason: '',
     labs: [
       { label: 'QAM 实验台', href: '#/qam' },
       { label: 'OFDM 实验台', href: '#/ofdm' },
     ],
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    params: [qamModParam, qamEbn0Param, qamAlphaParam],
+    defaults: { mod: 1, ebn0Db: 12, alpha: 0.35 },
+    failPreset: { mod: 3, ebn0Db: 12, alpha: 0.35 },
+    compute: computeQam,
   },
   {
     no: 9,

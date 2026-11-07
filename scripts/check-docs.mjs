@@ -502,7 +502,7 @@ let courseLine = '';
         chapter.implemented ? '一屏' : chapter.labs?.length ? '深度实验台' : '未实现',
         String(chapter.params.length),
         chapter.labs?.length
-          ? chapter.labs.map((lab) => lab.label.replace(/\s*实验台$/, '')).join(' + ')
+          ? chapter.labs.map((lab) => lab.label.replace(/\s*实验台$/, '')).join(' / ')
           : '—',
       ];
       // 13 行 × 5 列逐个比对，全部计入断言总数——「跑了不计数」等于没跑。
