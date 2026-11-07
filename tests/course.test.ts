@@ -116,12 +116,18 @@ test('第 6 章眼图：默认张着、反例闭上，两个读数带理论对�
   const base = chapter.compute(chapter.defaults)
   assert.equal(base.failed, false)
   const eye = Number(base.readouts[0].value)
-  assert.ok(eye > 0 && eye <= 2, `眼高应落在 (0, 2]，实际 ${eye}`)
+  // 20 dB、无多径、采样对准判决点：两簇内沿之差应接近满开 2（噪声扣掉约 0.3）。
+  assert.ok(Math.abs(eye - 1.7) <= 0.15, `默认档眼高应在 1.7 附近，实际 ${eye}`)
+  // 信噪比往下拖，眼高必须跟着掉——旧写法是反的。
+  const lowSnr = Number(chapter.compute({ ...chapter.defaults, eyeSnrDb: 8 }).readouts[0].value)
+  assert.ok(lowSnr < eye, `8 dB 的眼高 ${lowSnr} 应低于 20 dB 的 ${eye}`)
   assert.ok(base.readouts.some((item) => item.hint.includes('理论')))
   assert.equal(base.readouts[1].value, '0.000', '采样落在判决点上时，升余弦的 ISI 应为 0')
 
   const failed = chapter.compute(chapter.failPreset)
   assert.equal(failed.failed, true)
+  const closed = Number(failed.readouts[0].value)
+  assert.ok(closed < 0.3, `α=0.05、定时误差 0.45Ts 的眼高应小于 0.3，实际 ${closed}`)
   assert.ok(failed.readouts.some((item) => item.warn), '反例里至少要有一条读数标红')
   assert.notEqual(failed.conclusion, base.conclusion)
   assert.ok(failed.conclusion.includes('噪声') || failed.conclusion.includes('多径') || failed.conclusion.includes('滚降'))

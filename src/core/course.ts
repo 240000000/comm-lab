@@ -552,6 +552,9 @@ function computeEye(params: Record<string, number>): CourseView {
   for (let i = -EYE_GRID; i <= EYE_GRID; i += 1) phases.push(i / EYE_GRID)
   const columns: number[][] = phases.map(() => [])
   const center: number[] = []
+  // 判决点上的两条分簇：+1 的样本与 -1 的样本分开收，后面各取内沿。
+  const plusCenter: number[] = []
+  const minusCenter: number[] = []
   let errors = 0
   let decided = 0
 
@@ -561,6 +564,8 @@ function computeEye(params: Record<string, number>): CourseView {
       columns[i].push(value)
       if (i === EYE_GRID) {
         center.push(value)
+        if (symbols[m] > 0) plusCenter.push(value)
+        else minusCenter.push(value)
         decided += 1
         if (Math.sign(value) !== Math.sign(symbols[m])) errors += 1
       }
@@ -585,9 +590,13 @@ function computeEye(params: Record<string, number>): CourseView {
   }
   const upper = columns.map((values) => quantile(values, 0.98))
   const lower = columns.map((values) => quantile(values, 0.02))
-  // 眼高按判决点上下两条包络的 p2–p98 区间算，再折半归一到「满开 = 2」，
-  // 避免 380 条轨迹里最极端的噪声把读数撑到 2 以上。
-  const eyeHeight = Math.min(2, (upper[EYE_GRID] - lower[EYE_GRID]) / 2)
+  // 眼高要按发送符号分簇算：+1 那一簇的上沿取 p2、-1 那一簇的下沿取 p98，
+  // 两者相减就是「最靠里的两只眼睛之间的距离」。满开是 2，直接用它比。
+  // 旧写法取两簇混在一起的 p2–p98 再折半，噪声一大外侧分位反而往外撑，
+  // 数值会往上走——方向和「眼图闭了」相反，是量纲错。
+  const eyeUp = quantile(plusCenter, 0.02)
+  const eyeDown = quantile(minusCenter, 0.98)
+  const eyeHeight = Math.max(0, Math.min(2, eyeUp - eyeDown))
   const theoryHeight = Math.max(0, 2 * (1 - isi))
   const ber = decided > 0 ? errors / decided : 0
   const theoryBer = qFunction(Math.sqrt(2 * ebN0))
@@ -619,7 +628,7 @@ function computeEye(params: Record<string, number>): CourseView {
       {
         label: '眼高（实测）',
         value: eyeHeight.toFixed(2),
-        hint: `判决点 p2–p98 区间折半，满开为 2；理论开口 ${theoryHeight.toFixed(2)}`,
+        hint: `判决点上 +1 簇 p2 减 −1 簇 p98，满开为 2；理论开口 ${theoryHeight.toFixed(2)}`,
         warn: eyeHeight < 0.6,
       },
       {

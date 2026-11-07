@@ -65,6 +65,9 @@ export function CourseChart({
         yMax = Math.max(yMax, y)
       }
     }
+    // 上面扫范围时改过 globalAlpha，画坐标轴和刻度之前必须复位，
+    // 否则以后调整 series 顺序，坐标轴会变成 18% 透明度。
+    ctx.globalAlpha = 1
     if (!Number.isFinite(xMin) || !Number.isFinite(yMin)) return
     if (xMax === xMin) xMax = xMin + 1
     if (yMax === yMin) {
