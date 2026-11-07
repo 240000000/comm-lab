@@ -15,6 +15,7 @@ import {
   type CourseView,
 } from '../core/course.ts'
 import { CourseChart } from './CourseChart.tsx'
+import { CourseLegend } from './CourseLegend.tsx'
 import { ParamSlider } from './ParamSlider.tsx'
 
 const START_CHAPTER = 2
@@ -140,6 +141,7 @@ const ChapterScreen = memo(function ChapterScreen({
           stack={view.stack}
           guides={view.guides}
         />
+        <CourseLegend series={view.series} />
       </div>
 
       <div className="readouts course-readouts">

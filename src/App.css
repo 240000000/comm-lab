@@ -2345,6 +2345,50 @@ video::-webkit-media-controls-overlay-play-button {
   width: 100%;
 }
 
+/* 图例从 canvas 里搬出来，放在画布下方：一行放不下就换行，宽度跟着容器走，
+   不再有写死的块宽，也就不会压住曲线或压到自己的色块上。 */
+.course-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6f8399;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+/* 色块直接用 series 自己的颜色（currentColor），不另定一套。 */
+.legend-mark {
+  flex: none;
+  width: 26px;
+  height: 0;
+  border-top: 2px solid currentColor;
+}
+
+.legend-mark.is-dashed {
+  border-top-style: dashed;
+}
+
+.legend-mark.is-dot {
+  width: 7px;
+  height: 7px;
+  border: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.legend-text {
+  white-space: nowrap;
+}
+
 .course-readouts {
   margin: 0 0 16px;
 }

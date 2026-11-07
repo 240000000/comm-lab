@@ -342,42 +342,6 @@ export function CourseChart({
       ctx.setLineDash([])
     }
     ctx.globalAlpha = 1
-
-    // 图例放右上角，压在网格上，不动轴；先铺一块半透明底，曲线穿过去也不糊。
-    const legendItems = series.filter((s) => !s.quiet)
-    // 堆叠柱的柱子顶到绘图区上沿，图例放右上会压住最后一根；柱状图统一挪到左上角。
-    const legendX = stack ? PAD.left + 12 : PAD.left + plotW - 112
-    const legendLine = stack ? PAD.left + 28 : PAD.left + plotW - 96
-    const legendDot = stack ? PAD.left + 44 : PAD.left + plotW - 80
-    const legendText = stack ? PAD.left + 76 : PAD.left + plotW
-    if (legendItems.length > 0) {
-      ctx.fillStyle = 'rgba(9, 15, 22, 0.82)'
-      ctx.fillRect(legendX, PAD.top + 2, stack ? 120 : 112, legendItems.length * 18 + 6)
-    }
-    ctx.textAlign = stack ? 'left' : 'right'
-    ctx.textBaseline = 'middle'
-    ctx.font = '12px "Noto Sans SC", "Microsoft YaHei", sans-serif'
-    let legendY = PAD.top + 11
-    for (const s of legendItems) {
-      ctx.fillStyle = s.color
-      ctx.strokeStyle = s.color
-      if (s.marker) {
-        ctx.beginPath()
-        ctx.arc(legendDot, legendY, 3.5, 0, Math.PI * 2)
-        ctx.fill()
-      } else {
-        ctx.lineWidth = s.dashed ? 1.2 : 1.8
-        ctx.setLineDash(s.dashed ? [4, 4] : [])
-        ctx.beginPath()
-        ctx.moveTo(legendLine, legendY)
-        ctx.lineTo(legendLine + 32, legendY)
-        ctx.stroke()
-        ctx.setLineDash([])
-      }
-      ctx.fillStyle = COLOR.axisText
-      ctx.fillText(s.name, legendText, legendY)
-      legendY += 18
-    }
   }, [series, xLabel, yLabel, logX, logY, bars, stack, guides])
 
   // 画的时候用的是最新的 draw，所以尺寸回调里不必重建 observer。

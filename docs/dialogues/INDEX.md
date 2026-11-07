@@ -65,6 +65,7 @@
 | R51 | 2026-11-08 | 会话 28 | 「不动历史」改成分档口径：已推送的一律不动、错了补一笔 fix；同一轮内还没 push 的 amend 不算改写历史，但存档要写明改了几次、为什么改（R50 就是这种）；段末落一句「打包实数记在下一轮存档」；技术报告 PDF 重导仍 29 页 | docs/archive/2026-11-08-session-28.md |
 | R52 | 2026-11-08 | 会话 29 | 滑块与数值框：`useRafValue` 合帧、`ParamSlider` 一体组件（草稿/夹紧/step 对齐/回退）、六图 canvas 只在尺寸真变时重分配；与 R51 逐字对照 0 处不符 | docs/archive/2026-11-08-session-29.md |
 | R53 | 2026-11-08 | 会话 30 | 课程视图：`CourseChart` 的 `clientWidth` 改由 `ResizeObserver` 缓存进 ref、不再每帧读布局；`Control`/`ChapterScreen`/`CourseTree` 包 `memo`、`onChange` 用 `useCallback` 收窄重渲染面；13 章逐档读数比对 mismatches 0 | docs/archive/2026-11-08-session-30.md |
+| R54 | 2026-11-08 | 会话 31 | 课程视图图例从 canvas 里搬出来：删掉绘图区内部写死 112 像素的图例块，改由 `CourseLegend` 在画布下方画一行会换行的网页元素；13 章图例均在画布外、容器与文字零溢出、读数 0 处不符 | docs/archive/2026-11-08-session-31.md |
 
 ## 约定
 
