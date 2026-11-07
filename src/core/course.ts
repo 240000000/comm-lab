@@ -32,6 +32,8 @@ export type CourseSeries = {
   color: string
   dashed?: boolean
   quiet?: boolean
+  /** 只画散点、不连线；第 7 章的蒙特卡洛实测点用它。 */
+  marker?: boolean
   points: Array<[number, number]>
 }
 
@@ -50,6 +52,8 @@ export type CourseView = {
   readouts: CourseReadout[]
   conclusion: string
   failed: boolean
+  /** 纵轴取对数（第 7 章的误码率曲线）。 */
+  logY?: boolean
 }
 
 export type CourseChapter = {
@@ -678,6 +682,180 @@ const bitsParam: CourseParam = { key: 'bits', label: '量化位数 n', min: 8, m
 const compandParam: CourseParam = { key: 'compand', label: 'A 律压扩', min: 0, max: 1, step: 1, unit: '', options: ['关', '开'] }
 
 /** 13 章目录。顺序与教材一致，未实现的原因写清楚，不藏。 */
+
+/* ---------- 第 7 章：四种二进制带通调制，差的那 3 dB 到底差在哪 ---------- */
+
+const BAND_SCHEMES = ['2ASK', '2FSK', '2PSK', '2DPSK'] as const
+const BAND_COLORS = ['#7fb3d5', '#e0a45c', '#5ad1a5', '#c58bf0']
+/** 蒙特卡洛样本数；固定种子，所以同一档每次重跑结果逐位相同。 */
+const BAND_SAMPLES = 20000
+const BAND_SEED = 20261107
+/** 曲线横轴 0…12 dB，每 1 dB 一个点。 */
+const BAND_POINTS = 13
+
+const bandSchemeParam: CourseParam = {
+  key: 'scheme',
+  label: '调制方式',
+  min: 0,
+  max: 3,
+  step: 1,
+  unit: '',
+  options: [...BAND_SCHEMES],
+}
+const bandEbn0Param: CourseParam = {
+  key: 'ebn0Db',
+  label: 'Eb/N0',
+  min: 0,
+  max: 12,
+  step: 1,
+  unit: 'dB',
+}
+const bandPhaseParam: CourseParam = {
+  key: 'phaseDeg',
+  label: '相干载波相位误差 φ',
+  min: 0,
+  max: 45,
+  step: 5,
+  unit: '°',
+}
+
+/** 相位误差打掉的有效能量：只有相干检测的 2ASK / 2PSK 吃 cos²φ。 */
+function coherentLoss(phaseDeg: number): number {
+  return Math.cos((phaseDeg * Math.PI) / 180) ** 2
+}
+
+/** 四种调制的理论误码率；全部现算，不抄教材上的数。 */
+function bandTheory(scheme: number, ebn0Db: number, phaseDeg: number): number {
+  const gamma = 10 ** (ebn0Db / 10)
+  if (scheme === 1) return qFunction(Math.sqrt(gamma)) // 2FSK 相干
+  if (scheme === 3) return 0.5 * Math.exp(-gamma) // 2DPSK 差分相干
+  const loss = coherentLoss(phaseDeg)
+  return qFunction(Math.sqrt(2 * gamma * loss)) // 2ASK / 2PSK 相干
+}
+
+/**
+ * 反解 2FSK 的 Q(√γ)：给定一个误码率，问 2FSK 要多少 γ 才达到它。
+ * Q 随 γ 单调下降，二分即可，不需要闭式解。
+ */
+function fskGammaFor(ber: number): number {
+  let lo = 1e-6
+  let hi = 1e4
+  for (let i = 0; i < 200; i += 1) {
+    const mid = (lo + hi) / 2
+    if (qFunction(Math.sqrt(mid)) > ber) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+/** 蒙特卡洛：按当前档的判决式逐比特送噪声，数错了多少个。 */
+function shootBits(scheme: number, ebn0Db: number, phaseDeg: number): number {
+  const rng = createRng(BAND_SEED + scheme * 101 + Math.round(ebn0Db) * 7 + Math.round(phaseDeg / 5) * 13)
+  const gamma = 10 ** (ebn0Db / 10)
+  const amp = scheme === 1 ? Math.sqrt(gamma) : Math.sqrt(2 * gamma * coherentLoss(phaseDeg))
+  let errors = 0
+  for (let i = 0; i < BAND_SAMPLES; i += 1) {
+    const bit = rng.next() < 0.5 ? 0 : 1
+    let wrong: boolean
+    if (scheme === 3) {
+      // 差分相干：拿前一个码元当参考，判据是两个采样相乘的符号。
+      // 乘积把两路噪声各算一次，等效噪声方差减半，所以幅度取 √(2γ)，
+      // 这样蒙特卡洛才落在 0.5·exp(−Eb/N0) 这条理论线上。
+      const a = Math.sqrt(2 * gamma)
+      const r1 = a + rng.gauss()
+      const r2 = (bit === 1 ? a : -a) + rng.gauss()
+      const product = r1 * r2
+      wrong = bit === 1 ? product < 0 : product > 0
+    } else {
+      const z = (bit === 1 ? amp : -amp) + rng.gauss()
+      wrong = bit === 1 ? z < 0 : z > 0
+    }
+    if (wrong) errors += 1
+  }
+  return errors / BAND_SAMPLES
+}
+
+function computeBandpass(params: Record<string, number>): CourseView {
+  const scheme = Math.min(3, Math.max(0, Math.round(params.scheme ?? 0)))
+  const ebn0Db = Math.min(12, Math.max(0, Math.round(params.ebn0Db ?? 8)))
+  const phaseDeg = Math.min(45, Math.max(0, Math.round((params.phaseDeg ?? 0) / 5) * 5))
+  const label = BAND_SCHEMES[scheme]
+
+  // 四条理论曲线画在同一坐标系里，当前档再叠一组实测点。
+  const series: CourseSeries[] = BAND_SCHEMES.map((name, index) => ({
+    name,
+    color: BAND_COLORS[index],
+    points: Array.from({ length: BAND_POINTS }, (_, i) => [i, bandTheory(index, i, phaseDeg)] as [number, number]),
+  }))
+
+  const theoryBer = bandTheory(scheme, ebn0Db, phaseDeg)
+  const measuredBer = shootBits(scheme, ebn0Db, phaseDeg)
+  series.push({
+    name: `${label} 实测`,
+    color: BAND_COLORS[scheme],
+    marker: true,
+    points: [[ebn0Db, measuredBer]],
+  })
+
+  // 同一条误码率水平线上，2FSK 要比当前档多花多少 dB。
+  const gammaNow = 10 ** (ebn0Db / 10)
+  const gainDb = 10 * Math.log10(fskGammaFor(theoryBer) / gammaNow)
+  const phaseLostDb = -10 * Math.log10(coherentLoss(phaseDeg))
+  const collapsed = phaseDeg >= 40 && Math.abs(gainDb) < 0.5
+
+  const deviate = measuredBer > 0 && (measuredBer > theoryBer * 3 || measuredBer < theoryBer / 3)
+  const errors = Math.round(measuredBer * BAND_SAMPLES)
+
+  const readouts: CourseReadout[] = [
+    {
+      label: `${label} 理论误码率`,
+      value: exponent(theoryBer),
+      hint:
+        scheme === 1
+          ? 'Q(√(Eb/N0))：2FSK 两路正交，同样的 Eb 只有一路能量在起作用。'
+          : scheme === 3
+            ? '0.5·exp(−Eb/N0)：差分相干不恢复载波，代价是比相干 2PSK 差一截。'
+            : `Q(√(2Eb/N0·cos²φ))：相位误差 ${phaseDeg}° 先把有效能量打下 ${phaseLostDb.toFixed(2)} dB。`,
+      warn: false,
+    },
+    {
+      label: '实测误码率（20000 比特）',
+      value: exponent(measuredBer),
+      hint: `${errors} / ${BAND_SAMPLES} 比特判错；与理论比 ${measuredBer === 0 ? '本批没出错' : `${(measuredBer / theoryBer).toFixed(2)} 倍`}`,
+      warn: deviate,
+    },
+    {
+      label: '相对 2FSK 的增益',
+      value: `${Math.abs(gainDb) < 0.05 ? '' : gainDb > 0 ? '' : '−'}${Math.abs(gainDb) < 0.05 ? '0.0' : Math.abs(gainDb).toFixed(1)} dB`,
+      hint: collapsed
+        ? `相位误差吃了 ${phaseLostDb.toFixed(2)} dB，与 2FSK 已经打平。`
+        : `同样误码率下，2FSK 要 ${(ebn0Db + gainDb).toFixed(1)} dB，当前档 ${ebn0Db.toFixed(1)} dB。`,
+      warn: collapsed || Math.abs(gainDb) < 0.5,
+    },
+  ]
+
+  let conclusion: string
+  if (collapsed) {
+    conclusion = `相位误差 45 度吃掉了整整 3 dB，2PSK 现在和 2FSK 打平：增益 ${gainDb.toFixed(1)} dB，曲线退到 2FSK 上，那个「省 3 dB」的结论就没了。`
+  } else if (scheme === 1) {
+    conclusion = `2FSK 自己就是基准，增益 0.0 dB；同样误码率下 2PSK 只要 ${Math.max(0, ebn0Db - 3.01).toFixed(1)} dB，差的正是那 3 dB。`
+  } else if (phaseDeg > 0) {
+    conclusion = `相位误差 ${phaseDeg} 度先吃掉 ${phaseLostDb.toFixed(2)} dB，剩下的才是 ${label} 相对 2FSK 的净增益 ${gainDb.toFixed(1)} dB。`
+  } else {
+    conclusion = `2PSK 的曲线整体比 2FSK 往左移 3.01 dB：同样的误码率，2PSK 用 ${ebn0Db} dB，2FSK 要 ${(ebn0Db + gainDb).toFixed(1)} dB。这一条在图上就是两条曲线之间的水平间距。`
+  }
+
+  return {
+    series,
+    xLabel: 'Eb/N0（dB）',
+    yLabel: '误码率 Pb',
+    logY: true,
+    readouts,
+    conclusion,
+    failed: collapsed,
+  }
+}
+
 export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 1,
@@ -746,12 +924,13 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     no: 7,
     title: '数字带通传输',
-    implemented: false,
-    reason: 'ASK/FSK/PSK 的星座与误码曲线已被第 8 章的 QAM 实验台覆盖，单独一屏信息量不足。',
-    question: '',
-    params: [],
-    defaults: {},
-    failPreset: {},
+    implemented: true,
+    reason: '',
+    question: '同样的比特率，为什么 2PSK 比 2FSK 少用 3 dB 就能达到同样的误码率？',
+    params: [bandSchemeParam, bandEbn0Param, bandPhaseParam],
+    defaults: { scheme: 2, ebn0Db: 8, phaseDeg: 0 },
+    failPreset: { scheme: 2, ebn0Db: 8, phaseDeg: 45 },
+    compute: computeBandpass,
   },
   {
     no: 8,

@@ -2,13 +2,14 @@
  * 课程视图的单测。
  *
  * 判据里最容易悄悄退化的几件事都在这里钉住：
- * 13 章必须全在、只有 2/5/10 能玩、每屏参数不超过 4 个、
+ * 13 章必须全在、只有 2/5/6/7/10 能玩、每屏参数不超过 4 个、
  * 每章的默认态不报红而「让它失效」之后必须报红。
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { COURSE_CHAPTERS, DEEP_LAB_CHAPTERS, chapterByNo } from '../src/core/course.ts'
 import { parseHash } from '../src/router.ts'
+import { qFunction } from '../src/core/ber.ts'
 
 test('左树 13 章，章号 1 到 13 连续', () => {
   assert.equal(COURSE_CHAPTERS.length, 13)
@@ -18,9 +19,9 @@ test('左树 13 章，章号 1 到 13 连续', () => {
   })
 })
 
-test('本轮只实现第 2、5、10 章', () => {
+test('本轮只实现第 2、5、6、7、10 章', () => {
   const done = COURSE_CHAPTERS.filter((c) => c.implemented).map((c) => c.no)
-  assert.deepEqual(done, [2, 5, 6, 10])
+  assert.deepEqual(done, [2, 5, 6, 7, 10])
   for (const chapter of COURSE_CHAPTERS) {
     if (chapter.implemented) assert.equal(typeof chapter.compute, 'function')
     else assert.ok(chapter.reason.length > 10, `第 ${chapter.no} 章没写未实现原因`)
@@ -167,4 +168,58 @@ test('第 6 章同参重跑结果一致', () => {
   const b = chapter.compute(chapter.defaults)
   assert.deepEqual(a.readouts, b.readouts)
   assert.equal(a.series[0].points.length, b.series[0].points.length)
+})
+
+test('第 7 章：四种调制在 8 dB 的理论误码率由 qFunction 现算', () => {
+  const chapter = chapterByNo(7)
+  const gamma = 10 ** 0.8
+  const expected = [
+    qFunction(Math.sqrt(2 * gamma)), // 2ASK
+    qFunction(Math.sqrt(gamma)), // 2FSK
+    qFunction(Math.sqrt(2 * gamma)), // 2PSK
+    0.5 * Math.exp(-gamma), // 2DPSK
+  ]
+  expected.forEach((want, scheme) => {
+    const got = Number(chapter.compute({ ...chapter.defaults, scheme }).readouts[0].value)
+    assert.ok(
+      Math.abs(got - want) / want < 0.02,
+      `第 ${scheme} 档 8 dB 理论值应为 ${want}，实际 ${got}`,
+    )
+  })
+})
+
+test('第 7 章：2PSK 在 8 dB 严格好于 2FSK，图是四线加一组实测点', () => {
+  const chapter = chapterByNo(7)
+  const psk = Number(chapter.compute({ ...chapter.defaults, scheme: 2 }).readouts[0].value)
+  const fsk = Number(chapter.compute({ ...chapter.defaults, scheme: 1 }).readouts[0].value)
+  assert.ok(psk < fsk, `2PSK ${psk} 应严格小于 2FSK ${fsk}`)
+  const view = chapter.compute(chapter.defaults)
+  assert.equal(view.logY, true, '误码率曲线必须用对数纵轴')
+  assert.equal(view.series.length, 5, '四条理论曲线 + 一组实测点')
+  assert.equal(view.series[4].marker, true, '实测点只画散点')
+  assert.equal(view.series[4].points.length, 1)
+})
+
+test('第 7 章：φ=45 的 2PSK 与 φ=0 的 2FSK 落在同一个量级（那 3 dB 被吃干净）', () => {
+  const chapter = chapterByNo(7)
+  const psk45 = Number(chapter.compute({ scheme: 2, ebn0Db: 8, phaseDeg: 45 }).readouts[0].value)
+  const fsk0 = Number(chapter.compute({ scheme: 1, ebn0Db: 8, phaseDeg: 0 }).readouts[0].value)
+  const ratio = psk45 / fsk0
+  assert.ok(ratio > 0.1 && ratio < 10, `两者相差应不到一个数量级，实际比值 ${ratio}`)
+  assert.ok(Math.abs(ratio - 1) < 0.01, `cos²45° 把 2PSK 的 3 dB 优势全吃掉，比值应约 1，实际 ${ratio}`)
+})
+
+test('第 7 章失效档：增益 0.0 dB 标红、结论改口；默认档 3.0 dB 不报红', () => {
+  const chapter = chapterByNo(7)
+  const bad = chapter.compute(chapter.failPreset)
+  assert.equal(bad.failed, true)
+  assert.equal(bad.readouts[2].value, '0.0 dB')
+  assert.equal(bad.readouts[2].warn, true, '增益为 0 必须标红')
+  assert.match(bad.conclusion, /打平/)
+  assert.match(bad.conclusion, /3 dB/)
+  const good = chapter.compute(chapter.defaults)
+  assert.equal(good.failed, false)
+  assert.equal(good.readouts[2].value, '3.0 dB')
+  assert.equal(good.readouts[2].warn, false)
+  assert.match(good.conclusion, /往左移/)
 })
