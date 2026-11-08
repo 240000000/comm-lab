@@ -71,6 +71,7 @@
 | R57 | 2026-11-08 | 会话 34 | 只改一个物理量：第 5 章 FM 制度增益由 3β²/(2π) 改回 3β²(β+1)（R56 那条是验收方目标数给错导致的回归）；β=0.5/1/2/3、25 dB 输入下输出 25.5 / 32.8 / 40.6 / 45.3 dB，β=2 低输入四档仍全判红；其余 12 章、AM/DSB/SSB 三条增益、带宽结论句与门限模型未动 |
 | R58 | 2026-11-08 | 会话 35 | 课程视图滑块拖动不再跟 React 抢：`ParamSlider` 拖动期间改非受控（`defaultValue` + `ref`，`draggingRef` 挡住回写），`CoursePage` 拆出 `params` 与 `committed`，新增 `dragCommit.ts` 把拖动事件隔帧节流、松手用最后值全精度补算；有头 Edge + CDP 量第 6 章 90 步拖动：p95 20.8→7.2 ms、长任务 0→0 条、dpr 1.25；测试 234→237 | docs/archive/2026-11-08-session-35.md |
 | R59 | 2026-11-08 | 会话 36 | 课程视图图例搬到画布上方，新增 `legendRows()` 纯函数（每行几条、共几行可断言，单条超宽不截字）；13 章几何实测不遮不重、画布高度仍 320，360 宽下第 6 章两行；测试 237→241 | docs/archive/2026-11-08-session-36.md |
+| R60 | 2026-11-08 | 会话 37 | 两份 PDF 按 `prep_md.py` → `md2docx.py` → `post.py` → `topdf.ps1` 整链重导追上 Markdown，两份副本同 sha256；`check-docs` 加第 5 章 FM 两条断言（失效档 -0.3 dB 与四档 25.5 / 32.8 / 40.6 / 45.3 dB，容差 0.1，172→177 条）；更正 R52 存档「`canvas.width` 0 命中」为 2 处；新增 `docs/criteria/R52-visual-regression.md` | docs/archive/2026-11-08-session-37.md |
 
 ## 约定
 

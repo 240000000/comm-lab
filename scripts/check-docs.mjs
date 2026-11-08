@@ -442,8 +442,17 @@ let captionLine = '';
   const ch2 = chapterByNo(2)
   const ch6 = chapterByNo(6)
   const ch10 = chapterByNo(10)
+  const ch5 = chapterByNo(5)
   const eyeAt = (alpha, timing) =>
     Number(ch6.compute({ ...ch6.defaults, alpha, timing }).readouts[1].value)
+  // 第 5 章 FM 的输出信噪比也现算：制度增益是 3β²(β+1)，一个 β 一个数，
+  // 正文里写「翻成 -0.3 dB」和轮次表里那串「25.5 / 32.8 / 40.6 / 45.3」都得跟它对齐。
+  const fmOut = (beta, snrIn) =>
+    Number.parseFloat(
+      ch5
+        .compute({ ...ch5.defaults, mode: 3, beta, snrIn })
+        .readouts.find((r) => r.label === '输出信噪比').value,
+    )
   const cases = [
     {
       label: '第 2 章对偶偏差',
@@ -467,6 +476,20 @@ let captionLine = '';
       re: /混叠误差 ([\d.]+)%/,
       values: [Number.parseFloat(ch10.compute(ch10.failPreset).readouts[0].value)],
     },
+    {
+      label: '第 5 章 FM 失效档输出信噪比',
+      re: /输出信噪比翻成 (-?[\d.]+) dB/,
+      values: [fmOut(2, 6)],
+      tol: 0.1,
+      hint: 'FM 制度增益是 3β²(β+1)，β=2、输入 6 dB 的输出按 course.ts 现算',
+    },
+    {
+      label: '第 5 章 FM 四档输出信噪比',
+      re: /输出 (-?[\d.]+) \/ (-?[\d.]+) \/ (-?[\d.]+) \/ (-?[\d.]+) dB/,
+      values: [fmOut(0.5, 25), fmOut(1, 25), fmOut(2, 25), fmOut(3, 25)],
+      tol: 0.1,
+      hint: 'β=0.5/1/2/3、25 dB 输入下输出信噪比，按 course.ts 现算',
+    },
   ]
   for (const item of cases) {
     checked += item.values.length
@@ -487,13 +510,14 @@ let captionLine = '';
     for (let i = 0; i < item.values.length; i += 1) {
       const written = Number(m[i + 1])
       const actual = item.values[i]
-      if (Math.abs(written - actual) > 0.0015) {
+      if (Math.abs(written - actual) > (item.tol ?? 0.0015)) {
         failures.push({
           file: 'docs/tech-report.md',
           line: idx + 1,
           label: `${item.label}（第 ${i + 1} 个值）`,
           written: String(written),
           actual: String(actual),
+          hint: item.hint,
         })
       }
     }
