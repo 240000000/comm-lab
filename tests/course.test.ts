@@ -669,13 +669,22 @@ test('第 10 章：A 律档另立判据，比同位数均匀实测且必须是�
   assert.ok(companded.conclusion.includes('不套 6.02n + 1.76'), 'A 律档的结论句没另立口径')
 })
 
-test('第 5 章：β=1、25 dB 输入时输出信噪比落在 21.8 dB 附近', () => {
+test('第 5 章：β=1、25 dB 输入时输出信噪比落在 32.8 dB 附近', () => {
   const chapter = chapterByNo(5)!
-  const view = chapter.compute({ mode: 3, m: 0.6, beta: 1, snrIn: 25 })
-  const out = Number.parseFloat(view.readouts.find((r) => r.label === '输出信噪比')!.value)
-  // 3β²/(2π) = 0.4775 → −3.21 dB；25 − 3.21 = 21.79。
-  assert.ok(Math.abs(out - 21.8) < 0.15, `β=1 的输出信噪比 ${out} dB，偏离 21.8 超过 0.15 dB`)
-  assert.equal(view.failed, false)
+  const readOut = (beta: number) => {
+    const view = chapter.compute({ mode: 3, m: 0.6, beta, snrIn: 25 })
+    const out = Number.parseFloat(view.readouts.find((r) => r.label === '输出信噪比')!.value)
+    return { out, view }
+  }
+  // 3β²(β+1) = 6 → +7.78 dB；25 + 7.78 = 32.78。
+  const base = readOut(1)
+  assert.ok(Math.abs(base.out - 32.8) < 0.15, `β=1 的输出信噪比 ${base.out} dB，偏离 32.8 超过 0.15 dB`)
+  assert.equal(base.view.failed, false)
+  // 另外两档一起钉住：β=2 → 3·4·3 = 36 → +15.56 dB → 40.56；β=3 → 3·9·4 = 108 → +20.33 dB → 45.33。
+  const b2 = readOut(2)
+  assert.ok(Math.abs(b2.out - 40.6) < 0.2, `β=2 的输出信噪比 ${b2.out} dB，偏离 40.6 超过 0.2 dB`)
+  const b3 = readOut(3)
+  assert.ok(Math.abs(b3.out - 45.3) < 0.2, `β=3 的输出信噪比 ${b3.out} dB，偏离 45.3 超过 0.2 dB`)
 })
 
 test('第 5 章：带宽 warn 是双向的，实测比理论小 30% 以上也报红', () => {

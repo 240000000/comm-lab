@@ -360,10 +360,11 @@ function computeModulation(params: Record<string, number>): CourseView {
       : mode === 2
         ? '消息两条线在 1 与 1.5 kHz，上边带只占 f_c+1 到 f_c+1.5，所以是 0.5 kHz；一般情况 SSB 带宽等于消息最高频'
         : '消息最高 1.5 kHz，双边带占 3 kHz'
-  // FM 的制度增益取标准式 3β²(β+1)；解调器噪声按角频率带宽 2π(β+1)f_m 积分，
-  // 折算到消息带宽上要除掉 2π(β+1)，净增益退化成 3β²/(2π)：β=1 时约 0.48，略亏。
+  // 制度增益是输出信噪比与输入信噪比之比，两个功率之比，无量纲。
+  // 单音 FM 的标准式 G = 3β²(β+1)：β=1 时为 6，即 +7.78 dB。
+  // 解调器噪声按角频率积分的那个 2π 是单位换算，已经包含在该式的口径里，不能再除一次。
   const gainDb =
-    mode === 0 ? (2 * m * m) / (2 + m * m) : mode === 1 ? 2 : mode === 2 ? 1 : (3 * beta * beta) / (2 * Math.PI)
+    mode === 0 ? (2 * m * m) / (2 + m * m) : mode === 1 ? 2 : mode === 2 ? 1 : 3 * beta * beta * (beta + 1)
   let outSnr = snrIn + 10 * Math.log10(Math.max(gainDb, 1e-9))
   // 门限效应：β 越大，鉴频器要过的带宽越宽，门限来得越早。
   // 拐点取经验式 10 + 3·log2(1+β) dB，拐点之下按 2.5 dB/dB 掉——示意模型，不是解析结果。
@@ -414,7 +415,7 @@ function computeModulation(params: Record<string, number>): CourseView {
         value: `${fixed(outSnr, 1)} dB`,
         hint:
           mode === 3
-            ? `输入 ${fixed(snrIn, 1)} dB · 制度增益 3β²/(2π) = ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 2)} dB（β=${fixed(beta, 1)}）· 门限拐点 ${fixed(fmKnee, 1)} dB 是示意模型，不是解析结果`
+            ? `输入 ${fixed(snrIn, 1)} dB · 制度增益 3β²(β+1) = ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 2)} dB（β=${fixed(beta, 1)}）· 门限拐点 ${fixed(fmKnee, 1)} dB 是示意模型，不是解析结果`
             : `输入 ${fixed(snrIn, 1)} dB · 增益 ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 1)} dB`,
         warn: threshold,
       },
