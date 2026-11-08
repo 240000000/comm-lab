@@ -9,6 +9,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createDragCoalescer } from '../src/labs/dragCommit.ts'
 import {
+  LEGEND_ITEM_GAP,
+  legendItemWidth,
+  legendRows,
+  legendTextWidth,
+} from '../src/labs/legendRows.ts'
+import {
   COURSE_CHAPTERS,
   DEEP_LAB_CHAPTERS,
   binaryEntropy,
@@ -804,4 +810,68 @@ test('拖动节流：两次拖动各自独立，第二次不会继承上一次�
   c.push(4, (v) => seen.push(v))
   c.end((v) => seen.push(v))
   assert.deepEqual(seen, [3, 4])
+})
+
+test('图例折行：第 1/6/11/12 章在三种容器宽下每行都不超宽，条数不多不少', () => {
+  const cases = [
+    { no: 1, expect: 3 },
+    { no: 6, expect: 2 },
+    { no: 11, expect: 3 },
+    { no: 12, expect: 1 },
+  ]
+  for (const item of cases) {
+    const chapter = chapterByNo(item.no)
+    assert.ok(chapter?.compute, `第 ${item.no} 章应当有计算函数`)
+    const series = chapter.compute(chapter.defaults).series
+    const visible = series.filter((s) => !s.quiet)
+    assert.equal(visible.length, item.expect, `第 ${item.no} 章图例条数`)
+    for (const maxWidth of [760, 600, 420]) {
+      const layout = legendRows(series, maxWidth)
+      // 条数自洽：每行几条加起来正好是可见 series 数，行数与每行条数一一对应。
+      assert.equal(layout.rows.reduce((a, b) => a + b, 0), visible.length)
+      assert.equal(layout.totalRows, layout.rows.length)
+      assert.ok(layout.totalRows >= 1)
+      assert.equal(layout.widestRow, Math.max(...layout.widths))
+      // 每行总宽都不超过容器宽——这就是「永远不遮图、永不重合」的可测形式。
+      for (const width of layout.widths) {
+        assert.ok(width <= maxWidth, `第 ${item.no} 章有行宽 ${width} 超过容器 ${maxWidth}`)
+      }
+      assert.equal(layout.overflow, false, `第 ${item.no} 章在 ${maxWidth} 宽下不该有单条超宽`)
+    }
+  }
+})
+
+test('图例折行：第 6 章名字最长，窄容器下先换行而不是截断', () => {
+  const chapter = chapterByNo(6)
+  assert.ok(chapter?.compute)
+  const series = chapter.compute(chapter.defaults).series
+  const names = series.filter((s) => !s.quiet).map((s) => s.name)
+  assert.deepEqual(names, ['上包络（最坏的那个码元）', '下包络（最坏的那个码元）'])
+  // 名字一个字都不省：估算宽度按完整名字算。
+  assert.ok(legendTextWidth(names[0]) > 100)
+  assert.equal(legendItemWidth(names[0]), 26 + 6 + legendTextWidth(names[0]))
+  // 宽容器下排一行，窄容器下换两行，两种情况条数都一样多。
+  const wide = legendRows(series, 760)
+  const narrow = legendRows(series, 300)
+  assert.deepEqual(wide.rows, [2])
+  assert.deepEqual(narrow.rows, [1, 1])
+  assert.equal(narrow.rows.reduce((a, b) => a + b, 0), 2)
+  // 两行之间的间距是条目间距，第 12 章的 4 条堆叠在同一条 100 像素里也不会互相压。
+  assert.ok(narrow.widths.every((w) => w <= 300))
+  assert.ok(legendItemWidth(names[0]) + LEGEND_ITEM_GAP + legendItemWidth(names[1]) > 300)
+})
+
+test('图例折行：单条就比容器宽时不裁字，独占一行并报 overflow', () => {
+  const series = [{ name: '上包络（最坏的那个码元）' }, { name: '静默放行' }]
+  const layout = legendRows(series, 80)
+  assert.equal(layout.overflow, true)
+  assert.deepEqual(layout.rows, [1, 1])
+  assert.ok(layout.widths[0] > 80)
+})
+
+test('图例折行：quiet 的 series 不进图例也不参与折行', () => {
+  const series = [{ name: '甲' }, { name: '乙', quiet: true }, { name: '丙' }]
+  const layout = legendRows(series, 760)
+  assert.deepEqual(layout.rows, [2])
+  assert.equal(layout.totalRows, 1)
 })

@@ -144,6 +144,7 @@ const ChapterScreen = memo(function ChapterScreen({
       </div>
 
       <div className="course-chart">
+        <CourseLegend series={view.series} />
         <CourseChart
           series={view.series}
           xLabel={view.xLabel}
@@ -156,7 +157,6 @@ const ChapterScreen = memo(function ChapterScreen({
           xTicks={view.xTicks}
           yTicks={view.yTicks}
         />
-        <CourseLegend series={view.series} />
       </div>
 
       <div className="readouts course-readouts">

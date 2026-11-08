@@ -2345,13 +2345,14 @@ video::-webkit-media-controls-overlay-play-button {
   width: 100%;
 }
 
-/* 图例从 canvas 里搬出来，放在画布下方：一行放不下就换行，宽度跟着容器走，
-   不再有写死的块宽，也就不会压住曲线或压到自己的色块上。 */
+/* 图例从 canvas 里搬出来，放在画布上方：一行放不下就换行，宽度跟着容器走，
+   不再有写死的块宽，也就不会压住曲线或压到自己的色块上。
+   它占的是自己的高度，画布高度写死 320 不受它影响——排成三行也不会把图挤扁。 */
 .course-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
-  margin-top: 6px;
+  margin-bottom: 8px;
   padding: 0 2px;
   font-size: 12px;
   line-height: 1.5;
