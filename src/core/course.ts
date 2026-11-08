@@ -61,6 +61,9 @@ export type CourseView = {
   stack?: boolean
   /** 参考线：虚线横线加一行标注（第 12 章的 −1/N）。 */
   guides?: Array<{ y: number; label: string }>
+  /** 章节自己指定刻度（第 1 章）；不传就走通用图的自动算法，其余 12 章零影响。 */
+  xTicks?: number[]
+  yTicks?: number[]
 }
 
 export type CourseChapter = {
@@ -1572,13 +1575,9 @@ function log2(x: number): number {
   return Math.log(x) / Math.LN2
 }
 
-/**
- * 单次信息量：真正值钱的是「稀罕的那件事」。
- * p 是某件事发生的概率，取 p 与 1−p 中较小的那个——p=0.99 时是「没发生」那 1% 的意外，
- * p=0.01 时是「发生了」那 1% 的意外，两端都冲到 6.64 bit，p=0.5 正好 1 bit。
- */
+/** 单次信息量按定义就是 −log2 p，p 越大它越小，p→1 时趋于 0。 */
 export function selfInfo(p: number): number {
-  return -log2(Math.min(p, 1 - p))
+  return -log2(p)
 }
 
 /** 二元信源的熵：平均每次观测给多少比特。 */
@@ -1642,8 +1641,8 @@ function computeInfo(params: Record<string, number>): CourseView {
     {
       label: '单次信息量 I(p)',
       value: `${info.toFixed(2)} bit`,
-      hint: `−log2 min(p, 1−p) = ${info.toFixed(3)}；值钱的是稀罕的那一侧。这一条是单次的理论值，下一条才是平均。`,
-      warn: p >= 0.9,
+      hint: `−log2 p = ${info.toFixed(3)}；概率越大，这一次带来的信息越少，p → 1 时趋于 0。这一条是单次的理论值，下一条才是平均。`,
+      warn: info < entropy,
     },
     {
       label: '熵 H(p)',
@@ -1659,13 +1658,16 @@ function computeInfo(params: Record<string, number>): CourseView {
     },
   ]
 
+  // 失效不设硬阈值：两条曲线只在 p = 0.5 相交，p > 0.5 时单次必然小于平均，
+  // 判据自己就从读数里长出来，不会哪天和屏幕上的数打架。
+  const failed = info < entropy
   let conclusion: string
-  if (p >= 0.9) {
-    conclusion = `p = ${p.toFixed(2)}：单次信息量 ${info.toFixed(2)} bit，一条「几乎不会发生的事发生了」确实值钱；可它几乎不发生，熵只剩 ${entropy.toFixed(3)} bit。平均下来每符号就这点信息，把这条源压缩到极限也压不出更多——「信息量大」和「信息量多」是两回事。`
+  if (failed) {
+    conclusion = `一个几乎必然发生的事件，单次只带 ${info.toFixed(2)} bit；可平均仍有 ${entropy.toFixed(3)} bit，因为那 ${Math.round((1 - p) * 100)}% 的「不发生」一次就值 ${(-log2(1 - p)).toFixed(2)} bit——一个事件的信息量，不等于整条源的信息量。`
   } else if (Math.abs(p - 0.5) < 0.02) {
-    conclusion = `等概时每次观测正好 ${info.toFixed(2)} bit，熵也到顶 ${entropy.toFixed(3)} bit；所以「是/否两个等概答案」是衡量一切的 1 bit 标尺。`
+    conclusion = `两条线都到 ${info.toFixed(2)} bit，这是标尺：一次抛硬币带走的信息量，正好等于整条源的平均。`
   } else {
-    conclusion = `p = ${p.toFixed(2)}：单次 ${info.toFixed(2)} bit、熵 ${entropy.toFixed(3)} bit。小概率的一端单次很贵但很少发生，等概的一端每次便宜却平均给得最多，两者的交叉点就在 0.5。`
+    conclusion = `单次 ${info.toFixed(2)} bit 很值钱，可平均只有 ${entropy.toFixed(3)} bit，它太罕见了，摊到整条源上就只剩这点。`
   }
 
   return {
@@ -1674,7 +1676,10 @@ function computeInfo(params: Record<string, number>): CourseView {
     yLabel: '比特',
     readouts,
     conclusion,
-    failed: p >= 0.9,
+    failed,
+    // 刻度按本章的语义定：p 只关心 0.01 与 0.99 两个极端和中间三档，纵轴到 6 bit 一档。
+    xTicks: [0.01, 0.25, 0.5, 0.75, 0.99],
+    yTicks: [0, 2, 4, 6],
   }
 }
 

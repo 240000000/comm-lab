@@ -36,6 +36,8 @@ export function CourseChart({
   bars = false,
   stack = false,
   guides,
+  xTicks,
+  yTicks,
 }: {
   series: CourseSeries[]
   xLabel: string
@@ -45,6 +47,9 @@ export function CourseChart({
   bars?: boolean
   stack?: boolean
   guides?: Array<{ y: number; label: string }>
+  /** 章节自己指定刻度；传了就用传进来的，不传就走下面的自动算法。 */
+  xTicks?: number[]
+  yTicks?: number[]
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   // 宽度只量一次、之后读缓存：clientWidth 会强制浏览器同步重排，
@@ -122,7 +127,9 @@ export function CourseChart({
       yMax += 1
     }
     const dataMin = yMin
-    const yPad = (yMax - yMin) * (logY ? 0.05 : 0.08)
+    // 章节自己给了纵向刻度时，轴就锁在「刻度下界 → 数据端点」，不再留 8% 的头顶空白：
+    // 第 1 章那条竖线的上端点正好落在轴顶，不会多出一截空荡荡的 0.58 bit。
+    const yPad = yTicks ? 0 : (yMax - yMin) * (logY ? 0.05 : 0.08)
     yMin -= yPad
     yMax += yPad
     // 数据本身没有负值（比特、误码率、个数），下界就别留负刻度，免得读者以为存在负信息量。
@@ -144,34 +151,38 @@ export function CourseChart({
       xMax = Math.ceil(xMax) + 0.15
       if (xMax - xMin < 2) xMax = xMin + 2
     }
-    // 横向刻度值：线性轴 5 档等分；对数轴按整十次幂走。
-    const xTicks: number[] = []
-    if (logX) {
+    // 横向刻度值：章节传了就用它给的；否则线性轴 5 档等分，对数轴按整十次幂走。
+    const xTickList: number[] = []
+    if (xTicks) {
+      xTickList.push(...xTicks)
+    } else if (logX) {
       const step = Math.ceil((xMax - xMin) / 8)
-      for (let k = Math.ceil(xMin); k <= Math.floor(xMax); k += step) xTicks.push(k)
+      for (let k = Math.ceil(xMin); k <= Math.floor(xMax); k += step) xTickList.push(k)
     } else {
-      for (let i = 0; i <= 4; i++) xTicks.push(xMin + ((xMax - xMin) / 4) * i)
+      for (let i = 0; i <= 4; i++) xTickList.push(xMin + ((xMax - xMin) / 4) * i)
     }
-    // 纵向刻度值：线性轴 5 档等分；对数轴每十倍一档，太密时隔档画。
-    const yTicks: number[] = []
-    if (logY) {
+    // 纵向刻度值：同上；没传时线性轴 5 档等分，对数轴每十倍一档、太密时隔档画。
+    const yTickList: number[] = []
+    if (yTicks) {
+      yTickList.push(...yTicks)
+    } else if (logY) {
       const step = Math.ceil((yMax - yMin) / 8)
-      for (let k = Math.ceil(yMin); k <= Math.floor(yMax); k += step) yTicks.push(k)
+      for (let k = Math.ceil(yMin); k <= Math.floor(yMax); k += step) yTickList.push(k)
     } else {
-      for (let i = 0; i <= 4; i++) yTicks.push(yMax - ((yMax - yMin) / 4) * i)
+      for (let i = 0; i <= 4; i++) yTickList.push(yMax - ((yMax - yMin) / 4) * i)
     }
 
     // 网格：竖线 4 条；横线跟着纵向刻度走。
     ctx.strokeStyle = COLOR.grid
     ctx.lineWidth = 1
-    for (const value of yTicks) {
+    for (const value of yTickList) {
       const y = PAD.top + (1 - (value - yMin) / (yMax - yMin)) * plotH
       ctx.beginPath()
       ctx.moveTo(PAD.left, y)
       ctx.lineTo(PAD.left + plotW, y)
       ctx.stroke()
     }
-    for (const value of xTicks) {
+    for (const value of xTickList) {
       const x = PAD.left + ((value - xMin) / (xMax - xMin)) * plotW
       ctx.beginPath()
       ctx.moveTo(x, PAD.top)
@@ -199,21 +210,21 @@ export function CourseChart({
         ctx.fillText(String(v), px(v), PAD.top + plotH + 8)
       }
     } else if (logX) {
-      for (const value of xTicks) {
+      for (const value of xTickList) {
         const x = PAD.left + ((value - xMin) / (xMax - xMin)) * plotW
-        ctx.fillText(formatPower(value), x, PAD.top + plotH + 8)
+        ctx.fillText(xTicks ? formatExact(value) : formatPower(value), x, PAD.top + plotH + 8)
       }
     } else {
-      for (const value of xTicks) {
+      for (const value of xTickList) {
         const x = PAD.left + ((value - xMin) / (xMax - xMin)) * plotW
-        ctx.fillText(formatTick(value), x, PAD.top + plotH + 8)
+        ctx.fillText(xTicks ? formatExact(value) : formatTick(value), x, PAD.top + plotH + 8)
       }
     }
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
-    for (const value of yTicks) {
+    for (const value of yTickList) {
       const y = PAD.top + (1 - (value - yMin) / (yMax - yMin)) * plotH
-      ctx.fillText(logY ? formatPower(value) : formatTick(value), PAD.left - 8, y)
+      ctx.fillText(logY ? formatPower(value) : yTicks ? formatExact(value) : formatTick(value), PAD.left - 8, y)
     }
 
     // 轴名。
@@ -342,7 +353,7 @@ export function CourseChart({
       ctx.setLineDash([])
     }
     ctx.globalAlpha = 1
-  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides])
+  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides, xTicks, yTicks])
 
   // 画的时候用的是最新的 draw，所以尺寸回调里不必重建 observer。
   const drawRef = useRef(draw)
@@ -376,6 +387,11 @@ export function CourseChart({
   }, [])
 
   return <canvas className="course-canvas" ref={ref} style={{ height: HEIGHT }} />
+}
+
+/** 章节显式给的刻度按原值写：0.01 就写 0.01，不补零成 0.010。 */
+function formatExact(value: number): string {
+  return String(Number(value.toFixed(6)))
 }
 
 function formatTick(value: number): string {

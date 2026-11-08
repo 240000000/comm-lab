@@ -464,15 +464,32 @@ test('第 1 章：熵在 p = 0.5 处取最大，扫 0.01–0.99 全区间验证'
   }
 })
 
-test('第 1 章：p = 0.99 时单次 6.644 bit、熵 0.0808 bit', () => {
-  assert.ok(Math.abs(selfInfo(0.99) - 6.644) < 1e-3)
-  assert.ok(Math.abs(binaryEntropy(0.99) - 0.0808) < 1e-3)
+test('第 1 章：p = 0.99 时单次跌到 0.0145 bit、熵 0.0808 bit', () => {
+  assert.ok(Math.abs(selfInfo(0.99) - 0.01450) < 1e-4)
+  assert.ok(Math.abs(selfInfo(0.01) - 6.6439) < 1e-3)
   const chapter = chapterByNo(1)
   const view = chapter.compute({ ...chapter.defaults, p: 0.99 })
   assert.equal(view.failed, true)
-  assert.equal(view.readouts[0].value, '6.64 bit')
-  assert.equal(view.readouts[1].value, '0.081 bit')
-  assert.match(view.conclusion, /信息量大.*信息量多/)
+  assert.equal(view.readouts[0].value, '0.01 bit')
+  assert.match(view.readouts[1].value, /0\.081/)
+  assert.match(view.conclusion, /平均/)
+})
+
+test('第 1 章：单次信息量随 p 严格递减，不再镜像', () => {
+  let prev = Infinity
+  for (let i = 1; i <= 99; i += 1) {
+    const p = i / 100
+    const value = selfInfo(p)
+    assert.ok(value < prev, `p=${p} 的 ${value} 不小于前一个 ${prev}`)
+    prev = value
+  }
+})
+
+test('第 1 章：p 小于 0.5 时单次大于熵，大于 0.5 时反过来', () => {
+  assert.ok(selfInfo(0.3) > binaryEntropy(0.3))
+  assert.ok(selfInfo(0.7) < binaryEntropy(0.7))
+  assert.ok(Math.abs(selfInfo(0.5) - 1) < 1e-12)
+  assert.ok(Math.abs(binaryEntropy(0.5) - 1) < 1e-12)
 })
 
 test('第 1 章：实测平均信息量贴近熵（n = 20 万、p = 0.3）', () => {

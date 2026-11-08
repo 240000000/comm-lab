@@ -66,6 +66,7 @@
 | R52 | 2026-11-08 | 会话 29 | 滑块与数值框：`useRafValue` 合帧、`ParamSlider` 一体组件（草稿/夹紧/step 对齐/回退）、六图 canvas 只在尺寸真变时重分配；与 R51 逐字对照 0 处不符 | docs/archive/2026-11-08-session-29.md |
 | R53 | 2026-11-08 | 会话 30 | 课程视图：`CourseChart` 的 `clientWidth` 改由 `ResizeObserver` 缓存进 ref、不再每帧读布局；`Control`/`ChapterScreen`/`CourseTree` 包 `memo`、`onChange` 用 `useCallback` 收窄重渲染面；13 章逐档读数比对 mismatches 0 | docs/archive/2026-11-08-session-30.md |
 | R54 | 2026-11-08 | 会话 31 | 课程视图图例从 canvas 里搬出来：删掉绘图区内部写死 112 像素的图例块，改由 `CourseLegend` 在画布下方画一行会换行的网页元素；13 章图例均在画布外、容器与文字零溢出、读数 0 处不符 | docs/archive/2026-11-08-session-31.md |
+| R55 | 2026-11-08 | 会话 32 | 课程视图第 1 章单次信息量改回 −log2 p（原先是 −log2 min(p, 1−p)，p=0.99 与 0.01 都得到 6.64 bit）；失效判据改成 I < H，不再用 p ≥ 0.9 的硬阈值，结论三段重写；第 1 章改用显式刻度 0.01/0.25/0.5/0.75/0.99 与 0/2/4/6、轴顶锁到 7.2；测试 225→227 | docs/archive/2026-11-08-session-32.md |
 
 ## 约定
 

@@ -140,6 +140,8 @@ const ChapterScreen = memo(function ChapterScreen({
           bars={view.bars}
           stack={view.stack}
           guides={view.guides}
+          xTicks={view.xTicks}
+          yTicks={view.yTicks}
         />
         <CourseLegend series={view.series} />
       </div>
