@@ -448,7 +448,9 @@ let captionLine = '';
     {
       label: '第 2 章对偶偏差',
       re: /对偶偏差从机器精度跳到 ([\d.]+)/,
-      values: [Number(ch2.compute(ch2.failPreset).readouts[1].value)],
+      values: [
+        Number(ch2.compute(ch2.failPreset).readouts.find((r) => r.label === '对偶偏差').value),
+      ],
     },
     {
       label: '第 6 章反例峰值 ISI',

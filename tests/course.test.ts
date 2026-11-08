@@ -629,3 +629,97 @@ test('第 13 章：K=0.05 太慢，60 步后还在 ±0.02 外面', () => {
   assert.ok(Math.abs(trace[trace.length - 1]) > 0.02, `末值 ${trace[trace.length - 1]} 已经进带`)
   assert.equal(pllLockStep(trace), null)
 })
+
+test('第 10 章：四/六/八位三档的相对差都在 2% 以内，谁都不用靠默认档过关', () => {
+  const chapter = chapterByNo(10)!
+  for (const bits of [4, 6, 8]) {
+    const view = chapter.compute({ fs: 4, bits, compand: 0 })
+    assert.equal(view.failed, false, `${bits} 位被判红`)
+    const snr = view.readouts.find((r) => r.label === '量化信噪比')!
+    assert.equal(snr.warn, false, `${bits} 位的量化信噪比读数标红了`)
+    // 读数形如「25.77 dB」，hint 里带「相对差 -0.27%，阈值 2%」。
+    const measured = Number.parseFloat(snr.value)
+    const theory = 6.02 * bits + 1.76
+    const rel = Math.abs(measured - theory) / theory
+    assert.ok(rel < 0.02, `${bits} 位相对差 ${(rel * 100).toFixed(2)}% 越过 2%`)
+    assert.ok(snr.hint.includes('阈值 2%'))
+  }
+})
+
+test('第 10 章：四位的偏差来自削顶，留半个台阶过载余量后贴着渐近式', () => {
+  const chapter = chapterByNo(10)!
+  const four = chapter.compute({ fs: 4, bits: 4, compand: 0 })
+  const measured = Number.parseFloat(four.readouts.find((r) => r.label === '量化信噪比')!.value)
+  // 实测 25.77 dB：满量程正弦不留余量时只有 25.31（差 0.53 dB 全被峰值削顶吃掉）。
+  assert.ok(Math.abs(measured - 25.77) < 0.05, `四位实测 ${measured}，与 25.77 差超过 0.05 dB`)
+})
+
+test('第 10 章：A 律档另立判据，比同位数均匀实测且必须是净损失', () => {
+  const chapter = chapterByNo(10)!
+  const uniform = chapter.compute({ fs: 4, bits: 8, compand: 0 })
+  const companded = chapter.compute({ fs: 4, bits: 8, compand: 1 })
+  const u = Number.parseFloat(uniform.readouts.find((r) => r.label === '量化信噪比')!.value)
+  const row = companded.readouts.find((r) => r.label === '量化信噪比（A 律）')!
+  const c = Number.parseFloat(row.value)
+  // 压扩把台阶按幅度重分配：满量程正弦落在粗的一头，只可能是净损失。
+  assert.ok(c < u, `压扩后 ${c} dB 不该高于均匀的 ${u} dB`)
+  assert.equal(row.warn, false)
+  assert.equal(companded.failed, false)
+  assert.ok(row.hint.includes('同位数均匀量化实测'), 'A 律档的 hint 仍拿 6.02n + 1.76 当参照')
+  assert.ok(companded.conclusion.includes('不套 6.02n + 1.76'), 'A 律档的结论句没另立口径')
+})
+
+test('第 5 章：β=1、25 dB 输入时输出信噪比落在 21.8 dB 附近', () => {
+  const chapter = chapterByNo(5)!
+  const view = chapter.compute({ mode: 3, m: 0.6, beta: 1, snrIn: 25 })
+  const out = Number.parseFloat(view.readouts.find((r) => r.label === '输出信噪比')!.value)
+  // 3β²/(2π) = 0.4775 → −3.21 dB；25 − 3.21 = 21.79。
+  assert.ok(Math.abs(out - 21.8) < 0.15, `β=1 的输出信噪比 ${out} dB，偏离 21.8 超过 0.15 dB`)
+  assert.equal(view.failed, false)
+})
+
+test('第 5 章：带宽 warn 是双向的，实测比理论小 30% 以上也报红', () => {
+  const chapter = chapterByNo(5)!
+  // β=1 的 98% 能量带宽只有 Carson 上限的 50%，旧的单向判据不会报。
+  const fm = chapter.compute({ mode: 3, m: 0.6, beta: 1, snrIn: 25 })
+  const band = fm.readouts.find((r) => r.label === '占用带宽')!
+  assert.equal(band.warn, true, 'FM 带宽只占理论的 50%，双向判据应该报黄')
+  assert.ok(band.hint.includes('实测占理论的 50%'))
+  // 三档单音调制都正好铺满理论带宽，不该报。
+  for (const mode of [0, 1, 2]) {
+    const view = chapter.compute({ mode, m: 0.6, beta: 1, snrIn: 25 })
+    assert.equal(view.readouts.find((r) => r.label === '占用带宽')!.warn, false)
+  }
+})
+
+test('第 5 章：门限拐点随 β 上移，β 越大越早掉进断崖', () => {
+  const chapter = chapterByNo(5)!
+  const knee = (beta: number) => {
+    // 找到「刚好不再报红」的输入信噪比，就是这块的拐点。
+    for (let snr = 2; snr <= 24; snr += 0.5) {
+      const view = chapter.compute({ mode: 3, m: 0.6, beta, snrIn: snr })
+      // 只看门限那一条：输入太低时解调失真也会跟着红，别把它当成拐点。
+      // 从低往高扫，第一个不再报红的输入信噪比就是拐点。
+      if (!view.readouts.find((r) => r.label === '输出信噪比')!.warn) return snr
+    }
+    return Number.POSITIVE_INFINITY
+  }
+  const k05 = knee(0.5)
+  const k1 = knee(1)
+  const k2 = knee(2)
+  assert.ok(k05 < k1 && k1 < k2, `拐点没随 β 上移：β=0.5 ${k05}、β=1 ${k1}、β=2 ${k2}`)
+  // 10 + 3·log2(1+β)：β=1 时 13.0 dB，β=2 时 14.75 dB。
+  assert.ok(Math.abs(k1 - 13) <= 0.5, `β=1 的拐点应在 13 dB 附近，实际 ${k1}`)
+})
+
+test('第 2 章：功率档同时报实线峰与平均功率，两个数不混为一谈', () => {
+  const chapter = chapterByNo(2)!
+  const view = chapter.compute({ tau: 1.5, shape: 0, kind: 1 })
+  const peak = view.readouts.find((r) => r.label === '自相关峰值 R(0)')!
+  const power = view.readouts.find((r) => r.label === '平均功率 R(0)/T')!
+  assert.equal(peak.value, '1.5000')
+  assert.equal(power.value, '0.1875')
+  // 两者差的是窗长 T = 8 ms，读数区要把这层关系写出来。
+  assert.ok(peak.hint.includes('图上实线的峰'))
+  assert.ok(power.hint.includes('除以窗长 T'))
+})

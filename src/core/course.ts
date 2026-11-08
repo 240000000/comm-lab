@@ -134,7 +134,7 @@ function computeSignal(params: Record<string, number>): CourseView {
   const autocorr = idft(psd.map((v) => ({ re: v, im: 0 }))).map((c) => c.re)
   // 能量信号：∫x²dt；功率信号：再除以窗长。
   const energyPeak = samples.reduce((sum, v) => sum + v * v * dt, 0)
-  const measuredPeak = kind === 1 ? (autocorr[0] * dt) / T : autocorr[0] * dt
+  
   // 对偶：能量信号的功率谱是 |X|²，功率信号要再除以周期 T。
   // 判据选错时，反变换回来的自相关整体被多除了一次 T，两条线对不上。
   const expectedDivisor = kind === 1 ? T : 1
@@ -176,13 +176,35 @@ function computeSignal(params: Record<string, number>): CourseView {
   ]
 
   const failed = deviation > 1e-3
+  // 功率档的读数必须报两个数：图上那条实线的峰是 R(0)，平均功率要再除以窗长 T。
+  // 只报一个数会让读数和图差出 T 倍，看起来像算错了。
+  const peakLevel = autocorr[0] * dt
+  const peakReadouts: CourseReadout[] =
+    kind === 1
+      ? [
+          {
+            label: '自相关峰值 R(0)',
+            value: fixed(peakLevel, 4),
+            hint: `图上实线的峰；理论 E = ${fixed(energyPeak, 4)}`,
+            warn: false,
+          },
+          {
+            label: '平均功率 R(0)/T',
+            value: fixed(peakLevel / T, 4),
+            hint: `同一个峰除以窗长 T = ${fixed(T, 2)} ms；理论 P = E/T = ${fixed(energyPeak / T, 4)}`,
+            warn: false,
+          },
+        ]
+      : [
+          {
+            label: '自相关峰值 R(0)',
+            value: fixed(peakLevel, 4),
+            hint: `理论 E = ${fixed(energyPeak, 4)}`,
+            warn: false,
+          },
+        ]
   const readouts: CourseReadout[] = [
-    {
-      label: kind === 1 ? '平均功率 R(0)' : '自相关峰值 R(0)',
-      value: fixed(measuredPeak, 4),
-      hint: kind === 1 ? `理论 P = E/T = ${fixed(energyPeak / T, 4)}` : `理论 E = ${fixed(energyPeak, 4)}`,
-      warn: false,
-    },
+    ...peakReadouts,
     {
       label: '对偶偏差',
       value: deviation < 1e-12 ? '0（机器精度）' : exponent(deviation),
@@ -336,14 +358,19 @@ function computeModulation(params: Record<string, number>): CourseView {
     mode === 3
       ? 'Carson 上限 2(β+1)f_m'
       : mode === 2
-        ? '消息两条线在 1 与 1.5 kHz，单边带占 0.5 kHz'
+        ? '消息两条线在 1 与 1.5 kHz，上边带只占 f_c+1 到 f_c+1.5，所以是 0.5 kHz；一般情况 SSB 带宽等于消息最高频'
         : '消息最高 1.5 kHz，双边带占 3 kHz'
-  const gainDb = mode === 0 ? (2 * m * m) / (2 + m * m) : mode === 1 ? 2 : mode === 2 ? 1 : 1.5 * beta * beta * (beta + 1)
+  // FM 的制度增益取标准式 3β²(β+1)；解调器噪声按角频率带宽 2π(β+1)f_m 积分，
+  // 折算到消息带宽上要除掉 2π(β+1)，净增益退化成 3β²/(2π)：β=1 时约 0.48，略亏。
+  const gainDb =
+    mode === 0 ? (2 * m * m) / (2 + m * m) : mode === 1 ? 2 : mode === 2 ? 1 : (3 * beta * beta) / (2 * Math.PI)
   let outSnr = snrIn + 10 * Math.log10(Math.max(gainDb, 1e-9))
+  // 门限效应：β 越大，鉴频器要过的带宽越宽，门限来得越早。
+  // 拐点取经验式 10 + 3·log2(1+β) dB，拐点之下按 2.5 dB/dB 掉——示意模型，不是解析结果。
+  const fmKnee = 10 + 3 * Math.log2(1 + beta)
   let threshold = false
-  if (mode === 3 && snrIn < 10) {
-    // 门限效应：输入信噪比跌破 10 dB 之后，输出不是线性下降而是断崖。
-    outSnr -= (10 - snrIn) * 2.5
+  if (mode === 3 && snrIn < fmKnee) {
+    outSnr -= (fmKnee - snrIn) * 2.5
     threshold = true
   }
   const envelopeFail = mode === 0 && m > 1
@@ -363,6 +390,8 @@ function computeModulation(params: Record<string, number>): CourseView {
     },
   ]
 
+  const bandRatio = measuredBand / theoryBand
+
   return {
     series,
     xLabel: '时间 t / s',
@@ -371,8 +400,8 @@ function computeModulation(params: Record<string, number>): CourseView {
       {
         label: '占用带宽',
         value: `${fixed(measuredBand, 2)} kHz`,
-        hint: `理论 ${fixed(theoryBand, 2)} kHz · ${bandHint}`,
-        warn: measuredBand > theoryBand * 1.6,
+        hint: `理论 ${fixed(theoryBand, 2)} kHz（实测占理论的 ${fixed(bandRatio * 100, 0)}%）· ${bandHint}`,
+        warn: Math.abs(measuredBand - theoryBand) > theoryBand * 0.3,
       },
       {
         label: '解调失真',
@@ -383,15 +412,18 @@ function computeModulation(params: Record<string, number>): CourseView {
       {
         label: '输出信噪比',
         value: `${fixed(outSnr, 1)} dB`,
-        hint: `输入 ${fixed(snrIn, 1)} dB · 增益 ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 1)} dB`,
+        hint:
+          mode === 3
+            ? `输入 ${fixed(snrIn, 1)} dB · 制度增益 3β²/(2π) = ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 2)} dB（β=${fixed(beta, 1)}）· 门限拐点 ${fixed(fmKnee, 1)} dB 是示意模型，不是解析结果`
+            : `输入 ${fixed(snrIn, 1)} dB · 增益 ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 1)} dB`,
         warn: threshold,
       },
     ],
     conclusion: failed
       ? envelopeFail
         ? '调制度 m 超过 1，包络在过零点翻折，检波出来的波形已经不再是原来的消息——失真读数越过 5%，包络检波失效。'
-        : 'FM 输入信噪比跌破门限，输出信噪比断崖式下跌，增加带宽换来的增益在这一段不管用了。'
-      : `解调输出贴着消息，失真 ${fixed(distortion * 100, 1)}%，带宽 ${fixed(measuredBand, 2)} kHz 与理论 ${fixed(theoryBand, 2)} kHz 对得上。`,
+        : `FM 输入信噪比跌破门限（β=${fixed(beta, 1)} 时拐点在 ${fixed(fmKnee, 1)} dB），输出信噪比断崖式下跌，增加带宽换来的增益在这一段不管用了。`
+      : `解调输出贴着消息，失真 ${fixed(distortion * 100, 1)}%，带宽实测 ${fixed(measuredBand, 2)} kHz，${mode === 3 ? '是 Carson 上限' : '是理论值'} ${fixed(theoryBand, 2)} kHz 的 ${fixed(bandRatio * 100, 0)}%——${mode === 3 ? '98% 能量带宽天然比上限窄，β 越大越贴近上限。' : mode === 2 ? '本图消息只有 1 kHz 与 1.5 kHz 两条谱线，上边带从 f_c+1 到 f_c+1.5，所以只占 0.5 kHz；一般情况 SSB 带宽等于消息最高频。' : '两条谱线都被搬过去，双边带正好占满。'}`,
     failed,
   }
 }
@@ -434,35 +466,52 @@ function computeSource(params: Record<string, number>): CourseView {
   }
   const aliasError = rms(errs) / (rms(refs) || 1)
 
-  // 量化（可选 A 律压扩）：台阶宽 2/2^n，半个台阶抬到格点中心。
+  // 量化（可选 A 律压扩）：2^n 个格点，量程比信号峰值多留半个台阶。
+  // 留这半个台阶是有原因的：正弦峰值恰好压在量程边界上会被削顶，
+  // 那部分误差远大于 q/2，6.02n + 1.76 的前提（误差在 ±q/2 内均匀）就不成立了——
+  // 四位时这一削顶就要吃掉 0.5 dB，正好等于旧判据里那笔对不上的账。
   const levels = 2 ** Math.round(bits)
-  const quantize = (x: number) => {
+  const guard = 1 / levels
+  const floorLevel = -1 - guard
+  const span = 2 + 2 * guard
+  const quantizeWith = (x: number, compand: number) => {
     // 压扩开时先把幅度压扁再均匀量化，收端展开：小信号拿到的台阶更细。
-    const v = companding === 1 ? aLawCompress(x) : x
-    const q = Math.min(levels - 1, Math.max(0, Math.floor(((v + 1) / 2) * levels)))
-    const step = ((q + 0.5) / levels) * 2 - 1
-    return companding === 1 ? aLawExpand(step) : step
+    const v = compand === 1 ? aLawCompress(x) : x
+    const q = Math.min(levels - 1, Math.max(0, Math.floor(((v - floorLevel) / span) * levels)))
+    const step = floorLevel + (q + 0.5) * (span / levels)
+    return compand === 1 ? aLawExpand(step) : step
   }
+  const quantize = (x: number) => quantizeWith(x, companding)
   const quantized = original.map(quantize)
   // 量化信噪比在更密的相位网格上统计，别让 1,024 个点的取样偏差混进来。
   const dense = 8192
-  let signalPower = 0
-  let noisePower = 0
-  for (let i = 0; i < dense; i++) {
-    const x = Math.cos((2 * Math.PI * i) / dense)
-    const y = quantize(x)
-    signalPower += x * x
-    noisePower += (y - x) * (y - x)
+  const measureSnr = (compand: number) => {
+    let signal = 0
+    let noise = 0
+    for (let i = 0; i < dense; i++) {
+      const x = Math.cos((2 * Math.PI * i) / dense)
+      const y = quantizeWith(x, compand)
+      signal += x * x
+      noise += (y - x) * (y - x)
+    }
+    return 10 * Math.log10(signal / Math.max(noise, 1e-18))
   }
-  signalPower /= dense
-  noisePower /= dense
-  const snrMeasured = 10 * Math.log10(signalPower / Math.max(noisePower, 1e-18))
+  const snrMeasured = measureSnr(companding)
+  // 压扩档要一个参照：同样位数、同样信号，不开压扩的均匀量化实测值。
+  const snrUniform = companding === 1 ? measureSnr(0) : snrMeasured
   const snrTheory = 6.02 * bits + 1.76
+  // 判据用相对误差：差值除以理论值。6.02n + 1.76 是渐近式，
+  // 位数越少（台阶越粗）偏得越多，绝对阈值会把四位数一律判红。
+  const snrError = (snrMeasured - snrTheory) / snrTheory
+  const compandDelta = snrMeasured - snrUniform
   const bitrate = ratio * fh * bits
 
   const aliasing = ratio < 2
-  // 6.02n + 1.76 dB 只对均匀量化成立；压扩开着时不拿它判红。
-  const snrFail = companding === 0 && Math.abs(snrMeasured - snrTheory) > 0.2
+  // 两套判据，各管各的：
+  // 均匀档比 6.02n + 1.76（相对差 2% 以内）；压扩档拿它没意义——那个式子只对均匀量化成立——
+  // 改判「压扩在满量程正弦上必须是净损失」：压扩把台阶按幅度重分配，小信号变细、大信号变粗，
+  // 本例信号正好铺满量程，所以信噪比只会比同位数均匀量化低、不会高；高出来就是压扩没生效。
+  const snrFail = companding === 1 ? compandDelta >= 0 : Math.abs(snrError) > 0.02
 
   const series: CourseSeries[] = [
     {
@@ -490,9 +539,12 @@ function computeSource(params: Record<string, number>): CourseView {
         warn: aliasing,
       },
       {
-        label: '量化信噪比',
+        label: companding === 1 ? '量化信噪比（A 律）' : '量化信噪比',
         value: `${fixed(snrMeasured, 2)} dB`,
-        hint: `理论 6.02n + 1.76 = ${fixed(snrTheory, 2)} dB（n = ${Math.round(bits)}）`,
+        hint:
+          companding === 1
+            ? `同位数均匀量化实测 ${fixed(snrUniform, 2)} dB，压扩后 ${fixed(snrMeasured, 2)} dB（差 ${compandDelta >= 0 ? '+' : ''}${fixed(compandDelta, 2)} dB）；本图信号铺满量程，压扩只该是净损失，差值为正说明压扩没生效`
+            : `理论 6.02n + 1.76 = ${fixed(snrTheory, 2)} dB（n = ${Math.round(bits)}）；相对差 ${fixed(snrError * 100, 2)}%，阈值 2%`,
         warn: snrFail && !aliasing,
       },
       {
@@ -504,9 +556,13 @@ function computeSource(params: Record<string, number>): CourseView {
     ],
     conclusion: aliasing
       ? `抽样率 ${fixed(ratio, 2)} f_H 低于 2 f_H，谱的高频部分折回来，重建误差 ${fixed(aliasError * 100, 1)}%——这就是混叠。`
-      : snrFail && !aliasing
-        ? `量化信噪比 ${fixed(snrMeasured, 2)} dB 偏离 6.02n + 1.76 = ${fixed(snrTheory, 2)} dB 超过 0.2 dB，量化台阶没铺满或压扩没还原。`
-        : `抽样率 ${fixed(ratio, 2)} f_H 满足奈奎斯特，量化信噪比 ${fixed(snrMeasured, 2)} dB 与 6.02n + 1.76 相差不到 0.2 dB。`,
+      : companding === 1
+        ? snrFail
+          ? `A 律档不套 6.02n + 1.76（那个只对均匀量化成立），改跟同位数均匀量化的实测值比：压扩后 ${fixed(snrMeasured, 2)} dB 反而比均匀的 ${fixed(snrUniform, 2)} dB 高 ${fixed(compandDelta, 2)} dB，可本图信号铺满量程，压扩只该是净损失——压扩这条路没走通。`
+          : `A 律档不套 6.02n + 1.76（那个只对均匀量化成立），改跟同位数均匀量化的实测值比：压扩后 ${fixed(snrMeasured, 2)} dB，均匀的是 ${fixed(snrUniform, 2)} dB，差 ${fixed(compandDelta, 2)} dB。压扩把台阶按幅度重新分配，小信号拿到的台阶更细、大信号更粗；本图信号铺满量程，落在粗的这一头，所以整体是净损失——压扩换的不是总信噪比，是信噪比在幅度上的分布。`
+        : snrFail
+          ? `量化信噪比 ${fixed(snrMeasured, 2)} dB，相对 6.02n + 1.76 = ${fixed(snrTheory, 2)} dB 差 ${fixed(snrError * 100, 2)}%，越过 2% 阈值，量化台阶没铺满。`
+          : `抽样率 ${fixed(ratio, 2)} f_H 满足奈奎斯特，量化信噪比 ${fixed(snrMeasured, 2)} dB 与 6.02n + 1.76 = ${fixed(snrTheory, 2)} dB 差 ${fixed(snrError * 100, 2)}%，在 2% 以内。`,
     failed: aliasing || (snrFail && !aliasing),
   }
 }
