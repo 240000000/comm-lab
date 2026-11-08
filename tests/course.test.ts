@@ -7,6 +7,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createDragCoalescer } from '../src/labs/dragCommit.ts'
 import {
   COURSE_CHAPTERS,
   DEEP_LAB_CHAPTERS,
@@ -731,4 +732,76 @@ test('第 2 章：功率档同时报实线峰与平均功率，两个数不混�
   // 两者差的是窗长 T = 8 ms，读数区要把这层关系写出来。
   assert.ok(peak.hint.includes('图上实线的峰'))
   assert.ok(power.hint.includes('除以窗长 T'))
+})
+
+// ---------------------------------------------------------------------------
+// R58：拖动期间隔一帧算一次，松手必须补算成全精度
+// ---------------------------------------------------------------------------
+
+test('拖动节流：不拖动时每次变化都提交，拖动时隔一次提交一次', () => {
+  const seen: number[] = []
+  const c = createDragCoalescer<number>()
+
+  // 不在拖动中：键盘改值、点一下轨道，都该立刻算。
+  c.push(1, (v) => seen.push(v))
+  c.push(2, (v) => seen.push(v))
+  assert.deepEqual(seen, [1, 2])
+
+  // 拖动中：6 次变化只算 3 次，且算的是第 1、3、5 次。
+  seen.length = 0
+  c.begin()
+  for (let v = 3; v <= 8; v++) c.push(v, (x) => seen.push(x))
+  assert.deepEqual(seen, [3, 5, 7])
+  assert.equal(c.live(), 8)
+  assert.equal(c.dragging(), true)
+})
+
+test('拖动节流：松手用最后一次的值补算，结果与一次没省完全相同', () => {
+  const committed: Array<Record<string, number>> = []
+  const commit = (v: Record<string, number>) => committed.push(v)
+  const c = createDragCoalescer<Record<string, number>>()
+
+  const ch6 = chapterByNo(6)
+  c.begin()
+  // 模拟把 α 从 0.35 一路拖到 0.05，中间每帧一次。
+  let live = { ...ch6.defaults }
+  const trail: Array<Record<string, number>> = []
+  for (let alpha = 0.3; alpha >= 0.05; alpha -= 0.05) {
+    live = { ...live, alpha: Number(alpha.toFixed(2)) }
+    trail.push(live)
+    c.push(live, commit)
+  }
+  c.end(commit)
+
+  // 松手后喂给 compute 的，就是最后一次的完整参数。
+  assert.equal(committed[committed.length - 1], live)
+  // 中间帧确实被省掉了一部分（不是全算也不是全不算）。
+  assert.ok(committed.length < trail.length)
+  assert.ok(committed.length > 1)
+
+  // 判定口径：拖动路径的读数、结论、失效判据，与直接用最后一次参数算的一字不差。
+  const viaDrag = ch6.compute(committed[committed.length - 1])
+  const direct = ch6.compute(live)
+  assert.deepEqual(viaDrag.readouts, direct.readouts)
+  assert.equal(viaDrag.conclusion, direct.conclusion)
+  assert.equal(viaDrag.failed, direct.failed)
+})
+
+test('拖动节流：两次拖动各自独立，第二次不会继承上一次的跳过位', () => {
+  const seen: number[] = []
+  const c = createDragCoalescer<number>()
+
+  c.begin()
+  c.push(1, (v) => seen.push(v))
+  c.push(2, (v) => seen.push(v))
+  c.end((v) => seen.push(v))
+  assert.deepEqual(seen, [1, 2])
+
+  // 第二轮从「该提交」开始，而不是接着上一轮的跳过位。
+  seen.length = 0
+  c.begin()
+  c.push(3, (v) => seen.push(v))
+  c.push(4, (v) => seen.push(v))
+  c.end((v) => seen.push(v))
+  assert.deepEqual(seen, [3, 4])
 })

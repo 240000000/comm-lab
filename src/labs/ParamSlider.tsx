@@ -20,6 +20,10 @@ type ParamSliderProps = {
   withRange?: boolean
   className?: string
   onChange: (value: number) => void
+  /** 按住滑块：交给调用方决定拖动期间要不要降频 */
+  onDragStart?: () => void
+  /** 松开滑块：调用方在这里补一次全精度计算 */
+  onDragEnd?: () => void
 }
 
 function formatValue(value: number, decimals: number | undefined): string {
@@ -40,10 +44,19 @@ export function ParamSlider({
   withRange = true,
   className,
   onChange,
+  onDragStart,
+  onDragEnd,
 }: ParamSliderProps) {
   const id = useId()
   const [draft, setDraft] = useState(() => formatValue(value, decimals))
   const focusedRef = useRef(false)
+  // 拖动期间滑块显示的是自己记下的值，不跟受控 value 来回拉：
+  // 回写链是 输入 → rAF 提交 → 父组件重算 → 新 value，重算要十几毫秒，
+  // 中间这一帧一旦把 value 写回旧值，thumb 就被拽回去了。
+  // 拖动期间滑块由浏览器自己走：这期间一个字节都不往 DOM 里写，
+  // 只有 rAF 提交后（松手或每两帧一次）才把受控值追上去。
+  const rangeRef = useRef<HTMLInputElement | null>(null)
+  const draggingRef = useRef(false)
   const pushRaf = useRafValue(onChange)
 
   // 外部改值（预设档、重置、换章）时把草稿跟上；正在输入时不动它。
@@ -51,6 +64,14 @@ export function ParamSlider({
     if (focusedRef.current) return
     setDraft(formatValue(value, decimals))
   }, [value, decimals])
+
+  // 受控值变了就把 DOM 追上去；拖动期间不写，免得把原生滑块拽回来。
+  useEffect(() => {
+    const el = rangeRef.current
+    if (!el || draggingRef.current) return
+    const next = String(value)
+    if (el.value !== next) el.value = next
+  }, [value])
 
   const clampSnap = (raw: number): number => {
     const clamped = Math.min(max, Math.max(min, raw))
@@ -111,6 +132,16 @@ export function ParamSlider({
     </span>
   )
 
+  // 松手时把最后的值直接对齐一次：rAF 里那一笔可能还排在队里，
+  // 先让父组件的 value 追上，滑块就不会在松手瞬间回跳一下再跳回来。
+  const releaseDrag = () => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    const el = rangeRef.current
+    if (el) el.value = String(value)
+    onDragEnd?.()
+  }
+
   return (
     <div className={outerClass}>
       <div className={labelClass}>
@@ -124,9 +155,19 @@ export function ParamSlider({
           min={min}
           max={max}
           step={step}
-          value={value}
+          ref={rangeRef}
+          defaultValue={value}
           aria-label={`${label} 的滑块`}
-          onChange={(event) => pushRaf(Number(event.target.value))}
+          onPointerDown={() => {
+            draggingRef.current = true
+            onDragStart?.()
+          }}
+          onChange={(event) => {
+            pushRaf(Number(event.target.value))
+          }}
+          onPointerUp={releaseDrag}
+          onPointerCancel={releaseDrag}
+          onBlur={releaseDrag}
         />
       ) : null}
       {hint !== undefined ? <span className="control-hint">{hint}</span> : null}

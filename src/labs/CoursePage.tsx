@@ -5,7 +5,8 @@
  * 一句话问题、两三个滑块、一张图、三个读数、一句话结论。
  * 每章的计算都在 src/core/course.ts 里，页面只负责把参数递进去、把结果摆出来。
  */
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { createDragCoalescer } from './dragCommit'
 import {
   COURSE_CHAPTERS,
   DEEP_LAB_CHAPTERS,
@@ -60,11 +61,15 @@ const Control = memo(function Control({
   param,
   value,
   onChange,
+  onDragStart,
+  onDragEnd,
 }: {
   paramKey: string
   param: CourseParam
   value: number
   onChange: (key: string, value: number) => void
+  onDragStart: () => void
+  onDragEnd: () => void
 }) {
   const handleChange = useCallback((next: number) => onChange(paramKey, next), [onChange, paramKey])
 
@@ -95,6 +100,8 @@ const Control = memo(function Control({
       step={param.step}
       unit={param.unit}
       onChange={handleChange}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
     />
   )
 })
@@ -103,6 +110,8 @@ const ChapterScreen = memo(function ChapterScreen({
   chapter,
   params,
   onChange,
+  onDragStart,
+  onDragEnd,
   onFail,
   onReset,
   view,
@@ -110,6 +119,8 @@ const ChapterScreen = memo(function ChapterScreen({
   chapter: CourseChapter
   params: Record<string, number>
   onChange: (key: string, value: number) => void
+  onDragStart: () => void
+  onDragEnd: () => void
   onFail: () => void
   onReset: () => void
   view: CourseView
@@ -126,6 +137,8 @@ const ChapterScreen = memo(function ChapterScreen({
             param={param}
             value={params[param.key]}
             onChange={onChange}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
           />
         ))}
       </div>
@@ -177,10 +190,16 @@ export function CoursePage() {
   const [no, setNo] = useState(initialChapter)
   const chapter = chapterByNo(no) ?? chapterByNo(START_CHAPTER)!
   const [params, setParams] = useState<Record<string, number>>(chapter.defaults)
+  // 拖动中每隔一帧才算一次：params 是滑块与标签用的即时值，committed 才是喂给
+  // compute 的值。松手时 end() 会用最后一次的即时值补算一遍，所以松手后看到的
+  // 读数、结论、失效判据跟一次都没省过的完全一样，被省掉的只有中间帧。
+  const [committed, setCommitted] = useState<Record<string, number>>(chapter.defaults)
+  const dragRef = useRef(createDragCoalescer<Record<string, number>>())
+  const paramsRef = useRef(params)
 
   const view = useMemo(
-    () => (chapter.compute ? chapter.compute(params) : null),
-    [chapter, params],
+    () => (chapter.compute ? chapter.compute(committed) : null),
+    [chapter, committed],
   )
 
   // 三个回调都固定住引用：不改的话每次渲染都是新闭包，
@@ -189,15 +208,31 @@ export function CoursePage() {
     const target = chapterByNo(next)
     if (!target) return
     setNo(next)
+    paramsRef.current = target.defaults
     setParams(target.defaults)
+    setCommitted(target.defaults)
   }, [])
 
   const setParam = useCallback((key: string, value: number) => {
-    setParams((prev) => ({ ...prev, [key]: value }))
+    const next = { ...paramsRef.current, [key]: value }
+    paramsRef.current = next
+    setParams(next)
+    dragRef.current.push(next, setCommitted)
   }, [])
 
-  const onFail = useCallback(() => setParams(chapter.failPreset), [chapter])
-  const onReset = useCallback(() => setParams(chapter.defaults), [chapter])
+  const onDragStart = useCallback(() => dragRef.current.begin(), [])
+  const onDragEnd = useCallback(() => dragRef.current.end(setCommitted), [])
+
+  const onFail = useCallback(() => {
+    paramsRef.current = chapter.failPreset
+    setParams(chapter.failPreset)
+    setCommitted(chapter.failPreset)
+  }, [chapter])
+  const onReset = useCallback(() => {
+    paramsRef.current = chapter.defaults
+    setParams(chapter.defaults)
+    setCommitted(chapter.defaults)
+  }, [chapter])
 
   return (
     <main className="lab course">
@@ -222,6 +257,8 @@ export function CoursePage() {
               chapter={chapter}
               params={params}
               onChange={setParam}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
               onFail={onFail}
               onReset={onReset}
               view={view}
