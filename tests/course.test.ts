@@ -728,16 +728,38 @@ test('第 5 章：门限拐点随 β 上移，β 越大越早掉进断崖', () =
   assert.ok(Math.abs(k1 - 13) <= 0.5, `β=1 的拐点应在 13 dB 附近，实际 ${k1}`)
 })
 
-test('第 2 章：功率档同时报实线峰与平均功率，两个数不混为一谈', () => {
+test('第 2 章：图上刻度与能量口径分两行报，两个数不混为一谈', () => {
   const chapter = chapterByNo(2)!
   const view = chapter.compute({ tau: 1.5, shape: 0, kind: 1 })
-  const peak = view.readouts.find((r) => r.label === '自相关峰值 R(0)')!
-  const power = view.readouts.find((r) => r.label === '平均功率 R(0)/T')!
+  const graph = view.readouts.find((r) => r.label === '图上 自相关 R(0)/T')!
+  const peak = view.readouts.find((r) => r.label === '原始自相关峰 R(0)')!
+  assert.equal(graph.value, '0.1875')
   assert.equal(peak.value, '1.5000')
-  assert.equal(power.value, '0.1875')
   // 两者差的是窗长 T = 8 ms，读数区要把这层关系写出来。
-  assert.ok(peak.hint.includes('图上实线的峰'))
-  assert.ok(power.hint.includes('除以窗长 T'))
+  assert.ok(graph.hint.includes('图上实线'))
+  assert.ok(peak.hint.includes('还没除 T'))
+})
+
+test('第 2 章：能量档两条线逐点相等，功率档归一后也重合', () => {
+  const chapter = chapterByNo(2)!
+  const energy = chapter.compute({ ...chapter.defaults, kind: 0 })
+  assert.deepEqual(energy.series[0].points, energy.series[1].points)
+  assert.equal(energy.failed, false)
+
+  const power = chapter.compute({ ...chapter.defaults, kind: 1 })
+  assert.deepEqual(power.series[0].points, power.series[1].points)
+  // 图上刻度归一到 R(0)/T：τ = 1.5 时峰是 1.5/8 = 0.1875。
+  const peak = Math.max(...power.series[0].points.map((p) => p[1]))
+  assert.ok(Math.abs(peak - 0.1875) < 1e-9, `功率档图上峰值应为 0.1875，实际 ${peak}`)
+  assert.equal(power.failed, false)
+})
+
+test('第 2 章：把幅度谱当功率谱，形状变了、对偶偏差到 0.9 量级', () => {
+  const chapter = chapterByNo(2)!
+  const view = chapter.compute({ ...chapter.failPreset, kind: 2 })
+  const deviation = Number(view.readouts.find((r) => r.label === '对偶偏差')!.value)
+  assert.ok(deviation > 0.9, `反例档对偶偏差应在 0.9 以上，实际 ${deviation}`)
+  assert.equal(view.failed, true)
 })
 
 // ---------------------------------------------------------------------------

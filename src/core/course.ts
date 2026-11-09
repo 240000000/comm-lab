@@ -121,6 +121,17 @@ function spectrumSquared(samples: number[]): number[] {
   return dft(x).map((c) => c.re * c.re + c.im * c.im)
 }
 
+/** 错用幅度谱：拿 |X| 当功率谱。少了一次平方，反变换回来的已经不是自相关。 */
+function spectrumMagnitude(samples: number[]): number[] {
+  const x: Complex[] = samples.map((v) => ({ re: v, im: 0 }))
+  return dft(x).map((c) => Math.hypot(c.re, c.im))
+}
+
+/** 实数谱的反变换：补零虚部，取实部。 */
+function idftReal(spectrum: number[]): number[] {
+  return idft(spectrum.map((v) => ({ re: v, im: 0 }))).map((c) => c.re)
+}
+
 function computeSignal(params: Record<string, number>): CourseView {
   const tau = params.tau ?? 1.5
   const shape = params.shape ?? 0
@@ -128,81 +139,88 @@ function computeSignal(params: Record<string, number>): CourseView {
   const n = 256
   const T = 8
   const dt = T / n
-
   const samples = pulseSamples(tau, shape)
-  const psd = spectrumSquared(samples)
-  const autocorr = idft(psd.map((v) => ({ re: v, im: 0 }))).map((c) => c.re)
+  // 反例档把幅度谱当功率谱：少一次平方，反变换出来的曲线形状就不对了。
+  const used = idftReal(kind === 2 ? spectrumMagnitude(samples) : spectrumSquared(samples))
+  // 参照那条线永远走正规的 |X|²，两档才比得出「同一个归一化下还差多少」。
+  const reference = kind === 2 ? idftReal(spectrumSquared(samples)) : used
   // 能量信号：∫x²dt；功率信号：再除以窗长。
   const energyPeak = samples.reduce((sum, v) => sum + v * v * dt, 0)
-  
+
   // 对偶：能量信号的功率谱是 |X|²，功率信号要再除以周期 T。
-  // 判据选错时，反变换回来的自相关整体被多除了一次 T，两条线对不上。
-  const expectedDivisor = kind === 1 ? T : 1
+  // 两条线共用同一个除数，图上比的就只剩「谱有没有用错」。
+  const expectedDivisor = kind === 0 ? 1 : T
   let worst = 0
   let peakAbs = 0
-  for (let m = 0; m < n; m++) {
-    const measured = autocorr[m] * dt
-    const fromPsd = (autocorr[m] * dt) / expectedDivisor
+  for (let m = 0; m < n; m += 1) {
+    const measured = (used[m] * dt) / expectedDivisor
+    const fromPsd = (reference[m] * dt) / expectedDivisor
     worst = Math.max(worst, Math.abs(measured - fromPsd))
-    peakAbs = Math.max(peakAbs, Math.abs(measured))
+    peakAbs = Math.max(peakAbs, Math.abs(fromPsd))
   }
   const deviation = worst / (peakAbs || 1)
-  const halfLevel = Math.max(...autocorr.map((v) => Math.abs(v))) / 2
+
+  const halfLevel = Math.max(...used.map(Math.abs)) / 2
   let widthLags = 0
-  for (let m = 0; m < n; m++) {
-    if (autocorr[m] > halfLevel) widthLags++
+  for (let m = 1; m < n / 2; m += 1) {
+    if (Math.abs(used[m]) > halfLevel) widthLags = m
   }
   const measuredWidth = widthLags * dt
   const theoryWidth = tau
 
+  const pointsOf = (source: number[]): [number, number][] =>
+    Array.from(
+      { length: n },
+      (_, m): [number, number] => [
+        (m - n / 2) * dt,
+        (source[(m + n / 2) % n] * dt) / expectedDivisor,
+      ],
+    )
   const series: CourseSeries[] = [
     {
-      name: '实测自相关 R(τ)',
+      name: kind === 2 ? '幅度谱 |X| 反变换' : '实测自相关 R(τ)',
       color: '#3ce3c6',
-      points: Array.from({ length: n }, (_, m) => [
-        (m - n / 2) * dt,
-        autocorr[(m + n / 2) % n] * dt,
-      ] as [number, number]),
+      points: pointsOf(used),
     },
     {
       name: '由功率谱反变换',
       color: '#8f7fd4',
       dashed: true,
-      points: Array.from({ length: n }, (_, m) => [
-        (m - n / 2) * dt,
-        (autocorr[(m + n / 2) % n] / expectedDivisor) * dt,
-      ] as [number, number]),
+      points: pointsOf(reference),
     },
   ]
 
   const failed = deviation > 1e-3
-  // 功率档的读数必须报两个数：图上那条实线的峰是 R(0)，平均功率要再除以窗长 T。
-  // 只报一个数会让读数和图差出 T 倍，看起来像算错了。
-  const peakLevel = autocorr[0] * dt
+  const peakLevel = used[0] * dt
+  // 图上刻度与能量口径差一个窗长，两行读数各报各的，不许混成一个数。
   const peakReadouts: CourseReadout[] =
-    kind === 1
+    kind === 0
       ? [
           {
             label: '自相关峰值 R(0)',
             value: fixed(peakLevel, 4),
-            hint: `图上实线的峰；理论 E = ${fixed(energyPeak, 4)}`,
-            warn: false,
-          },
-          {
-            label: '平均功率 R(0)/T',
-            value: fixed(peakLevel / T, 4),
-            hint: `同一个峰除以窗长 T = ${fixed(T, 2)} ms；理论 P = E/T = ${fixed(energyPeak / T, 4)}`,
-            warn: false,
+            hint: `理论 E = ${fixed(energyPeak, 4)}`,
+            warn: failed,
           },
         ]
       : [
           {
-            label: '自相关峰值 R(0)',
+            label: '图上 自相关 R(0)/T',
+            value: fixed(peakLevel / T, 4),
+            hint: `图上实线用的是这个刻度：峰再除以窗长 T = ${fixed(T, 2)} ms。`,
+            warn: failed,
+          },
+          {
+            label: '原始自相关峰 R(0)',
             value: fixed(peakLevel, 4),
-            hint: `理论 E = ${fixed(energyPeak, 4)}`,
-            warn: false,
+            hint:
+              kind === 2
+                ? `谱用错了，这个峰已经不等于能量 E = ${fixed(energyPeak, 4)}。`
+                : `能量口径的峰，还没除 T；理论 E = ${fixed(energyPeak, 4)}。`,
+            warn: failed,
           },
         ]
+
   const readouts: CourseReadout[] = [
     ...peakReadouts,
     {
@@ -219,14 +237,20 @@ function computeSignal(params: Record<string, number>): CourseView {
     },
   ]
 
+  const nearZero = deviation < 1e-12 ? '0' : exponent(deviation)
+  const conclusion =
+    kind === 2
+      ? `把幅度谱 |X| 当成功率谱，少了一次平方：反变换出来的不是自相关，整条曲线形状都变了，对偶偏差 ${exponent(deviation)}——两条线再也对不上，判据 1e-3 过不了。功率谱必须是 |X|²，不是 |X|。`
+      : kind === 1
+        ? `两条线都按窗长 T 归一，仍然贴在一起：功率信号的自相关是 (1/T)∫x(t)x(t+τ)dt，正好是 |X|²/T 的反变换，偏差 ${nearZero}。图上刻度读的是 R(0)/T = ${fixed(peakLevel / T, 4)}，能量口径的原始峰仍是 ${fixed(peakLevel, 4)}。`
+        : `两条线贴在一起：能量信号的功率谱就是 |X|²，反变换正好回到自相关，偏差 ${nearZero}，远小于 1e-3。虚线与实线的尺度完全一样、又被画在上面，所以屏幕上只剩一条——不是漏画。`
+
   return {
     series,
     xLabel: '时延 τ / ms',
     yLabel: 'R(τ)',
     readouts,
-    conclusion: failed
-      ? '把能量信号按功率信号归一，功率谱多除了一个窗长，反变换回来的自相关整体缩水——两条线再也对不上，判据 1e-3 过不了。'
-      : `两条线贴在一起：自相关与功率谱互为傅氏对，偏差 ${deviation < 1e-12 ? '在机器精度以内' : exponent(deviation)}，远小于 1e-3。`,
+    conclusion,
     failed,
   }
 }
@@ -731,7 +755,15 @@ function computeEye(params: Record<string, number>): CourseView {
 
 const tauParam: CourseParam = { key: 'tau', label: '脉冲宽度 τ', min: 0.2, max: 4, step: 0.1, unit: 'ms' }
 const shapeParam: CourseParam = { key: 'shape', label: '脉冲形状', min: 0, max: 1, step: 1, unit: '', options: ['矩形', '三角'] }
-const kindParam: CourseParam = { key: 'kind', label: '信号判据', min: 0, max: 1, step: 1, unit: '', options: ['能量信号', '功率信号'] }
+const kindParam: CourseParam = {
+  key: 'kind',
+  label: '信号判据',
+  min: 0,
+  max: 2,
+  step: 1,
+  unit: '',
+  options: ['能量信号', '功率信号', '错用幅度谱'],
+}
 const modeParam: CourseParam = {
   key: 'mode',
   label: '调制方式',
@@ -2196,7 +2228,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     question: '脉冲的自相关，为什么能和它的功率谱对上？',
     params: [tauParam, shapeParam, kindParam],
     defaults: { tau: 1.5, shape: 0, kind: 0 },
-    failPreset: { tau: 1.5, shape: 0, kind: 1 },
+    failPreset: { tau: 1.5, shape: 0, kind: 2 },
     compute: computeSignal,
   },
   {

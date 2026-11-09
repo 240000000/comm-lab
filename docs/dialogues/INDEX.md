@@ -73,6 +73,7 @@
 | R59 | 2026-11-08 | 会话 36 | 课程视图图例搬到画布上方，新增 `legendRows()` 纯函数（每行几条、共几行可断言，单条超宽不截字）；13 章几何实测不遮不重、画布高度仍 320，360 宽下第 6 章两行；测试 237→241 | docs/archive/2026-11-08-session-36.md |
 | R60 | 2026-11-08 | 会话 37 | 两份 PDF 按 `prep_md.py` → `md2docx.py` → `post.py` → `topdf.ps1` 整链重导追上 Markdown，两份副本同 sha256；`check-docs` 加第 5 章 FM 两条断言（失效档 -0.3 dB 与四档 25.5 / 32.8 / 40.6 / 45.3 dB，容差 0.1，172→177 条）；更正 R52 存档「`canvas.width` 0 命中」为 2 处；新增 `docs/criteria/R52-visual-regression.md` | docs/archive/2026-11-08-session-37.md |
 | R61 | 2026-11-08 | 会话 38 | 技术报告封面的「对应提交」与「日期」改为取 tag 所指的 commit（`describe --tags` → `rev-list -n 1` → `log -1 --format=%ad`），不再取 HEAD、不再写死 2026-10-31；整链重导后仍 30 页 | docs/archive/2026-11-08-session-38.md |
+| R62 | 2026-11-09 | 会话 39 | 第 2 章功率档实线也除窗长 T、读数拆两行报「图上 R(0)/T = 0.1875」与「原始峰 R(0) = 1.5000」；反例换成第三档「错用幅度谱」（`|X|` 当功率谱反变换，对偶偏差 9.47e-1），`failPreset` 改指 `kind: 2`；另 12 章读数一处分不差 | docs/archive/2026-11-09-session-39.md |
 
 ## 约定
 
