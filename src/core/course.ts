@@ -160,12 +160,26 @@ function computeSignal(params: Record<string, number>): CourseView {
   }
   const deviation = worst / (peakAbs || 1)
 
+  // 相关峰宽度按半高全宽报：先找最后一个高于半高的整数滞后，再在它和下一个
+  // 采样点之间连直线求半高穿越点，穿越滞后乘 2 就是全宽。只数整数滞后的话，
+  // τ 与采样间隔同量级时会被 dt 量化吃掉一截，那不是物理下限。
   const halfLevel = Math.max(...used.map(Math.abs)) / 2
-  let widthLags = 0
+  let aboveLags = 0
+  let belowLags = 1
   for (let m = 1; m < n / 2; m += 1) {
-    if (Math.abs(used[m]) > halfLevel) widthLags = m
+    if (Math.abs(used[m]) > halfLevel) {
+      aboveLags = m
+      belowLags = m + 1
+    } else {
+      belowLags = m
+      break
+    }
   }
-  const measuredWidth = widthLags * dt
+  const aboveLevel = Math.abs(used[aboveLags])
+  const belowLevel = Math.abs(used[belowLags % n])
+  const levelSpan = aboveLevel - belowLevel
+  const crossFrac = levelSpan > 0 ? (aboveLevel - halfLevel) / levelSpan : 0
+  const measuredWidth = (aboveLags + crossFrac) * dt * 2
   const theoryWidth = tau
 
   const pointsOf = (source: number[]): [number, number][] =>
@@ -205,9 +219,12 @@ function computeSignal(params: Record<string, number>): CourseView {
         ]
       : [
           {
-            label: '图上 自相关 R(0)/T',
+            label: kind === 2 ? '图上 曲线峰值/T' : '图上 自相关 R(0)/T',
             value: fixed(peakLevel / T, 4),
-            hint: `图上实线用的是这个刻度：峰再除以窗长 T = ${fixed(T, 2)} ms。`,
+            hint:
+              kind === 2
+                ? `这条曲线是 |X| 的反变换，不是自相关；图上实线用的就是这个刻度，峰再除以窗长 T = ${fixed(T, 2)} ms。`
+                : `图上实线用的是这个刻度：峰再除以窗长 T = ${fixed(T, 2)} ms。`,
             warn: failed,
           },
           {

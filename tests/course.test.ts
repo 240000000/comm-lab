@@ -762,6 +762,38 @@ test('第 2 章：把幅度谱当功率谱，形状变了、对偶偏差到 0.9 
   assert.equal(view.failed, true)
 })
 
+test('第 2 章：相关峰宽度按半高全宽报，读数和 hint 里的脉宽不许各说各话', () => {
+  const chapter = chapterByNo(2)!
+  for (const kind of [0, 1]) {
+    const view = chapter.compute({ tau: 1.5, shape: 0, kind })
+    const readout = view.readouts.find((r) => r.label === '相关峰宽度')!
+    const width = Number(readout.value.replace(' ms', ''))
+    assert.ok(Math.abs(width - 1.5) < 0.05, `kind=${kind} 半高全宽应≈1.50 ms，实际 ${width}`)
+    const theory = Number(readout.hint.match(/脉宽 ([\d.]+) ms/)![1])
+    assert.ok(
+      Math.abs(width - theory) / theory < 0.05,
+      `kind=${kind} 读数 ${width} 与 hint 里的 ${theory} 差超过 5%`,
+    )
+  }
+})
+
+test('第 2 章：τ = 0.5 与 τ = 2.0 也自洽，不是只有默认档凑对', () => {
+  const chapter = chapterByNo(2)!
+  for (const tau of [0.5, 2]) {
+    for (const kind of [0, 1]) {
+      const view = chapter.compute({ tau, shape: 0, kind })
+      const readout = view.readouts.find((r) => r.label === '相关峰宽度')!
+      const width = Number(readout.value.replace(' ms', ''))
+      assert.ok(Math.abs(width - tau) < tau * 0.05, `τ=${tau} kind=${kind} 半高全宽应≈${tau} ms，实际 ${width}`)
+      const theory = Number(readout.hint.match(/脉宽 ([\d.]+) ms/)![1])
+      assert.ok(
+        Math.abs(width - theory) / theory < 0.05,
+        `τ=${tau} kind=${kind} 读数 ${width} 与 hint 里的 ${theory} 差超过 5%`,
+      )
+    }
+  }
+})
+
 // ---------------------------------------------------------------------------
 // R58：拖动期间隔一帧算一次，松手必须补算成全精度
 // ---------------------------------------------------------------------------
