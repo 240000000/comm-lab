@@ -9,6 +9,7 @@
  * marker 让某条 series 只画散点（蒙特卡洛实测点，不连成线）。
  */
 import { syncCanvasSize } from './canvasSize'
+import { niceTicks } from './niceTicks'
 import { useCallback, useEffect, useRef } from 'react'
 import type { CourseSeries } from '../core/course.ts'
 
@@ -26,6 +27,13 @@ const AXIS_FONT = '11px Consolas, "Cascadia Mono", monospace'
 
 /** 对数轴上 0 没法画，取一个比任何误码率都小的正数兜底。 */
 const LOG_FLOOR = 1e-12
+
+// 横轴刻度文字是居中对齐的，最左/最右那根的一半会伸进坐标区外侧的留白里。
+// 留白不够时把文字往里挪，宁可离刻度略偏，也不让它被画布边缘切掉。
+function clampCenter(ctx: CanvasRenderingContext2D, text: string, center: number, width: number): number {
+  const half = ctx.measureText(text).width / 2 + 2
+  return Math.min(Math.max(center, half), width - half)
+}
 
 export function CourseChart({
   series,
@@ -151,17 +159,20 @@ export function CourseChart({
       xMax = Math.ceil(xMax) + 0.15
       if (xMax - xMin < 2) xMax = xMin + 2
     }
-    // 横向刻度值：章节传了就用它给的；否则线性轴 5 档等分，对数轴按整十次幂走。
+    // 横向刻度值：章节传了就用它给的；堆叠柱的轴是计数，走整数网格；其余线性轴按「好看步长」定网格。
     const xTickList: number[] = []
     if (xTicks) {
       xTickList.push(...xTicks)
     } else if (logX) {
       const step = Math.ceil((xMax - xMin) / 8)
       for (let k = Math.ceil(xMin); k <= Math.floor(xMax); k += step) xTickList.push(k)
+    } else if (stack) {
+      const step = Math.max(1, Math.round((xMax - xMin) / 8))
+      for (let k = Math.ceil(xMin); k <= Math.floor(xMax); k += step) xTickList.push(k)
     } else {
-      for (let i = 0; i <= 4; i++) xTickList.push(xMin + ((xMax - xMin) / 4) * i)
+      xTickList.push(...niceTicks(xMin, xMax))
     }
-    // 纵向刻度值：同上；没传时线性轴 5 档等分，对数轴每十倍一档、太密时隔档画。
+    // 纵向刻度值：同上；没传时线性轴按「好看步长」定网格，对数轴每十倍一档、太密时隔档画。
     const yTickList: number[] = []
     if (yTicks) {
       yTickList.push(...yTicks)
@@ -169,10 +180,10 @@ export function CourseChart({
       const step = Math.ceil((yMax - yMin) / 8)
       for (let k = Math.ceil(yMin); k <= Math.floor(yMax); k += step) yTickList.push(k)
     } else {
-      for (let i = 0; i <= 4; i++) yTickList.push(yMax - ((yMax - yMin) / 4) * i)
+      yTickList.push(...niceTicks(yMin, yMax))
     }
 
-    // 网格：竖线 4 条；横线跟着纵向刻度走。
+    // 网格：竖线跟着横向刻度走，横线跟着纵向刻度走。
     ctx.strokeStyle = COLOR.grid
     ctx.lineWidth = 1
     for (const value of yTickList) {
@@ -198,7 +209,7 @@ export function CourseChart({
     ctx.lineTo(PAD.left + plotW, PAD.top + plotH)
     ctx.stroke()
 
-    // 刻度文字：横轴 0、1/4、1/2、3/4、1；纵轴按上面算好的刻度值写。
+    // 刻度文字：横轴按横向刻度值写（堆叠柱是整数计数）；纵轴按上面算好的刻度值写。
     ctx.fillStyle = COLOR.axisText
     ctx.font = AXIS_FONT
     ctx.textAlign = 'center'
@@ -207,24 +218,30 @@ export function CourseChart({
       // 堆叠柱的横轴是错误个数，刻度必须是整数；标 0.750 这种小数只会让人以为能拖半位错。
       const step = Math.max(1, Math.round((xMax - xMin) / 8))
       for (let v = Math.ceil(xMin); v <= Math.floor(xMax); v += step) {
-        ctx.fillText(String(v), px(v), PAD.top + plotH + 8)
+        const text = String(v)
+        ctx.fillText(text, clampCenter(ctx, text, px(v), width), PAD.top + plotH + 8)
       }
     } else if (logX) {
       for (const value of xTickList) {
         const x = PAD.left + ((value - xMin) / (xMax - xMin)) * plotW
-        ctx.fillText(xTicks ? formatExact(value) : formatPower(value), x, PAD.top + plotH + 8)
+        const text = xTicks ? formatExact(value) : formatPower(value)
+        ctx.fillText(text, clampCenter(ctx, text, x, width), PAD.top + plotH + 8)
       }
     } else {
       for (const value of xTickList) {
         const x = PAD.left + ((value - xMin) / (xMax - xMin)) * plotW
-        ctx.fillText(xTicks ? formatExact(value) : formatTick(value), x, PAD.top + plotH + 8)
+        const text = xTicks ? formatExact(value) : formatTick(value)
+        ctx.fillText(text, clampCenter(ctx, text, x, width), PAD.top + plotH + 8)
       }
     }
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
     for (const value of yTickList) {
       const y = PAD.top + (1 - (value - yMin) / (yMax - yMin)) * plotH
-      ctx.fillText(logY ? formatPower(value) : yTicks ? formatExact(value) : formatTick(value), PAD.left - 8, y)
+      const text = logY ? formatPower(value) : yTicks ? formatExact(value) : formatTick(value)
+      // 刻度文字不许被画布边缘裁掉：留 2 px 余量，宽了就往里挪，不靠改坐标区宽度硬撑。
+      const left = PAD.left - 8 - ctx.measureText(text).width
+      ctx.fillText(text, left < 2 ? PAD.left - 8 + (2 - left) : PAD.left - 8, y)
     }
 
     // 轴名。

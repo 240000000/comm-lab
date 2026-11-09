@@ -228,7 +228,7 @@ function computeSignal(params: Record<string, number>): CourseView {
             warn: failed,
           },
           {
-            label: '原始自相关峰 R(0)',
+            label: kind === 2 ? '原始 曲线峰值' : '原始自相关峰 R(0)',
             value: fixed(peakLevel, 4),
             hint:
               kind === 2
