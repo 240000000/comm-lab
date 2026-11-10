@@ -166,6 +166,8 @@ const ChapterScreen = memo(function ChapterScreen({
           guides={view.guides}
           xTicks={view.xTicks}
           yTicks={view.yTicks}
+          markerX={view.markerX}
+          markerLabel={view.markerLabel}
         />
       </div>
 

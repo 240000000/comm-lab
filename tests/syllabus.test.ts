@@ -62,7 +62,14 @@ const GOLDEN_READOUTS: Array<{ no: number; readouts: string[]; failed: boolean }
   { no: 11, readouts: ['最小距离 d=3', '可纠位数 t=1', '正确率（e = 1）=100.0%'], failed: false },
   {
     no: 12,
-    readouts: ['周期 N=127', '峰值自相关=1.0000', '最大旁瓣=-0.0079', '平衡性（1 的个数 − 0 的个数）=1'],
+    readouts: [
+      '周期 N=127',
+      '峰值自相关=1.0000',
+      '最大旁瓣=-0.0079',
+      '平衡性（1 的个数 − 0 的个数）=1',
+      '当前延迟 τ 的 R(τ)=1.0000',
+      '序列前 8 位=11111110',
+    ],
     failed: false,
   },
   { no: 13, readouts: ['剩余相位误差（实测 / 理论）=0.000 / 0.000', '收敛步数=7', '环路锁定=锁住'], failed: false },

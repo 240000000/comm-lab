@@ -46,6 +46,8 @@ export function CourseChart({
   guides,
   xTicks,
   yTicks,
+  markerX,
+  markerLabel,
 }: {
   series: CourseSeries[]
   xLabel: string
@@ -58,6 +60,9 @@ export function CourseChart({
   /** 章节自己指定刻度；传了就用传进来的，不传就走下面的自动算法。 */
   xTicks?: number[]
   yTicks?: number[]
+  /** 竖参考线：第 12 章用它指出「当前取的是第几根柱」；不传就没有这条线，其它章零影响。 */
+  markerX?: number
+  markerLabel?: string
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   // 宽度只量一次、之后读缓存：clientWidth 会强制浏览器同步重排，
@@ -283,6 +288,30 @@ export function CourseChart({
       }
     }
 
+    // 竖参考线：第 12 章拖 τ 时，这条线就是「现在看的是第几根柱」。
+    if (markerX !== undefined && Number.isFinite(markerX)) {
+      const mx = px(markerX)
+      ctx.setLineDash([6, 5])
+      ctx.lineWidth = 1.2
+      ctx.strokeStyle = '#e0a45c'
+      ctx.beginPath()
+      ctx.moveTo(mx, PAD.top)
+      ctx.lineTo(mx, PAD.top + plotH)
+      ctx.stroke()
+      ctx.setLineDash([])
+      if (markerLabel) {
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'bottom'
+        const lw = ctx.measureText(markerLabel).width
+        // 贴着左右边界时把标签往里挪，否则半个字会画到画布外。
+        const cx = Math.min(Math.max(mx, PAD.left + lw / 2 + 3), PAD.left + plotW - lw / 2 - 3)
+        ctx.fillStyle = 'rgba(9, 15, 22, 0.78)'
+        ctx.fillRect(cx - lw / 2 - 3, PAD.top - 2, lw + 6, 13)
+        ctx.fillStyle = '#e0a45c'
+        ctx.fillText(markerLabel, cx, PAD.top + 10)
+      }
+    }
+
     // 柱：从 0 基线一根根拉出来，比折线更能看出「除了 τ=0 全压在同一条线上」。
     if (bars) {
       ctx.setLineDash([])
@@ -370,7 +399,7 @@ export function CourseChart({
       ctx.setLineDash([])
     }
     ctx.globalAlpha = 1
-  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides, xTicks, yTicks])
+  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides, xTicks, yTicks, markerX, markerLabel])
 
   // 画的时候用的是最新的 draw，所以尺寸回调里不必重建 observer。
   const drawRef = useRef(draw)

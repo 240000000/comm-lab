@@ -61,6 +61,9 @@ export type CourseView = {
   stack?: boolean
   /** 参考线：虚线横线加一行标注（第 12 章的 −1/N）。 */
   guides?: Array<{ y: number; label: string }>
+  /** 竖参考线：标出「当前取的是第几根柱」（第 12 章的 τ）。只做渲染，不碰任何 compute。 */
+  markerX?: number
+  markerLabel?: string
   /** 章节自己指定刻度（第 1 章）；不传就走通用图的自动算法，其余 12 章零影响。 */
   xTicks?: number[]
   yTicks?: number[]
@@ -1497,13 +1500,28 @@ function computeMseq(params: Record<string, number>): CourseView {
       hint: `一个周期里 ${ones} 个 1、${period - ones} 个 0；m 序列的平衡性正好差 1。`,
       warn: balance !== 1,
     },
+    {
+      label: '当前延迟 τ 的 R(τ)',
+      value: tau === 0 ? peak.toFixed(4) : auto[tau].toFixed(5),
+      hint:
+        tau === 0
+          ? `图上那条竖线标在第 ${tau} 根柱上；τ=0 是峰值 R(0) = ${peak.toFixed(4)}。`
+          : `图上那条竖线标在第 ${tau} 根柱上；τ≠0 时落进旁瓣，R(τ) = ${auto[tau].toFixed(5)}（= −1/${period} = ${theorySide.toFixed(5)}）。`,
+      warn: false,
+    },
+    {
+      label: '序列前 8 位',
+      value: raw.slice(0, 8).join(''),
+      hint: `初态是 (${init.join(', ')})：换初态只换这条 m 序列从哪一位开始，反馈多项式没变。`,
+      warn: false,
+    },
   ]
 
   let conclusion: string
   if (failed) {
     conclusion = `抽头一换，周期从 ${full} 掉到 ${period}：序列还是 0/1 序列，但自相关不再是双值——屏上一共 ${distinct} 个值，最大旁瓣 ${sidelobe.toFixed(4)} 也离开了 −1/N。拿去做扩频，就分不清「同相」和「错一位」。`
   } else {
-    conclusion = `${period} 个延迟里，自相关只有两个值：τ=0 处 1，其余 ${period - 1} 个全是 −1/${period} = ${theorySide.toFixed(5)}。这就是扩频能抗多址干扰的底：别人错开一个码元，相关输出就掉到噪声量级。`
+    conclusion = `${period} 个延迟里，自相关只有两个值：τ=0 处 1，其余 ${period - 1} 个全是 −1/${period} = ${theorySide.toFixed(5)}。这就是扩频能抗多址干扰的底：别人错开一个码元，相关输出就掉到噪声量级。换初态只换序列的相位：三档初态给出的是同一条 m 序列的不同循环移位（前 8 位就是读数里那三串），自相关仍然只有这两个值——说明这两个值来自反馈多项式，而不是某一段具体码。`
   }
 
   return {
@@ -1515,6 +1533,8 @@ function computeMseq(params: Record<string, number>): CourseView {
     failed,
     bars: true,
     guides: [{ y: theorySide, label: `−1/N = ${theorySide.toFixed(5)}：其余 ${period - 1} 根柱都在这条线上` }],
+    markerX: tau,
+    markerLabel: `τ = ${tau}`,
   }
 }
 
@@ -2344,7 +2364,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   },
   {
     no: 8,
-    title: '新型数字带通调制',
+    title: '新型数字带通调制技术',
     implemented: true,
     question: '同样的带宽，为什么 64QAM 能多传 50% 的比特，却要多花几 dB？',
     reason: '',

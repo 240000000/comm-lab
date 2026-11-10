@@ -83,7 +83,8 @@ test('默认态：三到四个读数、一张图、一句话结论，且不报�
   for (const chapter of COURSE_CHAPTERS) {
     if (!chapter.compute) continue
     const view = chapter.compute(chapter.defaults)
-    assert.ok(view.readouts.length >= 3 && view.readouts.length <= 4, `第 ${chapter.no} 章读数 ${view.readouts.length} 个`)
+    // 第 12 章 R73 起多两项（当前 τ 的 R(τ)、序列前 8 位），其余章仍是 3~4 项。
+    assert.ok(view.readouts.length >= 3 && view.readouts.length <= 6, `第 ${chapter.no} 章读数 ${view.readouts.length} 个`)
     assert.ok(view.series.length >= 1)
     assert.ok(view.stack ? view.series[0].points.length >= 4 : view.series[0].points.length > 10, `第 ${chapter.no} 章点数太少`)
     assert.ok(view.conclusion.length > 10)
@@ -392,6 +393,46 @@ test('第 12 章：非本原抽头让周期掉下来，自相关冒出第三个�
   assert.ok(distinct.size > 2, `自相关的值种类应多于两个，实际 ${distinct.size}`)
   assert.equal(view.failed, true)
   assert.equal(view.readouts[0].warn, true)
+})
+
+test('第 12 章：拖 τ 时图上标出当前第几根柱，读数跟着走', () => {
+  const chapter = chapterByNo(12)
+  const zero = chapter.compute({ ...chapter.defaults, tau: 0 })
+  const moved = chapter.compute({ ...chapter.defaults, tau: 37 })
+  assert.equal(zero.markerX, 0)
+  assert.equal(moved.markerX, 37)
+  assert.equal(moved.markerLabel, 'τ = 37')
+
+  const pick = (view: { readouts: Array<{ label: string; value: string }> }) =>
+    view.readouts.find((r) => r.label === '当前延迟 τ 的 R(τ)')?.value
+  assert.equal(pick(zero), '1.0000')
+  assert.equal(pick(moved), '-0.00787')
+})
+
+test('第 12 章：换初态改的是序列本身，三档前 8 位互不相同', () => {
+  const chapter = chapterByNo(12)
+  const prefixes = [0, 1, 2].map((initOpt) => {
+    const view = chapter.compute({ ...chapter.defaults, initOpt })
+    return view.readouts.find((r) => r.label === '序列前 8 位')?.value ?? ''
+  })
+  assert.equal(new Set(prefixes).size, 3, `三档初态的前 8 位应互不相同，实际 ${prefixes.join(' / ')}`)
+  for (const prefix of prefixes) assert.match(prefix, /^[01]{8}$/)
+})
+
+test('第 12 章：结论句说明换初态只换相位、两个值来自反馈多项式', () => {
+  const chapter = chapterByNo(12)
+  const view = chapter.compute(chapter.defaults)
+  assert.match(view.conclusion, /换初态只换序列的相位/)
+  assert.match(view.conclusion, /来自反馈多项式/)
+})
+
+test('第 12 章：竖参考线只有这一章有，别的章不传就没有', () => {
+  const other = chapterByNo(2)
+  assert.equal(other.compute(other.defaults).markerX, undefined)
+})
+
+test('第 8 章：章名与教材目录一致，不许退回简称', () => {
+  assert.equal(chapterByNo(8).title, '新型数字带通调制技术')
 })
 
 test('第 11 章：(7,4) 的最小距离为 3、可纠 1 位，d 由码字枚举复核', () => {
