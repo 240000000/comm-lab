@@ -224,7 +224,7 @@ core 分成 11 个文件而不是一个大文件，理由同样是可核对：�
 
 ### 2.3 测试用 node 自带的 runner
 
-这台机器装依赖出过问题，vitest 一次要拉一百多个包；项目本身又是零测试依赖的。Node 24 默认开启类型擦除，`node --test` 能直接跑 `.ts`，所以 `package.json` 里只有一行 `"test": "node --test"`，测试放 `tests/*.test.ts`，20 个文件、`npm test` 报 265 条，本机热跑 `duration_ms` 1629.9，干净克隆里墙钟 2.5 s。
+这台机器装依赖出过问题，vitest 一次要拉一百多个包；项目本身又是零测试依赖的。Node 24 默认开启类型擦除，`node --test` 能直接跑 `.ts`，所以 `package.json` 里只有一行 `"test": "node --test"`，测试放 `tests/*.test.ts`，20 个文件、`npm test` 报 267 条，本机热跑 `duration_ms` 1629.9，干净克隆里墙钟 2.5 s。
 
 代价说清楚：没有快照测试、没有覆盖率报告、没有并发隔离，断言只有 `node:assert`；测试文件里的 import 也必须带 `.ts` 扩展名；`grep -c "^test("` 数出来的行数会比实际用例少，因为子测试与循环生成的用例不在顶层。换来的是 `npm ci` 只装 28 个包（`package-lock.json` 里 90 条 `node_modules/` 记录，其余 62 条是 oxlint、rollup、esbuild 各平台的二进制，npm 只取当前平台那一个），整条依赖树小到可以一眼看完。
 
@@ -306,7 +306,7 @@ npm run dev
 | `git clone --depth 1` | 6.42 s | 只取最新一次提交 |
 | `npm ci` | 1.95 s | 装 28 个包（lockfile 里另有 62 条平台二进制记录） |
 | `npm run build` | 1.22 s | 46 个模块，`tsc -b` 加 vite |
-| `npm test` | 2.5 s | 265 条用例 |
+| `npm test` | 2.5 s | 267 条用例 |
 
 `npm run dev` 起在终端打印的地址（本机是 `http://localhost:5183/`），打开后进 `#/qam`，看到的就是第一张图：16QAM 的 16 个点、旁边的 4 位格雷码标签、默认 12 dB 的琥珀色点云，下面三个读数和一条 0–20 dB 的误码率曲线。
 
@@ -326,7 +326,7 @@ npm run dev
 
 如果四步里任何一步失败，README 的常见问题表列了三种：`npm ci` 失败先删 `node_modules` 改用 `npm install`；页面空白先看控制台，通常是 Node 低于 24；只有线上 404 是 `base` 路径问题，本地不会复现。
 
-不开浏览器也能验一半：`npm test` 会告诉你 265 条过没过；`npm run build` 会告诉你产物有多大（本轮 `dist/assets/index-*.js` 约 314 kB、`index-*.css` 约 27 kB，哈希随内容变）。剩下的一半只能打开看——点云、曲线、标签位置这些没有断言。
+不开浏览器也能验一半：`npm test` 会告诉你 267 条过没过；`npm run build` 会告诉你产物有多大（本轮 `dist/assets/index-*.js` 约 314 kB、`index-*.css` 约 27 kB，哈希随内容变）。剩下的一半只能打开看——点云、曲线、标签位置这些没有断言。
 
 ### 3.2 Node 版本与零新增依赖
 
@@ -340,7 +340,7 @@ npm run dev
 
 没有通信库、没有数值库、没有绘图库——星座图、曲线、时域波形都是 canvas 手画，FFT、Viterbi、QAM 映射都在 `src/core/` 里手写。这一条不是自证，上面三条命令就是证据。
 
-代码检查用的是 oxlint，一个 Rust 写的 linter，体积小、不需要再装一堆 ESLint 插件，`npm run lint` 报的是"0 warnings and 0 errors"（扫描文件数随源码增删变，不写死）。它不是测试的替代品，只保证没有未使用变量、没有明显写错的地方；真正的逻辑靠 265 条测试。
+代码检查用的是 oxlint，一个 Rust 写的 linter，体积小、不需要再装一堆 ESLint 插件，`npm run lint` 报的是"0 warnings and 0 errors"（扫描文件数随源码增删变，不写死）。它不是测试的替代品，只保证没有未使用变量、没有明显写错的地方；真正的逻辑靠 267 条测试。
 
 "运行时不调模型、不联网"也能当场验：打开开发者工具的 Network 面板，四页各点一遍，除了本地静态文件没有任何请求；`src/` 里搜不到 `fetch`、`XMLHttpRequest`、`WebSocket`，也没有任何 base URL 常量。这一条比说"纯前端"有用，因为它是可观察的行为，不是架构描述。
 
@@ -424,6 +424,7 @@ npm run dev
 | R31 | R31 | 本条提交 | 第 6 章判失败去掉 `snrDb <= 8` 硬阈值，结论改按眼高 / 峰值 ISI / 误码率三条分支；8 dB 不再判闭眼（0.90），4 dB（0.30）才闭 |
 | R32 | R32 | 本条提交 | 课程视图第 7 章：四档调制误码率同画一张对数坐标，蒙特卡洛 20000 比特；φ=45° 吃掉 3 dB 后增益 0.0 dB 标红 |
 | R33 | R33 | 本条提交 | 把 2ASK 改成单极性 OOK：理论 Q(√(Eb/N0))、蒙特卡洛幅度 2√γ、门限 √γ；8 dB 与 2FSK 同为 6.00e-3，相对 2FSK 增益 0.0 dB |
+| R70 | R70 | 本条提交 | 首页左下角那件东西从横条改成竖螺旋：尺寸由留白宽算（`clamp(120px, 留白−24px, 300px)` × `min(56vh, 520px)`），1440 下盒宽 156 px、卡片左缘 173 px，留 17 px 空；形态改等半径竖螺旋（7 圈、落程 1.4、900 采样），描边加同色外发光、改偏紫 `rgb(176,148,255)`、`opacity 0.65`，渐隐只留右侧 8%；卡片区域与 R69 逐字节相同，测试 265→267 |
 | R69 | R69 | 本条提交 | 两件事：把第 5、6、7 章标题对齐教材原名（模拟调制系统 / 数字基带传输系统 / 数字带通传输系统），消除「导书前后同一章两套叫法」；第 13 章读数区补一句来源说明（一阶数字锁相环的抽象模型，对应教材 13.2 载波同步与 13.3 码元同步的环路）。首页左下角新增 `HomeCurve`：独立 canvas 画一条随时间绕行的三维闭合曲线，取点纯函数 `curvePoints.ts` 可单测，投影与描边在组件里，位图尺寸走 `syncCanvasSize`，`<1280 px` 淡出、`prefers-reduced-motion` 只画一帧；四张卡片所在矩形加曲线前后逐像素相同。测试 261→265 |
 | R68 | R68 | 本条提交 | 修 R67 里那处必抛的兜底：`doc.getTextContent({pageIndex})` 在 pdf.js 里不存在，改成 `getPage(n)` → `page.getTextContent()`，并把取文本抽成可注入的 `PageTextLoader`；文字层累计字符少于 50 判为「没有文字层」，返回空数组让界面走手输，加密与损坏文件落成 `PdfOutlineError` 的可读提示，不再把 TypeError 弹给用户。worker 在函数内 `import('pdfjs-dist/build/pdf.worker.min.mjs?url')` 设 `workerSrc`，起不来才退 `disableWorker: true` 重试一次。`#/course` 左树加「导入教材」：选 PDF → 预览（识别 N 章、其中 M 章有仿真、每行标「PDF 第 N 页」、未命中灰显「暂无仿真」）→ 「用这本书」替换左树或「取消」，另有「恢复默认教材」退回 13 章；目录只在内存、刷新即失效，PDF 不上传不落盘。13 章 compute 与默认视图一字未动；测试 257→261 |
 | R67 | R67 | 本条提交 | 只做解析层、不接界面：新增 `src/course/pdfOutline.ts`（`parsePdfOutline()` 走 `getOutline()` 取书签、`getPageIndex()` 解 PDF 页号，书签为空才扫前 40 页文字层兜底；章级过滤认「第 N 章」与「Chapter N」，滤掉 `4.3`、`13.2.1` 这类节级；`topicId` 仍由 `matchChapter()` 填，命不中留 null）。`pdfjs-dist@6.5.438` 只在函数内 `await import` 动态引入，主包仍是 `index-z2OLXHfv.js` 370.21 kB，pdf.js 落独立 chunk 444.31 kB。新增 `scripts/probe-pdf.mjs` 与 6 条纯函数测试；对 146 MB 教材实跑 484 页 / 296 条书签 / 13 个章级条目，页码 16/32/51/78/101/145/191/243/265/294/346/394/425 与手工核对一致；测试 251→257 |

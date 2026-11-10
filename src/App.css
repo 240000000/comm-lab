@@ -2238,20 +2238,23 @@ a.card {
   z-index: 1;
 }
 
-/* 首页左下角的连续曲线：独立 canvas，与右上角的点云各转各的。
-   压在内容之下（.shell 同层且在后、卡片不透明），所以不会盖住任何文字。 */
+/* 首页左下角的螺旋线：独立 canvas，与右上角的点云各转各的。
+   压着内容的只有 overlay 层，这块画布整体躺在页面左右留白里——宽度由留白算出来：
+   留白 = (100vw − min(1080px, 100vw − 48px)) / 2，再减 24 px 的呼吸量，
+   所以 1440 时 156 px、1920 时封顶 300 px，一个像素也不进卡片区域。
+   右侧只留 8% 的柔和收边，不用大段渐隐去遮丑。 */
 .home-curve {
   position: absolute;
   left: 0;
   bottom: 0;
   z-index: 1;
   display: block;
-  width: min(24vw, 300px);
-  height: 150px;
+  width: clamp(120px, calc((100vw - min(1080px, 100vw - 48px)) / 2 - 24px), 300px);
+  height: min(56vh, 520px);
   pointer-events: none;
-  opacity: 0.45;
-  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 56%, transparent 100%);
-  mask-image: linear-gradient(to right, #000 0%, #000 56%, transparent 100%);
+  opacity: 0.65;
+  -webkit-mask-image: linear-gradient(to right, #000 92%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 92%, transparent 100%);
   transition: opacity 240ms ease;
 }
 
