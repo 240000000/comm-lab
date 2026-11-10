@@ -224,7 +224,7 @@ core 分成 11 个文件而不是一个大文件，理由同样是可核对：�
 
 ### 2.3 测试用 node 自带的 runner
 
-这台机器装依赖出过问题，vitest 一次要拉一百多个包；项目本身又是零测试依赖的。Node 24 默认开启类型擦除，`node --test` 能直接跑 `.ts`，所以 `package.json` 里只有一行 `"test": "node --test"`，测试放 `tests/*.test.ts`，16 个文件、`npm test` 报 251 条，本机热跑 `duration_ms` 1629.9，干净克隆里墙钟 2.5 s。
+这台机器装依赖出过问题，vitest 一次要拉一百多个包；项目本身又是零测试依赖的。Node 24 默认开启类型擦除，`node --test` 能直接跑 `.ts`，所以 `package.json` 里只有一行 `"test": "node --test"`，测试放 `tests/*.test.ts`，18 个文件、`npm test` 报 251 条，本机热跑 `duration_ms` 1629.9，干净克隆里墙钟 2.5 s。
 
 代价说清楚：没有快照测试、没有覆盖率报告、没有并发隔离，断言只有 `node:assert`；测试文件里的 import 也必须带 `.ts` 扩展名；`grep -c "^test("` 数出来的行数会比实际用例少，因为子测试与循环生成的用例不在顶层。换来的是 `npm ci` 只装 28 个包（`package-lock.json` 里 90 条 `node_modules/` 记录，其余 62 条是 oxlint、rollup、esbuild 各平台的二进制，npm 只取当前平台那一个），整条依赖树小到可以一眼看完。
 
