@@ -565,7 +565,6 @@ function computeSource(params: Record<string, number>): CourseView {
     return compand === 1 ? aLawExpand(step) : step
   }
   const quantize = (x: number) => quantizeWith(x, companding)
-  const quantized = original.map(quantize)
   // 量化信噪比在更密的相位网格上统计，别让 1,024 个点的取样偏差混进来。
   const dense = 8192
   const measureSnr = (compand: number) => {
@@ -596,6 +595,19 @@ function computeSource(params: Record<string, number>): CourseView {
   // 本例信号正好铺满量程，所以信噪比只会比同位数均匀量化低、不会高；高出来就是压扩没生效。
   const snrFail = companding === 1 ? compandDelta >= 0 : Math.abs(snrError) > 0.02
 
+  // 抽样 → 量化 → 零阶保持：图上这条阶梯就是 fs 真能重建出来的样子。
+  // 抽样点数由抽样率决定（fs = ratio·f_H，画满 duration），量化仍走同一套（压扩档先压后展）。
+  // 三个读数仍由上面那条 8192 点密网格与解析式算出，不经过这里的抽样序列。
+  const sampleCount = Math.max(2, Math.round(ratio * fh * duration))
+  const sampleStep = duration / sampleCount
+  const stair: Array<[number, number]> = []
+  for (let k = 0; k < sampleCount; k += 1) {
+    const t = k * sampleStep
+    const held = quantize(Math.cos(2 * Math.PI * fh * t))
+    stair.push([t, held])
+    stair.push([t + sampleStep, held])
+  }
+
   const series: CourseSeries[] = [
     {
       name: '原信号 x(t)',
@@ -604,9 +616,9 @@ function computeSource(params: Record<string, number>): CourseView {
       points: original.map((v, i) => [i * dt, v] as [number, number]),
     },
     {
-      name: `量化输出（${Math.round(bits)} bit）`,
+      name: `抽样重建（${Math.round(bits)} bit，零阶保持）`,
       color: '#3ce3c6',
-      points: quantized.map((v, i) => [i * dt, v] as [number, number]),
+      points: stair,
     },
   ]
 
@@ -1305,8 +1317,9 @@ function computeMatch(params: Record<string, number>): CourseView {
   }))
   if (dt > 0) {
     series.push({
-      name: `${label} 失配采样`,
+      name: '失配后的相关输出',
       color: '#e05c5c',
+      dashed: true,
       points: Array.from({ length: MATCH_POINTS }, (_, i) => {
         const tau = -1 + (2 * i) / (MATCH_POINTS - 1)
         return [tau, rho * matchCorr(wave, tau - dt)] as [number, number]

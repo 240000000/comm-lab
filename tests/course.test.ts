@@ -1047,3 +1047,105 @@ test('图例折行：quiet 的 series 不进图例也不参与折行', () => {
   assert.deepEqual(layout.rows, [2])
   assert.equal(layout.totalRows, 1)
 })
+
+test('第 10 章：抽样重建是零阶保持的阶梯，拐点数跟着抽样率走', () => {
+  const chapter = chapterByNo(10)!
+  const stair = (fs: number) => chapter.compute({ ...chapter.defaults, fs }).series[1]
+  for (const fs of [2, 4, 8]) {
+    const series = stair(fs)
+    const points = series.points
+    // 每根柱画两次（起点与保持终点），所以点数 = 2 × 抽样点数。
+    assert.equal(points.length, 2 * Math.round(fs * 4), `fs=${fs} 的点数不对`)
+    assert.ok(series.name.includes('零阶保持'), '图例没标出这是零阶保持')
+    for (let i = 0; i + 1 < points.length; i += 2) {
+      assert.equal(points[i][1], points[i + 1][1], `fs=${fs} 第 ${i / 2} 段不是平的`)
+      assert.ok(points[i + 1][0] > points[i][0], '保持段没有宽度')
+    }
+  }
+  // fs=2 时正好踩在奈奎斯特上，阶梯与正弦差得最狠；fs=8 时明显跟上。
+  const dev = (fs: number) => {
+    const points = stair(fs).points
+    let worst = 0
+    for (const [x, y] of points) worst = Math.max(worst, Math.abs(y - Math.cos(2 * Math.PI * x)))
+    return worst
+  }
+  assert.ok(dev(2) > dev(8) + 0.5, `fs=2 的偏差 ${dev(2)} 没有明显大于 fs=8 的 ${dev(8)}`)
+  assert.ok(dev(8) > 0.1, 'fs=8 的阶梯也不该和正弦严丝合缝，零阶保持本身有保持误差')
+})
+
+test('第 10 章：重建链换成抽样-量化之后，三个读数逐字没变', () => {
+  const chapter = chapterByNo(10)!
+  const pick = (view: ReturnType<typeof chapter.compute>, label: string) =>
+    view.readouts.find((r) => r.label === label)?.value
+  const base = chapter.compute({ fs: 4, bits: 8, compand: 0 })
+  assert.equal(pick(base, '混叠误差'), '0.00e+0')
+  assert.equal(pick(base, '量化信噪比'), '49.99 dB')
+  assert.equal(pick(base, 'PCM 码率'), '32.0 kb/s')
+  const low = chapter.compute({ fs: 1, bits: 8, compand: 0 })
+  assert.equal(pick(low, '混叠误差'), '173.3%')
+  assert.equal(pick(low, '量化信噪比'), '49.99 dB')
+  assert.equal(pick(low, 'PCM 码率'), '8.0 kb/s')
+  assert.equal(low.failed, true, '抽样率低于 2 f_H 该判红')
+})
+
+test('第 10 章：压扩档的重建链里确实走了 A 律压扩', () => {
+  const chapter = chapterByNo(10)!
+  const uniform = chapter.compute({ fs: 1.4, bits: 8, compand: 0 })
+  const companded = chapter.compute({ fs: 1.4, bits: 8, compand: 1 })
+  const u = uniform.series[1].points
+  const c = companded.series[1].points
+  assert.equal(c.length, u.length, '两档的抽样点数该一样')
+  let worst = 0
+  for (let i = 0; i < u.length; i += 1) worst = Math.max(worst, Math.abs(u[i][1] - c[i][1]))
+  // 压扩改变的是台阶间距，不是抽样时刻：差异只在小幅度区出现，量级 5e-3。
+  assert.ok(worst > 0.003, `A 律与均匀的阶梯差 ${worst} 太小，压扩可能没进重建链`)
+  assert.equal(
+    companded.readouts.find((r) => r.label === '量化信噪比（A 律）')?.value,
+    '38.59 dB',
+    'A 律读数被重建链改动了',
+  )
+})
+
+test('第 9 章：失配那条曲线只在 dt>0 时出现，且是虚线', () => {
+  const chapter = chapterByNo(9)!
+  const onTime = chapter.compute({ ...chapter.defaults, dt: 0 })
+  assert.equal(onTime.series.length, 3, 'dt=0 时不该多出一条重合的线')
+  assert.equal(onTime.series.some((s) => s.name === '失配后的相关输出'), false)
+  const late = chapter.compute({ ...chapter.defaults, dt: 0.4 })
+  assert.equal(late.series.length, 4)
+  const mismatch = late.series.find((s) => s.name === '失配后的相关输出')!
+  assert.equal(mismatch.dashed, true, '第四条该是虚线，否则和实线糊在一起')
+})
+
+test('第 9 章：失配把相关峰推后 dt、压到 ρ 倍，读数仍是 4.44 dB', () => {
+  const chapter = chapterByNo(9)!
+  const peakOf = (dt: number) => {
+    const view = chapter.compute({ ...chapter.defaults, dt })
+    const curve = view.series.find((s) => s.name === '失配后的相关输出')
+    if (!curve) return null
+    let peak = -Infinity
+    let at = 0
+    for (const [x, y] of curve.points) {
+      if (y > peak) {
+        peak = y
+        at = x
+      }
+    }
+    return { peak, at, view }
+  }
+  const half = peakOf(0.2)!
+  const forty = peakOf(0.4)!
+  assert.ok(Math.abs(half.at - 0.2) < 0.02, `dt=0.2 的峰跑到 ${half.at}`)
+  assert.ok(Math.abs(half.peak - 0.8) < 0.01, `dt=0.2 的峰高 ${half.peak} 不是 0.8`)
+  assert.ok(Math.abs(forty.at - 0.4) < 0.02, `dt=0.4 的峰跑到 ${forty.at}`)
+  assert.ok(Math.abs(forty.peak - 0.6) < 0.01, `dt=0.4 的峰高 ${forty.peak} 不是 0.6`)
+  const loss = (view: ReturnType<typeof chapter.compute>) =>
+    view.readouts.find((r) => r.label === '失配损失')?.value
+  assert.equal(loss(chapter.compute({ ...chapter.defaults, dt: 0 })), '0.00 dB')
+  assert.equal(loss(forty.view), '4.44 dB')
+  assert.equal(
+    forty.view.readouts.find((r) => r.label === '峰值信噪比（理论）')?.value,
+    '11.0 dB',
+    '峰值信噪比不该被绘图用的那条线带偏',
+  )
+})
