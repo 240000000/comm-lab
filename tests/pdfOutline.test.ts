@@ -8,8 +8,14 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   chapterEntriesFromOutline,
+  chaptersFromTextLayer,
   chaptersFromTextLines,
   chapterNumberOf,
+  MIN_TEXT_CHARS,
+  parsePdfOutline,
+  PdfOutlineError,
+  scanTextLayer,
+  TEXT_SCAN_PAGES,
   isChapterTitle,
   toBook,
 } from '../src/course/pdfOutline.ts'
@@ -93,4 +99,85 @@ test('空输入返回空数组', () => {
   assert.deepEqual(chaptersFromTextLines([]), [])
   assert.deepEqual(toBook([]).chapters, [])
   assert.deepEqual(chapterEntriesFromOutline(undefined), [])
+})
+
+/** 假 doc：只暴露 scanTextLayer 用到的那点东西。 */
+function fakeDoc(pages: string[], numPages = pages.length) {
+  const calls: number[] = []
+  return {
+    calls,
+    doc: {
+      numPages,
+      getPage: async (pageNumber: number) => {
+        calls.push(pageNumber)
+        return {
+          getTextContent: async () => ({
+            items: (pages[pageNumber - 1] ?? '').split('').map((str) => ({ str })),
+          }),
+        }
+      },
+    },
+  }
+}
+
+test('文字层兜底：真翻 40 页、页页拼行、从里面抓到三章', async () => {
+  const pages: string[] = []
+  for (let page = 1; page <= 120; page += 1) pages.push(`第 ${page} 页的正文，这里没有章名`)
+  pages[2] = '第2章  确知信号'
+  pages[10] = '第8章  新型数字带通调制技术'
+  pages[39] = 'Chapter 12  Orthogonal codes'
+  const { doc, calls } = fakeDoc(pages)
+  const result = await scanTextLayer(doc as never)
+  // 只翻前 40 页：整本 120 页也只读 40 次，且一页不落。
+  assert.equal(TEXT_SCAN_PAGES, 40)
+  assert.equal(calls.length, 40)
+  assert.deepEqual(calls, Array.from({ length: 40 }, (_, index) => index + 1))
+  assert.equal(result.lines.length, 40)
+  assert.deepEqual(
+    chaptersFromTextLayer(result).map((entry) => entry.rawTitle),
+    ['第2章  确知信号', '第8章  新型数字带通调制技术', 'Chapter 12  Orthogonal codes'],
+  )
+})
+
+test('文字层抠出来的字符不到 50 个，就当扫描件返回空数组', async () => {
+  const { doc } = fakeDoc(['摘要', '第2章  确知信号'])
+  const result = await scanTextLayer(doc as never)
+  assert.ok(result.chars < MIN_TEXT_CHARS)
+  assert.equal(MIN_TEXT_CHARS, 50)
+  assert.deepEqual(chaptersFromTextLayer(result), [])
+  // 字符够的同一批行仍然要出章名，阈值不是一刀切死。
+  assert.deepEqual(
+    chaptersFromTextLayer({ lines: ['第2章  确知信号' + '正'.repeat(60)], chars: 60 }).map((e) => e.rawTitle),
+    ['第2章  确知信号' + '正'.repeat(60)],
+  )
+})
+
+test('加密的 PDF 给一句人话，不把 PasswordException 弹出去', async () => {
+  const encrypted = Object.assign(new Error('no password given'), { name: 'PasswordException' })
+  const loadPdfjs = async () => ({
+    getDocument: () => ({ promise: Promise.reject(encrypted), destroy: async () => undefined }),
+  })
+  await assert.rejects(
+    () => parsePdfOutline(new ArrayBuffer(8), loadPdfjs as never),
+    (error: unknown) => {
+      assert.ok(error instanceof PdfOutlineError)
+      assert.match((error as Error).message, /加了密码/)
+      return true
+    },
+  )
+})
+
+test('坏文件同样翻成人话，不透出 TypeError', async () => {
+  const broken = new TypeError('Invalid PDF structure')
+  const loadPdfjs = async () => ({
+    getDocument: () => ({ promise: Promise.reject(broken), destroy: async () => undefined }),
+  })
+  await assert.rejects(
+    () => parsePdfOutline(new ArrayBuffer(8), loadPdfjs as never),
+    (error: unknown) => {
+      assert.ok(error instanceof PdfOutlineError)
+      assert.match((error as Error).message, /读不动/)
+      return true
+    },
+  )
 })

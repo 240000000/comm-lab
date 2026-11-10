@@ -176,22 +176,42 @@ export function toBook(entries: OutlineEntry[]): OutlinedBook {
 /** 文字层兜底扫多少页。整本 484 页全扫太慢，目录页不会跑到 40 页以后。 */
 export const TEXT_SCAN_PAGES = 40
 
-/** pdf.js 模块的最小形状，只用到 getDocument。 */
+/** 文字层少到这个程度，就当这本书没有可抓的目录文字（扫描件）。 */
+export const MIN_TEXT_CHARS = 50
+
+/** 比 ArrayBuffer 被 transfer 走更早的一道网：调用方一眼能看懂的失败。 */
+export class PdfOutlineError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PdfOutlineError'
+  }
+}
+
+/** pdf.js 模块的最小形状，只用到 getDocument 与 worker 配置。 */
 type PdfjsModule = {
-  getDocument: (source: { data: Uint8Array | ArrayBuffer }) => {
+  getDocument: (source: { data: Uint8Array | ArrayBuffer; disableWorker?: boolean }) => {
     promise: Promise<unknown>
     /** pdf.js 6 起，释放资源走 loadingTask.destroy()，doc 上没有 destroy。 */
     destroy: () => Promise<void>
   }
+  GlobalWorkerOptions?: { workerSrc: string }
+}
+
+/** 一页的文字层。文本挂在 page 上，doc 上没有按页取文本的捷径。 */
+type PdfPage = {
+  getTextContent: () => Promise<{ items: Array<{ str?: unknown }> }>
 }
 
 type PdfDocument = {
   getOutline: () => Promise<unknown>
   getDestination: (id: string) => Promise<unknown>
   getPageIndex: (ref: unknown) => Promise<number>
-  getTextContent: (params: { pageIndex: number }) => Promise<{ items: Array<{ str?: unknown }> }>
+  getPage: (pageNumber: number) => Promise<PdfPage>
   numPages: number
 }
+
+/** 取一页文字的可注入接口：测试喂假 doc，线上走 pdf.js。 */
+export type PageTextLoader = (doc: PdfDocument, pageNumber: number) => Promise<string>
 
 /** 解一个 dest 到 PDF 页号（1 起）。解不出来就是 null，不猜。 */
 async function resolvePage(doc: PdfDocument, dest: unknown): Promise<number | null> {
@@ -202,20 +222,80 @@ async function resolvePage(doc: PdfDocument, dest: unknown): Promise<number | nu
   return typeof index === 'number' && Number.isFinite(index) ? index + 1 : null
 }
 
+/** 默认取数器：先 getPage(n)，再 page.getTextContent()，一行一页。 */
+async function pageText(doc: PdfDocument, pageNumber: number): Promise<string> {
+  const page = await doc.getPage(pageNumber)
+  const content = await page.getTextContent()
+  return content.items.map((item) => (typeof item.str === 'string' ? item.str : '')).join('')
+}
+
 /**
- * 打开一本书，先看书签；书签不可用就退到文字层。doc 一定会被 destroy。
- *
- * 第二个参数是给 Node 探针留的缝：pdf.js 在 Node 下要换成 legacy 构建
- * （现代构建依赖浏览器的 crypto），浏览器里走默认值就行。
+ * 扫前 limit 页的文字层，返回拼好的行与有效字符数。
+ * 抽成独立函数是为了能拿假 doc 测：真书多数是扫描件，没法靠它做回归。
  */
-export async function parsePdfOutline(
+export async function scanTextLayer(
+  doc: PdfDocument,
+  loadPageText: PageTextLoader = pageText,
+  limit = TEXT_SCAN_PAGES,
+): Promise<{ lines: string[]; chars: number }> {
+  const lines: string[] = []
+  const pages = Math.min(limit, doc.numPages)
+  for (let pageNumber = 1; pageNumber <= pages; pageNumber += 1) {
+    const line = (await loadPageText(doc, pageNumber)).trim()
+    if (line) lines.push(line)
+  }
+  const chars = lines.reduce((sum, line) => sum + line.replace(/\s+/g, '').length, 0)
+  return { lines, chars }
+}
+
+/** 文字层结果转章级条目：字符太少就当这本书没有文字层，返回空数组。 */
+export function chaptersFromTextLayer(result: { lines: string[]; chars: number }): OutlineEntry[] {
+  if (result.chars < MIN_TEXT_CHARS) return []
+  return chaptersFromTextLines(result.lines)
+}
+
+/** 把 pdf.js 的 worker 指到 Vite 打出来的那个文件；设不上就返回 false 让调用方退主线程。 */
+async function attachWorker(pdfjs: PdfjsModule): Promise<boolean> {
+  if (!pdfjs.GlobalWorkerOptions || typeof window === 'undefined') return false
+  try {
+    const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')) as { default: string }
+    pdfjs.GlobalWorkerOptions.workerSrc = worker.default
+    return true
+  } catch {
+    return false
+  }
+}
+
+function isPasswordError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'PasswordException'
+}
+
+/** 把 pdf.js 的原始异常翻成一句人能看懂的提示，别把 TypeError 弹给用户。 */
+function describeError(error: unknown): Error {
+  if (error instanceof PdfOutlineError) return error
+  if (isPasswordError(error)) {
+    return new PdfOutlineError('这本 PDF 加了密码，读不了目录。请换未加密的版本，或者直接手动输章名。')
+  }
+  return new PdfOutlineError('这本 PDF 读不动：文件可能损坏，或者用了不常见的编码。换一本试试，也可以手动输章名。')
+}
+
+/** 一次解析：开书、走书签、书签没有就走文字层。doc 一定会被 destroy。 */
+async function readOutline(
+  pdfjs: PdfjsModule,
   data: ArrayBuffer,
-  loadPdfjs: () => Promise<PdfjsModule> = () => import('pdfjs-dist') as Promise<PdfjsModule>,
+  loadPageText: PageTextLoader,
+  disableWorker: boolean,
 ): Promise<OutlineEntry[]> {
-  // 动态引入：pdf.js 走独立 chunk，主包不因为它变大。
-  const pdfjs = await loadPdfjs()
-  const loadingTask = pdfjs.getDocument({ data })
-  const doc = (await loadingTask.promise) as unknown as PdfDocument
+  const loadingTask = disableWorker
+    ? pdfjs.getDocument({ data, disableWorker: true })
+    : pdfjs.getDocument({ data })
+  let doc: PdfDocument
+  try {
+    doc = (await loadingTask.promise) as unknown as PdfDocument
+  } catch (error) {
+    await loadingTask.destroy().catch(() => undefined)
+    throw error
+  }
   try {
     const hits: ChapterHit[] = []
     walkOutline(await doc.getOutline(), hits)
@@ -226,20 +306,44 @@ export async function parsePdfOutline(
       }
       return entries
     }
-    // 书签这条路走不通：只扫前 40 页的文字层。
-    const lines: string[] = []
-    const pages = Math.min(TEXT_SCAN_PAGES, doc.numPages)
-    for (let page = 1; page <= pages; page += 1) {
-      const content = await doc.getTextContent({ pageIndex: page - 1 })
-      const line = content.items
-        .map((item) => (typeof item.str === 'string' ? item.str : ''))
-        .join('')
-        .trim()
-      if (line) lines.push(line)
-    }
-    return chaptersFromTextLines(lines)
+    // 扫描件：书签没有、文字层也抠不出东西。这里认怂，返回空数组让界面走手输。
+    return chaptersFromTextLayer(await scanTextLayer(doc, loadPageText))
   } finally {
     // 解析完立刻释放：doc 不留在闭包里，工作线程也一起关掉。
     await loadingTask.destroy()
+  }
+}
+
+/**
+ * 打开一本书，先看书签；书签不可用就退到文字层。doc 一定会被 destroy。
+ *
+ * 第二、第三个参数是缝：Node 探针要把 pdf.js 换成 legacy 构建（现代构建依赖浏览器
+ * 的 crypto）；测试要绕过真书直接喂假 doc。浏览器里两个都走默认值。
+ */
+export async function parsePdfOutline(
+  data: ArrayBuffer,
+  loadPdfjs: () => Promise<PdfjsModule> = () => import('pdfjs-dist') as Promise<PdfjsModule>,
+  loadPageText: PageTextLoader = pageText,
+): Promise<OutlineEntry[]> {
+  // 动态引入：pdf.js 走独立 chunk，主包不因为它变大。
+  const pdfjs = await loadPdfjs()
+  const workerReady = await attachWorker(pdfjs)
+  try {
+    return await readOutline(pdfjs, data, loadPageText, false)
+  } catch (error) {
+    if (!workerReady || isPasswordError(error)) throw describeError(error)
+    // worker 起不来（被 CSP 挡、workerSrc 没配对）时退到主线程再来一次。
+    console.info('pdf.js 的 worker 没起来，已退到主线程解析。')
+    let copy: ArrayBuffer
+    try {
+      copy = data.slice(0)
+    } catch {
+      throw describeError(error)
+    }
+    try {
+      return await readOutline(pdfjs, copy, loadPageText, true)
+    } catch (again) {
+      throw describeError(again)
+    }
   }
 }
