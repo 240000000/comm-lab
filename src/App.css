@@ -2238,6 +2238,31 @@ a.card {
   z-index: 1;
 }
 
+/* 首页左下角的连续曲线：独立 canvas，与右上角的点云各转各的。
+   压在内容之下（.shell 同层且在后、卡片不透明），所以不会盖住任何文字。 */
+.home-curve {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 1;
+  display: block;
+  width: min(24vw, 300px);
+  height: 150px;
+  pointer-events: none;
+  opacity: 0.45;
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 56%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 0%, #000 56%, transparent 100%);
+  transition: opacity 240ms ease;
+}
+
+/* 窄到 1280 px 以下，左右边距只剩 24 px，曲线会整块钻到卡片底下、只露一条边，
+   没有视觉意义，所以直接淡掉。 */
+@media (max-width: 1279.98px) {
+  .home-curve {
+    opacity: 0;
+  }
+}
+
 
 /* 原生控件自带的加载转圈与页面转圈重复，隐藏原生那个，保留 CSS 转圈。 */
 video::-webkit-media-controls-loading-panel,
