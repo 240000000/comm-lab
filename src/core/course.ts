@@ -293,6 +293,9 @@ function idealLowpass(values: number[], cutoff: number, fs: number): number[] {
   return idft(filtered).map((c) => c.re)
 }
 
+// 绘图用噪声的种子：固定常量 + 四元参数组合，保证同参数同图、换参数必换图。
+const MIX_SEED = 20261113
+
 function computeModulation(params: Record<string, number>): CourseView {
   const mode = params.mode ?? 0
   const m = params.m ?? 0.6
@@ -418,6 +421,13 @@ function computeModulation(params: Record<string, number>): CourseView {
   const envelopeFail = mode === 0 && m > 1
   const failed = envelopeFail || threshold
 
+  // 只给绘图用的含噪解调波形：σ 由「输出信噪比」读数换回幅度比，读数本身仍走理想路径。
+  const mixSigma = Math.pow(10, -outSnr / 20)
+  const mixRng = createRng(
+    MIX_SEED + mode * 1009 + Math.round(m * 100) * 31 + Math.round(beta * 10) * 17 + Math.round(snrIn) * 7,
+  )
+  const noisy = aligned.map((v) => v + mixSigma * mixRng.gauss())
+
   const series: CourseSeries[] = [
     {
       name: '消息 m(t)',
@@ -426,9 +436,9 @@ function computeModulation(params: Record<string, number>): CourseView {
       points: msg.map((v, i) => [i * dt, v] as [number, number]),
     },
     {
-      name: '解调输出',
+      name: '解调输出（含噪声）',
       color: '#3ce3c6',
-      points: aligned.map((v, i) => [i * dt + from * dt, v] as [number, number]),
+      points: noisy.map((v, i) => [i * dt + from * dt, v] as [number, number]),
     },
   ]
 
@@ -465,7 +475,7 @@ function computeModulation(params: Record<string, number>): CourseView {
       ? envelopeFail
         ? '调制度 m 超过 1，包络在过零点翻折，检波出来的波形已经不再是原来的消息——失真读数越过 5%，包络检波失效。'
         : `FM 输入信噪比跌破门限（β=${fixed(beta, 1)} 时拐点在 ${fixed(fmKnee, 1)} dB），输出信噪比断崖式下跌，增加带宽换来的增益在这一段不管用了。`
-      : `解调输出贴着消息，失真 ${fixed(distortion * 100, 1)}%，带宽实测 ${fixed(measuredBand, 2)} kHz，${mode === 3 ? '是 Carson 上限' : '是理论值'} ${fixed(theoryBand, 2)} kHz 的 ${fixed(bandRatio * 100, 0)}%——${mode === 3 ? '98% 能量带宽天然比上限窄，β 越大越贴近上限。' : mode === 2 ? '本图消息只有 1 kHz 与 1.5 kHz 两条谱线，上边带从 f_c+1 到 f_c+1.5，所以只占 0.5 kHz；一般情况 SSB 带宽等于消息最高频。' : '两条谱线都被搬过去，双边带正好占满。'}`,
+      : `解调输出贴着消息，失真 ${fixed(distortion * 100, 1)}%，带宽实测 ${fixed(measuredBand, 2)} kHz，${mode === 3 ? '是 Carson 上限' : '是理论值'} ${fixed(theoryBand, 2)} kHz 的 ${fixed(bandRatio * 100, 0)}%——${mode === 3 ? '98% 能量带宽天然比上限窄，β 越大越贴近上限。' : mode === 2 ? '本图消息只有 1 kHz 与 1.5 kHz 两条谱线，上边带从 f_c+1 到 f_c+1.5，所以只占 0.5 kHz；一般情况 SSB 带宽等于消息最高频。' : '两条谱线都被搬过去，双边带正好占满。'}这条线按输出信噪比 ${fixed(outSnr, 1)} dB 标定了噪声（σ = ${fixed(mixSigma, 3)}），画出来的不是理想波形。`,
     failed,
   }
 }

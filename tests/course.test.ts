@@ -728,6 +728,53 @@ test('第 5 章：门限拐点随 β 上移，β 越大越早掉进断崖', () =
   assert.ok(Math.abs(k1 - 13) <= 0.5, `β=1 的拐点应在 13 dB 附近，实际 ${k1}`)
 })
 
+test('第 5 章：换参数图必变——调制度与输入信噪比都能在图上看出来', () => {
+  const chapter = chapterByNo(5)!
+  const pointsOf = (patch: Record<string, number>) =>
+    chapter.compute({ mode: 0, m: 0.6, beta: 2, snrIn: 25, ...patch })
+      .series[1].points.map((q) => q[1])
+  const maxDiff = (a: number[], b: number[]) => {
+    let d = 0
+    for (let i = 0; i < Math.min(a.length, b.length); i++) d = Math.max(d, Math.abs(a[i] - b[i]))
+    return d
+  }
+  // 加噪之前这四条序列逐位相同，图上看不出任何变化。
+  assert.ok(maxDiff(pointsOf({ m: 0.2 }), pointsOf({ m: 1.0 })) > 0.1, 'm=0.2 与 m=1.0 的绘图序列应当明显不同')
+  assert.ok(maxDiff(pointsOf({ snrIn: 5 }), pointsOf({ snrIn: 25 })) > 0.5, '输入 5 dB 与 25 dB 的绘图序列应当明显不同')
+})
+
+test('第 5 章：噪声按输出信噪比标定，同一档两次算出来逐点相同', () => {
+  const chapter = chapterByNo(5)!
+  const view = chapter.compute({ mode: 3, m: 0.6, beta: 2, snrIn: 25 })
+  const again = chapter.compute({ mode: 3, m: 0.6, beta: 2, snrIn: 25 })
+  assert.deepEqual(view.series[1].points, again.series[1].points, '同参数必须逐点复现，不许用 Math.random')
+  assert.equal(view.series[1].name, '解调输出（含噪声）')
+  // 两个 σ 不同的档相减，差值序列就是两条独立噪声之差：均方根应贴着 √(σ₁²+σ₂²)。
+  const sigmaOf = (value: string) => Math.pow(10, -Number.parseFloat(value) / 20)
+  const low = chapter.compute({ mode: 0, m: 0.6, beta: 2, snrIn: 5 })
+  const high = chapter.compute({ mode: 0, m: 0.6, beta: 2, snrIn: 25 })
+  const sLow = sigmaOf(low.readouts.find((r) => r.label === '输出信噪比')!.value)
+  const sHigh = sigmaOf(high.readouts.find((r) => r.label === '输出信噪比')!.value)
+  let sum = 0
+  const n = high.series[1].points.length
+  for (let i = 0; i < n; i++) sum += (low.series[1].points[i][1] - high.series[1].points[i][1]) ** 2
+  const rms = Math.sqrt(sum / n)
+  const expect = Math.sqrt(sLow * sLow + sHigh * sHigh)
+  assert.ok(Math.abs(rms - expect) / expect < 0.15, `噪声均方根 ${rms.toFixed(3)} 应贴着 √(σ₁²+σ₂²)=${expect.toFixed(3)}`)
+  assert.ok(view.conclusion.includes('标定了噪声'))
+})
+
+test('第 5 章：三个读数仍走理想路径，加噪之后逐字不变', () => {
+  const chapter = chapterByNo(5)!
+  const full = chapter.compute({ mode: 0, m: 1.0, beta: 2, snrIn: 25 })
+  assert.equal(full.readouts.find((r) => r.label === '解调失真')!.value, '0.0%')
+  assert.equal(full.readouts.find((r) => r.label === '输出信噪比')!.value, '23.2 dB')
+  const fm = chapter.compute({ mode: 3, m: 0.6, beta: 8, snrIn: 25 })
+  assert.equal(fm.readouts.find((r) => r.label === '输出信噪比')!.value, '57.4 dB')
+  const low = chapter.compute({ mode: 0, m: 0.6, beta: 2, snrIn: 5 })
+  assert.equal(low.readouts.find((r) => r.label === '输出信噪比')!.value, '-0.2 dB')
+})
+
 test('第 2 章：图上刻度与能量口径分两行报，两个数不混为一谈', () => {
   const chapter = chapterByNo(2)!
   const view = chapter.compute({ tau: 1.5, shape: 0, kind: 1 })
