@@ -296,6 +296,10 @@ function idealLowpass(values: number[], cutoff: number, fs: number): number[] {
 // 绘图用噪声的种子：固定常量 + 四元参数组合，保证同参数同图、换参数必换图。
 const MIX_SEED = 20261113
 
+// 结论句与 hint 按图上噪声的相对幅度（σ 相对消息峰值 1.0）分档：0.15 以下还干净，0.5 以上基本被盖住。
+const NOISE_QUIET = 0.15
+const NOISE_BURIED = 0.5
+
 function computeModulation(params: Record<string, number>): CourseView {
   const mode = params.mode ?? 0
   const m = params.m ?? 0.6
@@ -465,9 +469,9 @@ function computeModulation(params: Record<string, number>): CourseView {
         label: '输出信噪比',
         value: `${fixed(outSnr, 1)} dB`,
         hint:
-          mode === 3
+          (mode === 3
             ? `输入 ${fixed(snrIn, 1)} dB · 制度增益 3β²(β+1) = ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 2)} dB（β=${fixed(beta, 1)}）· 门限拐点 ${fixed(fmKnee, 1)} dB 是示意模型，不是解析结果`
-            : `输入 ${fixed(snrIn, 1)} dB · 增益 ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 1)} dB`,
+            : `输入 ${fixed(snrIn, 1)} dB · 增益 ${fixed(10 * Math.log10(Math.max(gainDb, 1e-9)), 1)} dB`) + ` · ${noiseHint(mixSigma)}`,
         warn: threshold,
       },
     ],
@@ -475,9 +479,33 @@ function computeModulation(params: Record<string, number>): CourseView {
       ? envelopeFail
         ? '调制度 m 超过 1，包络在过零点翻折，检波出来的波形已经不再是原来的消息——失真读数越过 5%，包络检波失效。'
         : `FM 输入信噪比跌破门限（β=${fixed(beta, 1)} 时拐点在 ${fixed(fmKnee, 1)} dB），输出信噪比断崖式下跌，增加带宽换来的增益在这一段不管用了。`
-      : `解调输出贴着消息，失真 ${fixed(distortion * 100, 1)}%，带宽实测 ${fixed(measuredBand, 2)} kHz，${mode === 3 ? '是 Carson 上限' : '是理论值'} ${fixed(theoryBand, 2)} kHz 的 ${fixed(bandRatio * 100, 0)}%——${mode === 3 ? '98% 能量带宽天然比上限窄，β 越大越贴近上限。' : mode === 2 ? '本图消息只有 1 kHz 与 1.5 kHz 两条谱线，上边带从 f_c+1 到 f_c+1.5，所以只占 0.5 kHz；一般情况 SSB 带宽等于消息最高频。' : '两条谱线都被搬过去，双边带正好占满。'}这条线按输出信噪比 ${fixed(outSnr, 1)} dB 标定了噪声（σ = ${fixed(mixSigma, 3)}），画出来的不是理想波形。`,
+      : `${noiseSentence(mixSigma, outSnr, distortion)}带宽实测 ${fixed(measuredBand, 2)} kHz，${mode === 3 ? '是 Carson 上限' : '是理论值'} ${fixed(theoryBand, 2)} kHz 的 ${fixed(bandRatio * 100, 0)}%——${mode === 3 ? '98% 能量带宽天然比上限窄，β 越大越贴近上限。' : mode === 2 ? '本图消息只有 1 kHz 与 1.5 kHz 两条谱线，上边带从 f_c+1 到 f_c+1.5，所以只占 0.5 kHz；一般情况 SSB 带宽等于消息最高频。' : '两条谱线都被搬过去，双边带正好占满。'}`,
     failed,
   }
+}
+
+// 结论句与 hint 共用同一套分档，避免「图上被噪声盖住」还配一句「贴着消息」。
+function noiseTierPhrase(sigma: number): string {
+  if (sigma < NOISE_QUIET) return '图上基本干净'
+  if (sigma < NOISE_BURIED) return '图上开始起毛'
+  return '图上已被噪声盖住'
+}
+
+function noiseHint(sigma: number): string {
+  return `图上这条线按这个信噪比标了噪声（σ = ${fixed(sigma, 3)}，${noiseTierPhrase(sigma)}）`
+}
+
+function noiseSentence(sigma: number, outSnr: number, distortion: number): string {
+  const snr = fixed(outSnr, 1)
+  const level = fixed(sigma, 3)
+  const pct = fixed(distortion * 100, 1)
+  if (sigma < NOISE_QUIET) {
+    return `解调输出贴着消息，失真与带宽读数都按理想路径算、不是从图上量的；图上这条线按输出信噪比 ${snr} dB 标了噪声（σ = ${level}），只有细看才见毛刺。`
+  }
+  if (sigma < NOISE_BURIED) {
+    return `解调输出开始起毛，还能看出消息形状；读数是按理想路径算的，不是从这张图上量的，图上这条线按输出信噪比 ${snr} dB 标了噪声（σ = ${level}）。`
+  }
+  return `这条线已经被噪声盖住，图上看不出消息；但失真读数仍按理想路径算，是 ${pct}%，不是从这张图上量的，图上按输出信噪比 ${snr} dB 标了噪声（σ = ${level}）。`
 }
 
 function aLawCompress(x: number, A = 87.6): number {

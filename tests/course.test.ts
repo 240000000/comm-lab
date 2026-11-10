@@ -761,7 +761,7 @@ test('第 5 章：噪声按输出信噪比标定，同一档两次算出来逐�
   const rms = Math.sqrt(sum / n)
   const expect = Math.sqrt(sLow * sLow + sHigh * sHigh)
   assert.ok(Math.abs(rms - expect) / expect < 0.15, `噪声均方根 ${rms.toFixed(3)} 应贴着 √(σ₁²+σ₂²)=${expect.toFixed(3)}`)
-  assert.ok(view.conclusion.includes('标定了噪声'))
+  assert.ok(view.conclusion.includes('标了噪声'))
 })
 
 test('第 5 章：三个读数仍走理想路径，加噪之后逐字不变', () => {
@@ -773,6 +773,36 @@ test('第 5 章：三个读数仍走理想路径，加噪之后逐字不变', ()
   assert.equal(fm.readouts.find((r) => r.label === '输出信噪比')!.value, '57.4 dB')
   const low = chapter.compute({ mode: 0, m: 0.6, beta: 2, snrIn: 5 })
   assert.equal(low.readouts.find((r) => r.label === '输出信噪比')!.value, '-0.2 dB')
+})
+
+test('第 5 章：结论句按图上噪声分档，σ < 0.15 才说「贴着消息」', () => {
+  const chapter = chapterByNo(5)!
+  // σ = 0.1023，图上只有细毛刺——这一档才配说「贴着消息」。
+  const clean = chapter.compute({ mode: 0, m: 0.6, beta: 2, snrIn: 25 })
+  assert.match(clean.conclusion, /解调输出贴着消息/)
+  assert.match(clean.conclusion, /按理想路径算/)
+  assert.doesNotMatch(clean.conclusion, /已经被噪声盖住/)
+})
+
+test('第 5 章：σ 跨过 0.15 与 0.5 时结论句换档，中档说起毛', () => {
+  const chapter = chapterByNo(5)!
+  // σ = 0.3236，落在 0.15 与 0.5 之间。
+  const mid = chapter.compute({ mode: 0, m: 0.6, beta: 2, snrIn: 15 })
+  assert.match(mid.conclusion, /开始起毛/)
+  assert.match(mid.conclusion, /还能看出消息形状/)
+  assert.doesNotMatch(mid.conclusion, /贴着消息/)
+})
+
+test('第 5 章：噪声盖住图时结论句直说图上看不出消息，读数口径也写清', () => {
+  const chapter = chapterByNo(5)!
+  // σ = 1.0233，线基本被埋掉；失真仍按理想路径算 0.0%，不能说成从图上量的。
+  const buried = chapter.compute({ mode: 0, m: 0.6, beta: 2, snrIn: 5 })
+  assert.match(buried.conclusion, /已经被噪声盖住/)
+  assert.match(buried.conclusion, /图上看不出消息/)
+  assert.match(buried.conclusion, /失真读数仍按理想路径算，是 0\.0%/)
+  assert.doesNotMatch(buried.conclusion, /贴着消息/)
+  const hint = buried.readouts.find((r) => r.label === '输出信噪比')!.hint
+  assert.match(hint, /图上已被噪声盖住/)
 })
 
 test('第 2 章：图上刻度与能量口径分两行报，两个数不混为一谈', () => {
