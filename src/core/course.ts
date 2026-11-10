@@ -2194,7 +2194,7 @@ function computePll(params: Record<string, number>): CourseView {
     {
       label: '环路锁定',
       value: locked ? '锁住' : '没锁住',
-      hint: `理论上收敛条件是 |1−K| < 1，也就是 0 < K < 2；当前 K = ${gain.toFixed(2)}，误差乘数 1−K = ${multiplier.toFixed(2)}。`,
+      hint: `理论上收敛条件是 |1−K| < 1，也就是 0 < K < 2；当前 K = ${gain.toFixed(2)}，误差乘数 1−K = ${multiplier.toFixed(2)}。这一屏是一阶数字锁相环的抽象模型：对应教材 13.2 载波同步与 13.3 码元同步里的环路，教材没有同名小节，这里只演示一件事——增益决定收不收敛。`,
       warn: !locked,
     },
   ]
@@ -2273,7 +2273,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   },
   {
     no: 5,
-    title: '模拟调制',
+    title: '模拟调制系统',
     implemented: true,
     reason: '',
     question: '调制度超过 1 之后，包络检波为什么就认不出原来的波形了？',
@@ -2284,7 +2284,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   },
   {
     no: 6,
-    title: '数字基带传输',
+    title: '数字基带传输系统',
     implemented: true,
     reason: '',
     question: '滚降系数压到很小、采样又偏了一点，眼图为什么就闭上了？',
@@ -2295,7 +2295,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   },
   {
     no: 7,
-    title: '数字带通传输',
+    title: '数字带通传输系统',
     implemented: true,
     reason: '',
     question: '同样的比特率，为什么 2PSK 比 2FSK 少用 3 dB 就能达到同样的误码率？',
