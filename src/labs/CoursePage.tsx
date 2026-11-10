@@ -18,6 +18,7 @@ import {
 import { CourseChart } from './CourseChart.tsx'
 import { CourseLegend } from './CourseLegend.tsx'
 import { ParamSlider } from './ParamSlider.tsx'
+import type { OutlinedBook } from '../course/pdfOutline.ts'
 
 const START_CHAPTER = 2
 
@@ -28,28 +29,37 @@ function initialChapter(): number {
   return chapterByNo(no) ? no : START_CHAPTER
 }
 
-/** 目录 13 项与拖动无关，单独拿出来 memo，切参数时不跟着重渲染。 */
-const CourseTree = memo(function CourseTree({
-  current,
-  onPick,
-}: {
-  current: number
-  onPick: (no: number) => void
-}) {
+/** 目录一行：默认教材与导入教材共用这一种画法。 */
+type TreeRow = {
+  key: string
+  mark: string
+  done: boolean
+  no: string
+  title: string
+  note: string | null
+  active: boolean
+  disabled: boolean
+  onPick: () => void
+}
+
+/** 目录与拖动无关，单独拿出来 memo，切参数时不跟着重渲染。 */
+const CourseTree = memo(function CourseTree({ rows }: { rows: TreeRow[] }) {
   return (
     <nav className="course-tree" aria-label="课程目录">
-      {COURSE_CHAPTERS.map((item) => (
+      {rows.map((row) => (
         <button
-          key={item.no}
+          key={row.key}
           type="button"
-          className={`course-item${item.no === current ? ' active' : ''}`}
-          onClick={() => onPick(item.no)}
+          className={`course-item${row.active ? ' active' : ''}${row.disabled ? ' disabled' : ''}`}
+          onClick={row.onPick}
+          disabled={row.disabled}
         >
-          <span className={`course-mark${item.implemented ? ' done' : ''}`}>
-            {DEEP_LAB_CHAPTERS.includes(item.no) ? '●' : '○'}
+          <span className={`course-mark${row.done ? ' done' : ''}`}>{row.mark}</span>
+          <span className="course-no">{row.no}</span>
+          <span className="course-title">
+            {row.title}
+            {row.note ? <em className="course-note">{row.note}</em> : null}
           </span>
-          <span className="course-no">{String(item.no).padStart(2, '0')}</span>
-          <span className="course-title">{item.title}</span>
         </button>
       ))}
     </nav>
@@ -186,30 +196,40 @@ const ChapterScreen = memo(function ChapterScreen({
   )
 })
 
+const MAX_PDF_BYTES = 250 * 1024 * 1024
+const SLOW_PARSE_MS = 15_000
+
+type ImportPreview = { fileName: string; book: OutlinedBook; playable: number }
+
+type ImportState =
+  | { status: 'idle' }
+  | { status: 'parsing'; fileName: string; slow: boolean }
+  | { status: 'preview'; preview: ImportPreview }
+  | { status: 'failed'; fileName: string; message: string }
+
 export function CoursePage() {
   const [no, setNo] = useState(initialChapter)
   const chapter = chapterByNo(no) ?? chapterByNo(START_CHAPTER)!
   const [params, setParams] = useState<Record<string, number>>(chapter.defaults)
-  // 拖动中每隔一帧才算一次：params 是滑块与标签用的即时值，committed 才是喂给
-  // compute 的值。松手时 end() 会用最后一次的即时值补算一遍，所以松手后看到的
-  // 读数、结论、失效判据跟一次都没省过的完全一样，被省掉的只有中间帧。
   const [committed, setCommitted] = useState<Record<string, number>>(chapter.defaults)
   const dragRef = useRef(createDragCoalescer<Record<string, number>>())
   const paramsRef = useRef(params)
+  const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
+  const [imported, setImported] = useState<ImportPreview | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const slowTimer = useRef<number | null>(null)
 
   const view = useMemo(
     () => (chapter.compute ? chapter.compute(committed) : null),
     [chapter, committed],
   )
 
-  // 三个回调都固定住引用：不改的话每次渲染都是新闭包，
-  // 下面 memo 过的目录和控件每帧都会跟着重渲染。
   const pick = useCallback((next: number) => {
     const target = chapterByNo(next)
     if (!target) return
     setNo(next)
-    paramsRef.current = target.defaults
     setParams(target.defaults)
+    paramsRef.current = target.defaults
     setCommitted(target.defaults)
   }, [])
 
@@ -224,15 +244,125 @@ export function CoursePage() {
   const onDragEnd = useCallback(() => dragRef.current.end(setCommitted), [])
 
   const onFail = useCallback(() => {
-    paramsRef.current = chapter.failPreset
-    setParams(chapter.failPreset)
-    setCommitted(chapter.failPreset)
+    const preset = chapter.failPreset
+    paramsRef.current = preset
+    setParams(preset)
+    setCommitted(preset)
   }, [chapter])
+
   const onReset = useCallback(() => {
     paramsRef.current = chapter.defaults
     setParams(chapter.defaults)
     setCommitted(chapter.defaults)
   }, [chapter])
+
+  const stopSlowTimer = useCallback(() => {
+    if (slowTimer.current !== null) {
+      window.clearTimeout(slowTimer.current)
+      slowTimer.current = null
+    }
+  }, [])
+
+  const handleFile = useCallback(
+    async (file: File | undefined) => {
+      if (!file) return
+      const fileName = file.name
+      if (!/\.pdf$/i.test(fileName)) {
+        setImportState({ status: 'failed', fileName, message: '这里只认 PDF，选一个 .pdf 文件试试。' })
+        return
+      }
+      if (file.size > MAX_PDF_BYTES) {
+        setImportState({ status: 'failed', fileName, message: '这个文件超过 250 MB，先换一本小点的。' })
+        return
+      }
+      setImportState({ status: 'parsing', fileName, slow: false })
+      slowTimer.current = window.setTimeout(() => {
+        setImportState((prev) => (prev.status === 'parsing' ? { ...prev, slow: true } : prev))
+      }, SLOW_PARSE_MS)
+      // 解析层整块懒加载：pdfOutline 和自己那套关键词表不进主包，
+      // 只有真的选了文件才把这几个模块拉下来。
+      const outline = await import('../course/pdfOutline.ts')
+      try {
+        const entries = await outline.parsePdfOutline(await file.arrayBuffer())
+        if (entries.length === 0) {
+          setImportState({
+            status: 'failed',
+            fileName,
+            message: '这本书没有书签，文字层也抠不出章名（大概是扫描件）。这种书请手动输章名。',
+          })
+          return
+        }
+        const book = { ...outline.toBook(entries), title: fileName.replace(/\.pdf$/i, '') }
+        const playable = book.chapters.filter(
+          (entry) => entry.topicId && chapterByNo(Number(entry.topicId)),
+        ).length
+        setImportState({ status: 'preview', preview: { fileName, book, playable } })
+      } catch (error) {
+        setImportState({
+          status: 'failed',
+          fileName,
+          message: error instanceof outline.PdfOutlineError ? error.message : '这本 PDF 读不动，换一本试试。',
+        })
+      } finally {
+        stopSlowTimer()
+      }
+    },
+    [stopSlowTimer],
+  )
+
+  const useThisBook = useCallback(() => {
+    setImportState((prev) => {
+      if (prev.status !== 'preview') return prev
+      setImported(prev.preview)
+      const first = prev.preview.book.chapters.find((entry) => entry.topicId)
+      if (first?.topicId) pick(Number(first.topicId))
+      return { status: 'idle' }
+    })
+  }, [pick])
+
+  const cancelImport = useCallback(() => setImportState({ status: 'idle' }), [])
+
+  const restoreDefault = useCallback(() => {
+    setImported(null)
+    setImportState({ status: 'idle' })
+    pick(START_CHAPTER)
+  }, [pick])
+
+  const rows = useMemo<TreeRow[]>(() => {
+    if (!imported) {
+      return COURSE_CHAPTERS.map((item) => ({
+        key: `default-${item.no}`,
+        mark: DEEP_LAB_CHAPTERS.includes(item.no) ? '●' : '○',
+        done: item.implemented,
+        no: String(item.no).padStart(2, '0'),
+        title: item.title,
+        note: null,
+        active: item.no === no,
+        disabled: false,
+        onPick: () => pick(item.no),
+      }))
+    }
+    return imported.book.chapters.map((entry, index) => {
+      const target = entry.topicId ? chapterByNo(Number(entry.topicId)) : undefined
+      return {
+        key: `book-${index}`,
+        mark: target ? '●' : '○',
+        done: Boolean(target?.implemented),
+        no: String(entry.no ?? index + 1).padStart(2, '0'),
+        title: target ? `第 ${target.no} 章 · ${target.title}` : entry.rawTitle,
+        note: target
+          ? entry.page === null
+            ? 'PDF 页码未标'
+            : `PDF 第 ${entry.page} 页`
+          : '暂无仿真',
+        active: Boolean(target) && target!.no === no,
+        disabled: !target,
+        onPick: () => {
+          if (target) pick(target.no)
+        },
+      }
+    })
+  }, [imported, no, pick])
 
   return (
     <main className="lab course">
@@ -240,16 +370,88 @@ export function CoursePage() {
         ← 返回首页
       </a>
       <header className="lab-head">
-        <p className="eyebrow">课程视图 · 13 章</p>
+        <p className="eyebrow">课程视图 · {imported ? imported.book.title : '13 章'}</p>
         <h1>把整本书摊成 13 格，一次只看一格</h1>
         <p className="lede">
           左边是目录，点一章，右边给一屏：一句话问题、两三个滑块、一张图、三个读数、一句话结论。
-          13 章全部能拖，每章都是一屏：一句话问题、两三个参数、一张图、三个读数、一句结论；点第 4、8、11 章能跳到对应的实验台。
+          {imported
+            ? ' 现在用的是你导入的教材，目录只在内存里，刷新就回到默认 13 章。'
+            : ' 13 章全部能拖，另有实验台可以直接跳到对应的交互页。'}
         </p>
       </header>
 
       <div className="course-layout">
-        <CourseTree current={no} onPick={pick} />
+        <div className="course-side">
+          <div className="course-import-bar">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="course-file"
+              aria-label="导入教材 PDF"
+              onChange={(event) => {
+                void handleFile(event.target.files?.[0])
+                event.target.value = ''
+              }}
+            />
+            <button type="button" className="course-btn ghost" onClick={() => fileRef.current?.click()}>
+              导入教材
+            </button>
+            {imported ? (
+              <button type="button" className="course-btn ghost" onClick={restoreDefault}>
+                恢复默认教材
+              </button>
+            ) : null}
+          </div>
+          <p className="course-import-note">
+            {imported
+              ? `当前《${imported.book.title}》：${imported.book.chapters.length} 章里 ${imported.playable} 章能玩。PDF 不上传、不落盘，刷新即失效。`
+              : '选一本 .pdf，只读它的书签；不上传、不落盘，刷新就回默认 13 章。'}
+          </p>
+
+          {importState.status === 'parsing' ? (
+            <p className="course-import-status">
+              正在读《{importState.fileName}》的目录…
+              {importState.slow ? ' 还在解析，大文件要等一会儿，可以继续等。' : ''}
+            </p>
+          ) : null}
+
+          {importState.status === 'failed' ? (
+            <p className="course-import-status failed">{importState.message}</p>
+          ) : null}
+
+          {importState.status === 'preview' ? (
+            <div className="course-preview" role="dialog" aria-label="教材预览">
+              <p className="course-preview-title">{importState.preview.book.title}</p>
+              <p className="course-preview-meta">
+                识别到 {importState.preview.book.chapters.length} 章，其中 {importState.preview.playable} 章有仿真。
+              </p>
+              <ol className="course-preview-list">
+                {importState.preview.book.chapters.map((entry, index) => {
+                  const target = entry.topicId ? chapterByNo(Number(entry.topicId)) : undefined
+                  return (
+                    <li key={`preview-${index}`} className={target ? undefined : 'miss'}>
+                      <span>{target ? `第 ${target.no} 章 · ${target.title}` : entry.rawTitle}</span>
+                      <span className="course-preview-page">
+                        {target ? (entry.page === null ? 'PDF 页码未标' : `PDF 第 ${entry.page} 页`) : '暂无仿真'}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ol>
+              <div className="course-actions">
+                <button type="button" className="course-btn" onClick={useThisBook}>
+                  用这本书
+                </button>
+                <button type="button" className="course-btn ghost" onClick={cancelImport}>
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <CourseTree rows={rows} />
+        </div>
 
         <section className="course-main">
           {view ? (
@@ -270,6 +472,7 @@ export function CoursePage() {
       </div>
     </main>
   )
+}
 
 function TodoScreen({ chapter }: { chapter: CourseChapter }) {
   return (
@@ -288,5 +491,4 @@ function TodoScreen({ chapter }: { chapter: CourseChapter }) {
       ) : null}
     </section>
   )
-}
 }
