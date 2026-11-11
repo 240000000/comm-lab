@@ -846,19 +846,19 @@ test('第 5 章：噪声盖住图时结论句直说图上看不出消息，读�
   assert.match(hint, /图上已被噪声盖住/)
 })
 
-test('第 2 章：图上刻度与能量口径分两行报，两个数不混为一谈', () => {
+test('第 2 章：功率档报平均功率与相邻峰间隔，两个数分别对应 P = E/Tp 和 Tp', () => {
   const chapter = chapterByNo(2)!
   const view = chapter.compute({ tau: 1.5, shape: 0, kind: 1 })
-  const graph = view.readouts.find((r) => r.label === '图上 自相关 R(0)/T')!
-  const peak = view.readouts.find((r) => r.label === '原始自相关峰 R(0)')!
-  assert.equal(graph.value, '0.1875')
-  assert.equal(peak.value, '1.5000')
-  // 两者差的是窗长 T = 8 ms，读数区要把这层关系写出来。
-  assert.ok(graph.hint.includes('图上实线'))
-  assert.ok(peak.hint.includes('还没除 T'))
+  const power = view.readouts.find((r) => r.label === '平均功率 P')!
+  const spacing = view.readouts.find((r) => r.label === '相邻峰间隔')!
+  // τ = 1.5 时 2τ = 3，取能整除 8 且 ≥ 3 的最小周期 Tp = 4；矩形脉冲 E = 1.5，P = 1.5/4。
+  assert.equal(power.value, '0.3750')
+  assert.equal(spacing.value, '4.00 ms')
+  assert.ok(power.hint.includes('E / Tp'), `平均功率的 hint 应写清 P = E / Tp，实际 ${power.hint}`)
+  assert.ok(power.hint.includes('4.00'), `平均功率的 hint 应带上当前 Tp，实际 ${power.hint}`)
 })
 
-test('第 2 章：能量档两条线逐点相等，功率档归一后也重合', () => {
+test('第 2 章：能量档两条线逐点相等，功率档两条线也逐点相等', () => {
   const chapter = chapterByNo(2)!
   const energy = chapter.compute({ ...chapter.defaults, kind: 0 })
   assert.deepEqual(energy.series[0].points, energy.series[1].points)
@@ -866,10 +866,64 @@ test('第 2 章：能量档两条线逐点相等，功率档归一后也重合',
 
   const power = chapter.compute({ ...chapter.defaults, kind: 1 })
   assert.deepEqual(power.series[0].points, power.series[1].points)
-  // 图上刻度归一到 R(0)/T：τ = 1.5 时峰是 1.5/8 = 0.1875。
+  // 周期脉冲串的峰是平均功率 P = E/Tp = 1.5/4，不是除窗长 T 得到的 0.1875。
   const peak = Math.max(...power.series[0].points.map((p) => p[1]))
-  assert.ok(Math.abs(peak - 0.1875) < 1e-9, `功率档图上峰值应为 0.1875，实际 ${peak}`)
+  assert.ok(Math.abs(peak - 0.375) < 1e-9, `功率档图上峰值应为 0.375，实际 ${peak}`)
   assert.equal(power.failed, false)
+})
+
+test('第 2 章：功率档的峰按周期重复，±Tp 处与零延迟同高、远处不衰到零', () => {
+  const chapter = chapterByNo(2)!
+  const view = chapter.compute({ tau: 1.5, shape: 0, kind: 1 })
+  const points = view.series[0].points
+  const near = (x: number) => {
+    let best = points[0]
+    for (const p of points) if (Math.abs(p[0] - x) < Math.abs(best[0] - x)) best = p
+    return best[1]
+  }
+  const zero = near(0)
+  const minusTp = near(-4)
+  assert.ok(Math.abs(zero - 0.375) < 1e-9, `零延迟峰应为 0.375，实际 ${zero}`)
+  assert.ok(Math.abs(minusTp - zero) < 1e-9, `−Tp 处的峰应与零延迟同高，实际 ${minusTp} vs ${zero}`)
+  // 能量信号在脉冲外归零；周期信号的功率有限，τ 再大也还在同一量级。
+  const tail = points.filter((p) => Math.abs(p[0]) > 2)
+  const tailMax = Math.max(...tail.map((p) => Math.abs(p[1])))
+  assert.ok(tailMax > 0.3, `|τ| > 2 之后仍应有峰，实际最大 ${tailMax}`)
+})
+
+test('第 2 章：能量档在 |τ| > τ 之外确实归零，只有一个峰', () => {
+  const chapter = chapterByNo(2)!
+  const view = chapter.compute({ tau: 1.5, shape: 0, kind: 0 })
+  const points = view.series[0].points
+  const outside = points.filter((p) => Math.abs(p[0]) > 1.6)
+  const outsideMax = Math.max(...outside.map((p) => Math.abs(p[1])))
+  assert.ok(outsideMax < 1e-9, `能量档脉冲外应归零，实际最大 ${outsideMax}`)
+  const peaks = points.filter((p, i) => {
+    if (i === 0 || i === points.length - 1) return false
+    return p[1] >= points[i - 1][1] && p[1] >= points[i + 1][1] && p[1] > 1e-6
+  })
+  assert.equal(peaks.length, 1, `能量档只该有一个峰，实际 ${peaks.length} 个`)
+})
+
+test('第 2 章：两档的图必须逐点不相等（防止以后又被归一化成一个样）', () => {
+  const chapter = chapterByNo(2)!
+  for (const tau of [0.5, 1.5]) {
+    const energy = chapter.compute({ tau, shape: 0, kind: 0 }).series[0].points
+    const power = chapter.compute({ tau, shape: 0, kind: 1 }).series[0].points
+    assert.equal(energy.length, power.length)
+    const same = energy.every((p, i) => Math.abs(p[1] - power[i][1]) < 1e-9)
+    assert.equal(same, false, `τ=${tau} 时两档的曲线不该完全相同`)
+  }
+})
+
+test('第 2 章：周期 Tp 整除窗长 8，且整段里装得下一个完整脉冲', () => {
+  const chapter = chapterByNo(2)!
+  for (const tau of [0.2, 0.5, 1.5, 2, 3, 4]) {
+    const view = chapter.compute({ tau, shape: 0, kind: 1 })
+    const spacing = Number(view.readouts.find((r) => r.label === '相邻峰间隔')!.value.replace(' ms', ''))
+    assert.equal(Number.isInteger(8 / spacing), true, `τ=${tau} 的 Tp=${spacing} 没有整除 8`)
+    assert.ok(spacing >= 2 * tau - 1e-9, `τ=${tau} 的 Tp=${spacing} 装不下一个完整脉冲`)
+  }
 })
 
 test('第 2 章：把幅度谱当功率谱，形状变了、对偶偏差到 0.9 量级', () => {

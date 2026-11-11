@@ -119,6 +119,29 @@ function pulseSamples(tauMs: number, shape: number): number[] {
   return out
 }
 
+/**
+ * 周期脉冲串：周期 Tp（毫秒）必须整除窗长 T = 8，循环自相关才不会在窗的
+ * 边界上接错位。每个周期里只放一个完整脉冲（2τ ≤ Tp），所以峰的位置就是
+ * Tp 的整数倍，峰高是平均功率 E/Tp。
+ */
+function periodicSamples(tauMs: number, shape: number, periodMs: number): number[] {
+  const n = 256
+  const T = 8
+  const dt = T / n
+  const out: number[] = []
+  for (let i = 0; i < n; i++) {
+    const local = (i * dt) % periodMs
+    if (local >= tauMs) {
+      out.push(0)
+    } else if (shape === 0) {
+      out.push(1)
+    } else {
+      out.push(1 - Math.abs((2 * local) / tauMs - 1))
+    }
+  }
+  return out
+}
+
 function spectrumSquared(samples: number[]): number[] {
   const x: Complex[] = samples.map((v) => ({ re: v, im: 0 }))
   return dft(x).map((c) => c.re * c.re + c.im * c.im)
@@ -142,13 +165,19 @@ function computeSignal(params: Record<string, number>): CourseView {
   const n = 256
   const T = 8
   const dt = T / n
-  const samples = pulseSamples(tau, shape)
+  // 功率档换真周期信号：单脉冲只是能量信号，拿同一个 pulseSamples 再除个窗长
+  // 在物理上不成立，两档的图才会长得一模一样。Tp 只从能整除窗长的档里挑，
+  // 取第一个装得下一个完整脉冲的（2τ ≤ Tp）。
+  const periodCandidates = [1, 2, 4, 8]
+  const period = kind === 1 ? (periodCandidates.find((p) => p >= 2 * tau) ?? 8) : 0
+  const singlePulse = pulseSamples(tau, shape)
+  const samples = kind === 1 ? periodicSamples(tau, shape, period) : singlePulse
   // 反例档把幅度谱当功率谱：少一次平方，反变换出来的曲线形状就不对了。
   const used = idftReal(kind === 2 ? spectrumMagnitude(samples) : spectrumSquared(samples))
   // 参照那条线永远走正规的 |X|²，两档才比得出「同一个归一化下还差多少」。
   const reference = kind === 2 ? idftReal(spectrumSquared(samples)) : used
-  // 能量信号：∫x²dt；功率信号：再除以窗长。
-  const energyPeak = samples.reduce((sum, v) => sum + v * v * dt, 0)
+  // 单脉冲的能量 ∫x²dt；功率档的峰高是平均功率 P = E/Tp，不是这个数。
+  const energyPeak = singlePulse.reduce((sum, v) => sum + v * v * dt, 0)
 
   // 对偶：能量信号的功率谱是 |X|²，功率信号要再除以周期 T。
   // 两条线共用同一个除数，图上比的就只剩「谱有没有用错」。
@@ -162,6 +191,21 @@ function computeSignal(params: Record<string, number>): CourseView {
     peakAbs = Math.max(peakAbs, Math.abs(fromPsd))
   }
   const deviation = worst / (peakAbs || 1)
+
+  // 相邻峰间隔直接从曲线上量：找第一个超过 1/4 峰高的局部极大，滞后乘 dt。
+  let spacingLags = 0
+  for (let m = 1; m < n; m += 1) {
+    const value = Math.abs(used[m])
+    if (
+      value >= 0.25 * peakAbs &&
+      value >= Math.abs(used[m - 1]) &&
+      value >= Math.abs(used[(m + 1) % n])
+    ) {
+      spacingLags = m
+      break
+    }
+  }
+  const measuredPeriod = spacingLags > 0 ? spacingLags * dt : period
 
   // 相关峰宽度按半高全宽报：先找最后一个高于半高的整数滞后，再在它和下一个
   // 采样点之间连直线求半高穿越点，穿越滞后乘 2 就是全宽。只数整数滞后的话，
@@ -220,26 +264,35 @@ function computeSignal(params: Record<string, number>): CourseView {
             warn: failed,
           },
         ]
-      : [
-          {
-            label: kind === 2 ? '图上 曲线峰值/T' : '图上 自相关 R(0)/T',
-            value: fixed(peakLevel / T, 4),
-            hint:
-              kind === 2
-                ? `这条曲线是 |X| 的反变换，不是自相关；图上实线用的就是这个刻度，峰再除以窗长 T = ${fixed(T, 2)} ms。`
-                : `图上实线用的是这个刻度：峰再除以窗长 T = ${fixed(T, 2)} ms。`,
-            warn: failed,
-          },
-          {
-            label: kind === 2 ? '原始 曲线峰值' : '原始自相关峰 R(0)',
-            value: fixed(peakLevel, 4),
-            hint:
-              kind === 2
-                ? `谱用错了，这个峰已经不等于能量 E = ${fixed(energyPeak, 4)}。`
-                : `能量口径的峰，还没除 T；理论 E = ${fixed(energyPeak, 4)}。`,
-            warn: failed,
-          },
-        ]
+      : kind === 1
+        ? [
+            {
+              label: '平均功率 P',
+              value: fixed(peakLevel / T, 4),
+              hint: `P = E / Tp：单脉冲能量 E = ${fixed(energyPeak, 4)}、Tp = ${fixed(period, 2)} ms（峰高的实际读数就是这个 P）。`,
+              warn: failed,
+            },
+            {
+              label: '相邻峰间隔',
+              value: `${fixed(measuredPeriod, 2)} ms`,
+              hint: '从曲线上量出来的：自相关按 Tp 重复，τ 再大也不会衰到零。',
+              warn: false,
+            },
+          ]
+        : [
+            {
+              label: '图上 曲线峰值/T',
+              value: fixed(peakLevel / T, 4),
+              hint: `这条曲线是 |X| 的反变换，不是自相关；图上实线用的就是这个刻度，峰再除以窗长 T = ${fixed(T, 2)} ms。`,
+              warn: failed,
+            },
+            {
+              label: '原始 曲线峰值',
+              value: fixed(peakLevel, 4),
+              hint: `谱用错了，这个峰已经不等于能量 E = ${fixed(energyPeak, 4)}。`,
+              warn: failed,
+            },
+          ]
 
   const readouts: CourseReadout[] = [
     ...peakReadouts,
@@ -262,7 +315,7 @@ function computeSignal(params: Record<string, number>): CourseView {
     kind === 2
       ? `把幅度谱 |X| 当成功率谱，少了一次平方：反变换出来的不是自相关，整条曲线形状都变了，对偶偏差 ${exponent(deviation)}——两条线再也对不上，判据 1e-3 过不了。功率谱必须是 |X|²，不是 |X|。`
       : kind === 1
-        ? `两条线都按窗长 T 归一，仍然贴在一起：功率信号的自相关是 (1/T)∫x(t)x(t+τ)dt，正好是 |X|²/T 的反变换，偏差 ${nearZero}。图上刻度读的是 R(0)/T = ${fixed(peakLevel / T, 4)}，能量口径的原始峰仍是 ${fixed(peakLevel, 4)}。`
+        ? `能量信号的自相关只在脉冲宽度内非零，τ 再大就归零，峰的读数直接是能量 E。功率信号换成了周期 Tp = ${fixed(period, 2)} ms 的脉冲串，自相关跟着按周期重复、τ 再大也不会衰到零——它读的是平均功率 P = E/Tp = ${fixed(peakLevel / T, 4)}，不是能量。两条线照样贴在一起，偏差 ${nearZero}。`
         : `两条线贴在一起：能量信号的功率谱就是 |X|²，反变换正好回到自相关，偏差 ${nearZero}，远小于 1e-3。虚线与实线的尺度完全一样、又被画在上面，所以屏幕上只剩一条——不是漏画。`
 
   return {
@@ -2313,7 +2366,7 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     title: '确知信号',
     implemented: true,
     reason: '',
-    question: '脉冲的自相关，为什么能和它的功率谱对上？',
+    question: '同一个自相关，为什么能量信号只开一个峰、周期功率信号开一串？',
     params: [tauParam, shapeParam, kindParam],
     defaults: { tau: 1.5, shape: 0, kind: 0 },
     failPreset: { tau: 1.5, shape: 0, kind: 2 },
