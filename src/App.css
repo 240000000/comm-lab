@@ -2259,6 +2259,80 @@ a.card {
   pointer-events: none;
 }
 
+/* 首页模式切换：两枚按钮排成一行胶囊，默认模式先亮。 */
+.home-modes {
+  display: inline-flex;
+  gap: 4px;
+  margin: clamp(20px, 4vh, 30px) 0 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(16, 24, 34, 0.72);
+}
+
+.home-mode {
+  padding: 7px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.home-mode:hover {
+  color: var(--text);
+}
+
+.home-mode.on {
+  background: rgba(60, 227, 198, 0.16);
+  color: var(--accent);
+}
+
+/* 扩展模式面板：教材栏 + 课程视图入口卡 + 一句边界说明，竖着排。 */
+.home-extra {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  margin-top: clamp(28px, 5vh, 44px);
+}
+
+.home-extra .textbook-bar {
+  margin: 0;
+  max-width: 640px;
+}
+
+.course-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 640px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: inherit;
+  text-decoration: none;
+}
+
+.course-entry:hover {
+  border-color: var(--accent);
+}
+
+.course-entry h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.home-extra-note {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
 /* 原生控件自带的加载转圈与页面转圈重复，隐藏原生那个，保留 CSS 转圈。 */
 video::-webkit-media-controls-loading-panel,
 .short-film-video::-webkit-media-controls-loading-panel {
@@ -2622,7 +2696,7 @@ video::-webkit-media-controls-overlay-play-button {
 .textbook-bar {
   display: grid;
   gap: 8px;
-  max-width: 1080px;
+  max-width: min(1360px, 100% - 48px);
   margin: 0 auto 18px;
   padding: 14px 16px;
   border: 1px solid var(--line);

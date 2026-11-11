@@ -42,10 +42,9 @@ export function HomeParticles() {
     if (!ctx) return
 
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
-    // 两套点阵各算一次，之后逐帧只读不建。
+    // 两套点阵各算一次，之后逐帧只读不建；挡住全部 60 条迹的还是一套点阵。
     const eye = eyePoints()
     const spectrum = spectrumPoints()
-    const half = EYE_TRACES / 2
     const sx = new Float32Array(MAX_PARTICLES)
     const sy = new Float32Array(MAX_PARTICLES)
     const halfSize = new Float32Array(MAX_PARTICLES)
@@ -82,34 +81,32 @@ export function HomeParticles() {
       const spin = (elapsedMs / 14000) * Math.PI * 2
       let count = 0
 
-      for (let zone = 0; zone < 2; zone += 1) {
-        // 两团反向转：左边顺时针、右边逆时针，中间才不会连成一片糊。
-        // 变形过程中这一层照常转——两件事迭加，不是二选一。
-        const ang = zone === 0 ? spin : -spin + Math.PI
-        const ca = Math.cos(ang)
-        const sa = Math.sin(ang)
-        const cx = width * (zone === 0 ? 0.17 : 0.83)
-        const cy = height - 175
-        const unit = Math.min(Math.max(width * 0.135, 150), 300)
+      // 只画一团：摆在左下 0.17 处、顺时针转。变形过程中这一层照常转——
+      // 旋转与形态插值两件事迭加，不是二选一。右半区留空，给 hero 与说明让位。
+      const ang = spin
+      const ca = Math.cos(ang)
+      const sa = Math.sin(ang)
+      const cx = width * 0.17
+      const cy = height - 175
+      const unit = Math.min(Math.max(width * 0.135, 150), 300)
 
-        for (let trace = zone * half; trace < (zone + 1) * half; trace += 1) {
-          const rowBase = trace * EYE_SAMPLES * 3
-          for (let sample = 0; sample < EYE_SAMPLES; sample += stride) {
-            const at = rowBase + sample * 3
-            // 同一个下标在两个形态里都有定义，所以这里只是两支线性组合，不新建数组。
-            const x = eye[at] * wa + spectrum[at] * w
-            const y = eye[at + 1] * wa + spectrum[at + 1] * w
-            const z = eye[at + 2] * wa + spectrum[at + 2] * w
-            const rx = x * ca - z * sa
-            const rz = x * sa + z * ca
-            const depth = FOCUS / (FOCUS + rz * 0.55)
-            sx[count] = cx + rx * unit * depth
-            sy[count] = cy - (y * unit * 0.55 + rz * unit * TILT) * depth
-            const level = Math.min(1, Math.max(0, (depth - NEAR_MIN) / (NEAR_MAX - NEAR_MIN)))
-            halfSize[count] = 0.45 + 1.15 * level
-            bucket[count] = Math.min(BUCKETS - 1, Math.floor(level * BUCKETS))
-            count += 1
-          }
+      for (let trace = 0; trace < EYE_TRACES; trace += 1) {
+        const rowBase = trace * EYE_SAMPLES * 3
+        for (let sample = 0; sample < EYE_SAMPLES; sample += stride) {
+          const at = rowBase + sample * 3
+          // 同一个下标在两个形态里都有定义，所以这里只是两支线性组合，不新建数组。
+          const x = eye[at] * wa + spectrum[at] * w
+          const y = eye[at + 1] * wa + spectrum[at + 1] * w
+          const z = eye[at + 2] * wa + spectrum[at + 2] * w
+          const rx = x * ca - z * sa
+          const rz = x * sa + z * ca
+          const depth = FOCUS / (FOCUS + rz * 0.55)
+          sx[count] = cx + rx * unit * depth
+          sy[count] = cy - (y * unit * 0.55 + rz * unit * TILT) * depth
+          const level = Math.min(1, Math.max(0, (depth - NEAR_MIN) / (NEAR_MAX - NEAR_MIN)))
+          halfSize[count] = 0.45 + 1.15 * level
+          bucket[count] = Math.min(BUCKETS - 1, Math.floor(level * BUCKETS))
+          count += 1
         }
       }
 

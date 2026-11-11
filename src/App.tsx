@@ -42,6 +42,9 @@ const modules = [
 
 export default function App() {
   const [route, setRoute] = useState<Route>(currentRoute)
+  // 首页两种模式：默认模式就是原来那四张卡，扩展模式放教材导入与课程视图入口。
+  // 只活在组件里，不写 hash——冻结期不动路由，URL 记不住模式。
+  const [homeMode, setHomeMode] = useState<'default' | 'extra'>('default')
 
   useEffect(() => {
     const onHashChange = () => setRoute(currentRoute())
@@ -92,6 +95,26 @@ export default function App() {
         </div>
       </header>
 
+      <div className="home-modes" role="group" aria-label="首页模式">
+        <button
+          type="button"
+          className={homeMode === 'default' ? 'home-mode on' : 'home-mode'}
+          aria-pressed={homeMode === 'default'}
+          onClick={() => setHomeMode('default')}
+        >
+          默认模式
+        </button>
+        <button
+          type="button"
+          className={homeMode === 'extra' ? 'home-mode on' : 'home-mode'}
+          aria-pressed={homeMode === 'extra'}
+          onClick={() => setHomeMode('extra')}
+        >
+          扩展模式
+        </button>
+      </div>
+
+      {homeMode === 'default' ? (
       <section className="grid" aria-label="实验模块">
         {modules.map((m) => {
           return (
@@ -106,6 +129,38 @@ export default function App() {
           )
         })}
       </section>
+      ) : (
+        <section className="home-extra" aria-label="扩展模式面板">
+          <section className="textbook-bar">
+            <div className="textbook-head">
+              <p className="textbook-current">
+                当前教材：<strong>默认 13 章</strong>
+              </p>
+              <div className="textbook-actions">
+                <a className="course-btn ghost" href="#/course">
+                  导入 PDF 教材
+                </a>
+              </div>
+            </div>
+            <p className="textbook-note">
+              选书、读书签、出账单都在课程视图里做；这一页只是入口，不读任何文件。
+            </p>
+          </section>
+
+          <a className="course-entry" href="#/course">
+            <div className="card-head">
+              <span className="card-index">05</span>
+              <h2>课程视图 · 13 章</h2>
+            </div>
+            <p className="card-desc">
+              左树 13 章，每一章一屏：一句话问题、两三个滑块、一张图、三个读数、一句话结论。
+            </p>
+            <span className="card-enter">进入 →</span>
+          </a>
+
+          <p className="home-extra-note">只读你的目录，不读正文；PDF 不上传、不落盘。</p>
+        </section>
+      )}
 
         <footer className="foot">
           <p>纯前端实现 · 全部计算在浏览器内完成 · 不依赖后端服务</p>
