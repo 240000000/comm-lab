@@ -9,11 +9,11 @@
  * marker 让某条 series 只画散点（蒙特卡洛实测点，不连成线）。
  */
 import { syncCanvasSize } from './canvasSize'
+import { chartHeightFor } from './chartHeight'
 import { niceTicks } from './niceTicks'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CourseSeries } from '../core/course.ts'
 
-const HEIGHT = 320
 const PAD = { left: 64, right: 20, top: 18, bottom: 46 }
 
 const COLOR = {
@@ -68,22 +68,27 @@ export function CourseChart({
   // 宽度只量一次、之后读缓存：clientWidth 会强制浏览器同步重排，
   // 原来每次渲染都在这里读一遍，拖动时就是每帧一次重排。
   const widthRef = useRef(720)
+  // 画布高度由宽度现算（chartHeightFor）：宽度一量到就跟着变高，
+  // 64 位机和小屏都不至于把一屏图压成一条。state 只管内联 style，
+  // 真正画的时候用的是 draw 里按 widthRef 现算的那个 height。
+  const [cssHeight, setCssHeight] = useState(() => chartHeightFor(720))
 
   const draw = useCallback(() => {
     const canvas = ref.current
     if (!canvas) return
 
     const width = widthRef.current
+    const height = chartHeightFor(width)
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
-    syncCanvasSize(canvas, width, HEIGHT, dpr)
+    syncCanvasSize(canvas, width, height, dpr)
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, width, HEIGHT)
+    ctx.clearRect(0, 0, width, height)
 
     const plotW = width - PAD.left - PAD.right
-    const plotH = HEIGHT - PAD.top - PAD.bottom
+    const plotH = height - PAD.top - PAD.bottom
     if (plotW <= 0 || plotH <= 0) return
 
     // 纵坐标先过一遍 log10，后面所有映射都按变换后的值算。
@@ -253,7 +258,7 @@ export function CourseChart({
     ctx.fillStyle = COLOR.label
     ctx.textAlign = 'center'
     ctx.textBaseline = 'bottom'
-    ctx.fillText(xLabel, PAD.left + plotW / 2, HEIGHT - 8)
+    ctx.fillText(xLabel, PAD.left + plotW / 2, height - 8)
     ctx.save()
     ctx.translate(14, PAD.top + plotH / 2)
     ctx.rotate(-Math.PI / 2)
@@ -353,8 +358,8 @@ export function CourseChart({
           if (point[1] <= 0) continue
           ctx.fillStyle = s.color
           // 只有 1 个计数的那一段按真实高度只有 2 像素，补到 3 像素，让「这一段存在」看得见。
-          const height = Math.max(3, Math.abs(y0 - y1))
-          ctx.fillRect(px(x) - barW / 2, Math.min(y0, y1) - (height - Math.abs(y0 - y1)), barW, height)
+          const barH = Math.max(3, Math.abs(y0 - y1))
+          ctx.fillRect(px(x) - barW / 2, Math.min(y0, y1) - (barH - Math.abs(y0 - y1)), barW, barH)
           if (Math.abs(y0 - y1) > 15 && point[1] > 0) {
             ctx.fillStyle = '#08121a'
             ctx.font = AXIS_FONT
@@ -419,6 +424,7 @@ export function CourseChart({
     const initial = measure()
     if (initial > 0 && initial !== widthRef.current) {
       widthRef.current = initial
+      setCssHeight(chartHeightFor(initial))
       drawRef.current()
     }
 
@@ -426,13 +432,14 @@ export function CourseChart({
       const next = measure()
       if (next === widthRef.current) return
       widthRef.current = next
+      setCssHeight(chartHeightFor(next))
       drawRef.current()
     })
     observer.observe(host)
     return () => observer.disconnect()
   }, [])
 
-  return <canvas className="course-canvas" ref={ref} style={{ height: HEIGHT }} />
+  return <canvas className="course-canvas" ref={ref} style={{ height: cssHeight }} />
 }
 
 /** 章节显式给的刻度按原值写：0.01 就写 0.01，不补零成 0.010。 */

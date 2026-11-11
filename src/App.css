@@ -242,6 +242,12 @@ a.card {
   padding: clamp(32px, 6vh, 64px) 0 72px;
 }
 
+.course {
+  /* 只放宽 .course：.lab 被四个实验台共用，动它会把已经稳住的实验台一起晃。
+     两条规则同为单类选择器，靠源码顺序覆盖，所以这条必须排在 .lab 之后。 */
+  width: min(1360px, 100% - 48px);
+}
+
 .lab-head {
   max-width: 760px;
 }
@@ -493,7 +499,7 @@ a.card {
 .readout-value {
   margin: 0 0 10px;
   font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 19px;
+  font-size: 21px;
   line-height: 1.4;
   color: #e6eef6;
   word-break: break-word;
@@ -2267,7 +2273,7 @@ video::-webkit-media-controls-overlay-play-button {
 
 .course-layout {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: 264px minmax(0, 1fr);
   gap: 26px;
   align-items: start;
 }
@@ -2446,7 +2452,7 @@ video::-webkit-media-controls-overlay-play-button {
 
 .course-question {
   margin: 2px 0 18px;
-  font-size: 19px;
+  font-size: 21px;
   line-height: 1.55;
   color: var(--text);
 }
