@@ -630,7 +630,7 @@ test('第 1 章：正确口径下任何合法 p 都不判红，反例改由「�
   }
 })
 
-test('第 1 章：错档把单次信息量当平均，实测与熵差五倍以上', () => {
+test('第 1 章：错档把单次信息量当平均，方向与倍数分开断', () => {
   const chapter = chapterByNo(1)
   const view = chapter.compute({ ...chapter.defaults, p: 0.99, basis: 1 })
   assert.equal(view.failed, true)
@@ -640,12 +640,66 @@ test('第 1 章：错档把单次信息量当平均，实测与熵差五倍以�
   // 错档的「实测均值」就是单次信息量本身（读数只有三位小数，取到三位再比）。
   assert.ok(Math.abs(measured - Number(selfInfo(0.99).toFixed(3))) < 1e-9, `错档的实测均值就是 I(p)，实际 ${measured} vs ${selfInfo(0.99)}`)
   assert.ok(Math.abs(info - Number(selfInfo(0.99).toFixed(2))) < 1e-9, `单次信息量读数应是 ${selfInfo(0.99)} 的两位小数`)
-  // p=0.99 时 I(p) 比 H(p) 小得多：0.014 bits 对 0.081 bits，差 5.9 倍（log 尺度上「差几倍」）。
-  const ratio = Math.max(measured / entropy, entropy / measured)
-  assert.ok(ratio >= 5, `错档的偏差只有 ${ratio.toFixed(2)} 倍，不够「差几倍」`)
   assert.ok(view.conclusion.includes('单次'), `错档结论要出现「单次」，实际：${view.conclusion}`)
   assert.ok(view.conclusion.includes('平均'), `错档结论要出现「平均」，实际：${view.conclusion}`)
   assert.equal(view.readouts[2].warn, true)
+
+  // p = 0.01：罕见事件，单次比平均大得多。方向与倍数各断一次——
+  // 以前用 max(比值, 倒过来) 把方向抹平了，方向错的时候它照样是绿的。
+  const low = chapter.compute({ ...chapter.defaults, p: 0.01, basis: 1 })
+  const lowInfo = Number(low.readouts[0].value.replace(' bit', ''))
+  const lowEntropy = Number(low.readouts[1].value.replace(' bit', ''))
+  assert.ok(lowInfo > lowEntropy, `p=0.01 时 I(p) 应大于 H(p)，实际 ${lowInfo} vs ${lowEntropy}`)
+  assert.ok(lowInfo / lowEntropy > 5, `p=0.01 的倍数只有 ${(lowInfo / lowEntropy).toFixed(2)}`)
+  assert.ok(low.conclusion.includes('是平均的'), `p=0.01 应说「是平均的 N 倍」，实际：${low.conclusion}`)
+
+  // p = 0.99：常见事件，单次只有平均的一小部分，方向反过来，倍数也反过来。
+  assert.ok(info < entropy, `p=0.99 时 I(p) 应小于 H(p)，实际 ${info} vs ${entropy}`)
+  assert.ok(entropy / info > 5, `p=0.99 反过来只有 ${(entropy / info).toFixed(2)} 倍`)
+  assert.ok(view.conclusion.includes('只有平均的'), `p=0.99 应说「只有平均的 N%」，实际：${view.conclusion}`)
+
+  // p = 0.5：读数与正确档一模一样，红在口径上——文案要把这件事说明白。
+  const mid = chapter.compute({ ...chapter.defaults, p: 0.5, basis: 1 })
+  assert.equal(mid.failed, true, '口径错了就该红，哪怕 p = 0.5 时两个数恰好相同')
+  const midInfo = Number(mid.readouts[0].value.replace(' bit', ''))
+  const midEntropy = Number(mid.readouts[1].value.replace(' bit', ''))
+  assert.ok(Math.abs(midInfo - midEntropy) < 1e-9, `p=0.5 时 I 与 H 应相等，实际 ${midInfo} vs ${midEntropy}`)
+  assert.ok(mid.conclusion.includes('恰好'), `p=0.5 的结论要点明「恰好」，实际：${mid.conclusion}`)
+  assert.ok(mid.conclusion.includes('看不出来'), `p=0.5 的结论要说明「看不出来」，实际：${mid.conclusion}`)
+})
+
+test('第 1 章：错档文案里的倍数/百分比与实算比值一致，改文案不许跑偏', () => {
+  const chapter = chapterByNo(1)
+  for (const p of [0.01, 0.5, 0.9, 0.99]) {
+    const view = chapter.compute({ ...chapter.defaults, p, basis: 1 })
+    const info = selfInfo(p)
+    const entropy = binaryEntropy(p)
+    const ratio = info / entropy
+    if (Math.abs(info - entropy) < 1e-9) {
+      // 相等那一档不许再说「N 倍」——那正是原来的病灶。
+      assert.ok(!/平均的 \d+(\.\d+)? 倍/.test(view.conclusion), `p=${p} 两数相等，不该出现「N 倍」：${view.conclusion}`)
+      continue
+    }
+    if (ratio > 1) {
+      const m = view.conclusion.match(/是平均的 (\d+\.\d+) 倍/)
+      assert.ok(m, `p=${p} 的结论应写「是平均的 N 倍」，实际：${view.conclusion}`)
+      assert.ok(Math.abs(Number(m[1]) - ratio) < 0.01, `p=${p} 写的是 ${m[1]} 倍，实算 ${ratio.toFixed(4)}`)
+    } else {
+      const pct = view.conclusion.match(/只有平均的 (\d+\.\d)%/)
+      const inv = view.conclusion.match(/反过来平均是单次的 (\d+\.\d+) 倍/)
+      assert.ok(pct, `p=${p} 的结论应写「只有平均的 N%」，实际：${view.conclusion}`)
+      assert.ok(inv, `p=${p} 的结论应给出反向倍数，实际：${view.conclusion}`)
+      // 百分比只保留一位小数（误差 ≤ 0.05），倍数两位（误差 ≤ 0.005）。
+      assert.ok(Math.abs(Number(pct[1]) - ratio * 100) < 0.06, `p=${p} 写的是 ${pct[1]}%，实算 ${(ratio * 100).toFixed(3)}%`)
+      assert.ok(Math.abs(Number(inv[1]) - 1 / ratio) < 0.01, `p=${p} 反向写的是 ${inv[1]} 倍，实算 ${(1 / ratio).toFixed(4)}`)
+    }
+    // 读数卡上的 hint 用的是同一句话，也要对得上（这里只查 p=0.99 这一档的百分比）。
+    if (p === 0.99) {
+      const hintPct = view.readouts[2].hint.match(/只有平均的 (\d+\.\d)%/)
+      assert.ok(hintPct, `错档 hint 应说明百分比，实际：${view.readouts[2].hint}`)
+      assert.ok(Math.abs(Number(hintPct[1]) - ratio * 100) < 0.06, `hint 写的是 ${hintPct[1]}%，实算 ${(ratio * 100).toFixed(3)}%`)
+    }
+  }
 })
 
 test('第 1 章：失效档指向错档，默认档仍是正确的概率加权', () => {

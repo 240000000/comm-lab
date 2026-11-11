@@ -1851,6 +1851,24 @@ export function binaryEntropy(p: number): number {
   return -p * log2(p) - (1 - p) * log2(1 - p)
 }
 
+/**
+ * 错档里「I(p) 与 H(p) 差多少」的那半句。
+ *
+ * 这里算出来的数是**比值**、不是差：p > 0.5 时 I/H < 1，「差 0.18 倍」在中文里
+ * 读不通（差一倍是差很多，而 0.18 倍其实是「只有它的 18%」）。所以分三种情形写：
+ * 比值大于 1 说倍数；小于 1 说百分比并反过来给一个大于 1 的倍数；
+ * 恰好相等只发生在 p = 0.5，那一档要说明「错在这一档看不出来」。
+ */
+export function infoGapText(info: number, entropy: number): string {
+  if (Math.abs(info - entropy) < 1e-9) {
+    return `两种口径在 p = 0.5 恰好给出同一个数（${info.toFixed(3)} bit），错在这一档看不出来——把 p 拖到 0.01 或 0.99，差别才会露出来`
+  }
+  if (info > entropy) {
+    return `单次信息量是平均的 ${(info / entropy).toFixed(2)} 倍`
+  }
+  return `单次信息量只有平均的 ${((info / entropy) * 100).toFixed(1)}%，反过来平均是单次的 ${(entropy / info).toFixed(2)} 倍`
+}
+
 /** 按 p 抽 n 个 0/1，累计 −log2(抽到那个符号的概率) 再平均；纯抽样，不套公式。 */
 function sampleInfo(p: number, n: number): number {
   const rng = createRng(INFO_SEED + n)
@@ -1923,7 +1941,7 @@ function computeInfo(params: Record<string, number>): CourseView {
       value: `${measured.toFixed(3)} bit`,
       hint:
         basis === 1
-          ? `这一档把单次信息量 I(p) = ${info.toFixed(3)} bit 直接当成平均信息量报上来，没有按 p 与 1−p 加权；真正的平均是 H(p) = ${entropy.toFixed(3)} bit，两者差 ${(info / entropy).toFixed(2)} 倍。`
+          ? `这一档把单次信息量 I(p) = ${info.toFixed(3)} bit 直接当成平均信息量报上来，没有按 p 与 1−p 加权；真正的平均是 H(p) = ${entropy.toFixed(3)} bit，${infoGapText(info, entropy)}。`
           : `抽 ${n.toLocaleString('en-US')} 个 0/1 样本，累计 −log2(该符号的概率) 再除以 n；理论上是 H(p) = ${entropy.toFixed(3)} bit，实测与它比 ${(measured / entropy).toFixed(3)} 倍。`,
       warn: basis === 1 || Math.abs(measured - entropy) > 0.05,
     },
@@ -1934,7 +1952,7 @@ function computeInfo(params: Record<string, number>): CourseView {
   const failed = basis === 1
   let conclusion: string
   if (basis === 1) {
-    conclusion = `把单次信息量当平均，等于假设每个符号都同样罕见：I(p) = ${info.toFixed(2)} bit，可真正的平均是 H(p) = ${entropy.toFixed(3)} bit，差 ${(info / entropy).toFixed(2)} 倍——平均要按 p 与 1−p 加权，不能拿单次顶上。`
+    conclusion = `把单次信息量当平均，等于假设每个符号都同样罕见：I(p) = ${info.toFixed(2)} bit，${infoGapText(info, entropy)}——平均要按 p 与 1−p 加权，不能拿单次顶上。`
   } else if (Math.abs(p - 0.5) < 0.02) {
     conclusion = `两条线都到 ${info.toFixed(2)} bit，这是标尺：一次抛硬币带走的信息量，正好等于整条源的平均。`
   } else if (p > 0.5) {
