@@ -31,6 +31,8 @@ export type OutlinedChapter = {
   no: number | null
   rawTitle: string
   topicId: string | null
+  /** 认到主题时凭的关键词原文，最多三个；认不到就是空数组。 */
+  hits: string[]
   page: number | null
 }
 
@@ -163,6 +165,7 @@ export function toBook(entries: OutlineEntry[]): OutlinedBook {
       no: no ?? handWritten?.no ?? null,
       rawTitle: entry.rawTitle,
       topicId: matched?.topicId ?? handWritten?.topicId ?? null,
+      hits: matched?.hits ?? [],
       page: entry.page,
     }
   })

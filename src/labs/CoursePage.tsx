@@ -18,7 +18,19 @@ import {
 import { CourseChart } from './CourseChart.tsx'
 import { CourseLegend } from './CourseLegend.tsx'
 import { ParamSlider } from './ParamSlider.tsx'
-import type { OutlinedBook } from '../course/pdfOutline.ts'
+import {
+  DEFAULT_BOOK_ID,
+  UNCOVERED_NOTE,
+  addBook,
+  billOf,
+  bookById,
+  bookFromOutline,
+  defaultShelfBook,
+  evidenceOf,
+  isPlayable,
+  removeBook,
+} from '../course/shelf.ts'
+import type { ShelfBook } from '../course/shelf.ts'
 
 const START_CHAPTER = 2
 
@@ -201,12 +213,12 @@ const ChapterScreen = memo(function ChapterScreen({
 const MAX_PDF_BYTES = 250 * 1024 * 1024
 const SLOW_PARSE_MS = 15_000
 
-type ImportPreview = { fileName: string; book: OutlinedBook; playable: number }
+/** 解析完先出账单；账单上点了「用这本书」才换左树。 */
+type BillState = { fileName: string; book: ShelfBook }
 
 type ImportState =
   | { status: 'idle' }
   | { status: 'parsing'; fileName: string; slow: boolean }
-  | { status: 'preview'; preview: ImportPreview }
   | { status: 'failed'; fileName: string; message: string }
 
 export function CoursePage() {
@@ -217,9 +229,17 @@ export function CoursePage() {
   const dragRef = useRef(createDragCoalescer<Record<string, number>>())
   const paramsRef = useRef(params)
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
-  const [imported, setImported] = useState<ImportPreview | null>(null)
+  // 书架只在内存里：导入的章名和书一样不落地，刷新就回到默认那本。
+  const [shelf, setShelf] = useState<ShelfBook[]>(() => [defaultShelfBook()])
+  const [activeId, setActiveId] = useState<string>(DEFAULT_BOOK_ID)
+  const [bill, setBill] = useState<BillState | null>(null)
+  const [switching, setSwitching] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const slowTimer = useRef<number | null>(null)
+
+  const book = bookById(shelf, activeId)
+  const usingDefault = book.id === DEFAULT_BOOK_ID
+  const billStat = bill ? billOf(bill.book) : null
 
   const view = useMemo(
     () => (chapter.compute ? chapter.compute(committed) : null),
@@ -294,11 +314,11 @@ export function CoursePage() {
           })
           return
         }
-        const book = { ...outline.toBook(entries), title: fileName.replace(/\.pdf$/i, '') }
-        const playable = book.chapters.filter(
-          (entry) => entry.topicId && chapterByNo(Number(entry.topicId)),
-        ).length
-        setImportState({ status: 'preview', preview: { fileName, book, playable } })
+        const title = fileName.replace(/\.pdf$/i, '')
+        const added = bookFromOutline(title, outline.toBook(entries), `imported-${Date.now()}`)
+        setShelf((prev) => addBook(prev, added))
+        setBill({ fileName, book: added })
+        setImportState({ status: 'idle' })
       } catch (error) {
         setImportState({
           status: 'failed',
@@ -312,26 +332,46 @@ export function CoursePage() {
     [stopSlowTimer],
   )
 
+  /** 一章里挑第一个真能玩的，挑不到就回默认起始章。 */
+  const firstPlayable = useCallback((target: ShelfBook): number => {
+    const first = target.chapters.find((entry) => isPlayable(entry))
+    return first?.topicId ? Number(first.topicId) : START_CHAPTER
+  }, [])
+
   const useThisBook = useCallback(() => {
-    setImportState((prev) => {
-      if (prev.status !== 'preview') return prev
-      setImported(prev.preview)
-      const first = prev.preview.book.chapters.find((entry) => entry.topicId)
-      if (first?.topicId) pick(Number(first.topicId))
-      return { status: 'idle' }
-    })
-  }, [pick])
+    if (!bill) return
+    setActiveId(bill.book.id)
+    pick(firstPlayable(bill.book))
+    setBill(null)
+    setSwitching(false)
+  }, [bill, firstPlayable, pick])
 
-  const cancelImport = useCallback(() => setImportState({ status: 'idle' }), [])
+  const dismissBill = useCallback(() => setBill(null), [])
 
-  const restoreDefault = useCallback(() => {
-    setImported(null)
-    setImportState({ status: 'idle' })
-    pick(START_CHAPTER)
-  }, [pick])
+  const switchBook = useCallback(
+    (id: string) => {
+      const target = bookById(shelf, id)
+      setActiveId(target.id)
+      pick(firstPlayable(target))
+      setSwitching(false)
+    },
+    [firstPlayable, pick, shelf],
+  )
+
+  const dropBook = useCallback(
+    (id: string) => {
+      if (id === DEFAULT_BOOK_ID) return
+      setShelf((prev) => removeBook(prev, id))
+      if (id === activeId) {
+        setActiveId(DEFAULT_BOOK_ID)
+        pick(firstPlayable(defaultShelfBook()))
+      }
+    },
+    [activeId, firstPlayable, pick],
+  )
 
   const rows = useMemo<TreeRow[]>(() => {
-    if (!imported) {
+    if (usingDefault) {
       return COURSE_CHAPTERS.map((item) => ({
         key: `default-${item.no}`,
         mark: DEEP_LAB_CHAPTERS.includes(item.no) ? '●' : '○',
@@ -344,7 +384,7 @@ export function CoursePage() {
         onPick: () => pick(item.no),
       }))
     }
-    return imported.book.chapters.map((entry, index) => {
+    return book.chapters.map((entry, index) => {
       const target = entry.topicId ? chapterByNo(Number(entry.topicId)) : undefined
       return {
         key: `book-${index}`,
@@ -352,11 +392,7 @@ export function CoursePage() {
         done: Boolean(target?.implemented),
         no: String(entry.no ?? index + 1).padStart(2, '0'),
         title: target ? `第 ${target.no} 章 · ${target.title}` : entry.rawTitle,
-        note: target
-          ? entry.page === null
-            ? 'PDF 页码未标'
-            : `PDF 第 ${entry.page} 页`
-          : '暂无仿真',
+        note: target ? null : '暂无仿真',
         active: Boolean(target) && target!.no === no,
         disabled: !target,
         onPick: () => {
@@ -364,7 +400,7 @@ export function CoursePage() {
         },
       }
     })
-  }, [imported, no, pick])
+  }, [book, no, pick, usingDefault])
 
   return (
     <main className="lab course">
@@ -372,19 +408,22 @@ export function CoursePage() {
         ← 返回首页
       </a>
       <header className="lab-head">
-        <p className="eyebrow">课程视图 · {imported ? imported.book.title : '13 章'}</p>
+        <p className="eyebrow">课程视图 · {usingDefault ? '13 章' : book.title}</p>
         <h1>把整本书摊成 13 格，一次只看一格</h1>
         <p className="lede">
           左边是目录，点一章，右边给一屏：一句话问题、两三个滑块、一张图、三个读数、一句话结论。
-          {imported
-            ? ' 现在用的是你导入的教材，目录只在内存里，刷新就回到默认 13 章。'
-            : ' 13 章全部能拖，另有实验台可以直接跳到对应的交互页。'}
+          {usingDefault
+            ? ' 13 章全部能拖，另有实验台可以直接跳到对应的交互页。'
+            : ' 现在用的是你导入的教材，目录只在内存里，刷新就回到默认 13 章。'}
         </p>
       </header>
 
-      <div className="course-layout">
-        <div className="course-side">
-          <div className="course-import-bar">
+      <section className="textbook-bar">
+        <div className="textbook-head">
+          <p className="textbook-current">
+            当前教材：<strong>{book.title}</strong>
+          </p>
+          <div className="textbook-actions">
             <input
               ref={fileRef}
               type="file"
@@ -397,20 +436,55 @@ export function CoursePage() {
               }}
             />
             <button type="button" className="course-btn ghost" onClick={() => fileRef.current?.click()}>
-              导入教材
+              导入一本书
             </button>
-            {imported ? (
-              <button type="button" className="course-btn ghost" onClick={restoreDefault}>
-                恢复默认教材
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="course-btn ghost"
+              onClick={() => setSwitching((open) => !open)}
+            >
+              {switching ? '收起' : '切换'}
+            </button>
           </div>
-          <p className="course-import-note">
-            {imported
-              ? `当前《${imported.book.title}》：${imported.book.chapters.length} 章里 ${imported.playable} 章能玩。PDF 不上传、不落盘，刷新即失效。`
-              : '选一本 .pdf，只读它的书签；不上传、不落盘，刷新就回默认 13 章。'}
-          </p>
+        </div>
+        <p className="textbook-note">
+          PDF 不上传、不落盘；书的章名只活在这一次会话里，刷新就回默认 13 章。
+        </p>
+        {switching ? (
+          <ul className="textbook-list">
+            {shelf.map((item) => {
+              const stat = billOf(item)
+              return (
+                <li key={item.id}>
+                  <span className="textbook-list-title">{item.title}</span>
+                  <span className="textbook-list-bill">
+                    {stat.playable} / {stat.total} 章能玩
+                  </span>
+                  <button
+                    type="button"
+                    className="course-btn ghost"
+                    onClick={() => switchBook(item.id)}
+                    disabled={item.id === book.id}
+                  >
+                    {item.id === book.id ? '使用中' : '用这本'}
+                  </button>
+                  <button
+                    type="button"
+                    className="course-btn ghost"
+                    onClick={() => dropBook(item.id)}
+                    disabled={item.id === DEFAULT_BOOK_ID}
+                  >
+                    移除
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        ) : null}
+      </section>
 
+      <div className="course-layout">
+        <div className="course-side">
           {importState.status === 'parsing' ? (
             <p className="course-import-status">
               正在读《{importState.fileName}》的目录…
@@ -422,37 +496,39 @@ export function CoursePage() {
             <p className="course-import-status failed">{importState.message}</p>
           ) : null}
 
-          {importState.status === 'preview' ? (
-            <div className="course-preview" role="dialog" aria-label="教材预览">
-              <p className="course-preview-title">{importState.preview.book.title}</p>
+          {bill && billStat ? (
+            <div className="course-bill" role="dialog" aria-label="教材账单">
+              <p className="course-preview-title">{bill.book.title}</p>
               <p className="course-preview-meta">
-                识别到 {importState.preview.book.chapters.length} 章，其中 {importState.preview.playable} 章有仿真。
+                来自《{bill.fileName}》：只读了书签，正文一个字节都没留。
               </p>
-              <ol className="course-preview-list">
-                {importState.preview.book.chapters.map((entry, index) => {
-                  const target = entry.topicId ? chapterByNo(Number(entry.topicId)) : undefined
-                  return (
-                    <li key={`preview-${index}`} className={target ? undefined : 'miss'}>
-                      <span>{target ? `第 ${target.no} 章 · ${target.title}` : entry.rawTitle}</span>
-                      <span className="course-preview-page">
-                        {target ? (entry.page === null ? 'PDF 页码未标' : `PDF 第 ${entry.page} 页`) : '暂无仿真'}
-                      </span>
-                    </li>
-                  )
-                })}
+              <ul className="course-bill-lines">
+                <li>识别到 {billStat.total} 章</li>
+                <li>其中 {billStat.playable} 章有可交互模型</li>
+                <li>
+                  其余 {billStat.uncovered} 章：{UNCOVERED_NOTE}
+                </li>
+              </ul>
+              <ol className="course-bill-list">
+                {bill.book.chapters.map((entry, index) => (
+                  <li key={`bill-${index}`} className={isPlayable(entry) ? undefined : 'miss'}>
+                    <span className="course-bill-title">{entry.rawTitle}</span>
+                    <span className="course-bill-evidence">{evidenceOf(entry)}</span>
+                  </li>
+                ))}
               </ol>
               <div className="course-actions">
                 <button type="button" className="course-btn" onClick={useThisBook}>
                   用这本书
                 </button>
-                <button type="button" className="course-btn ghost" onClick={cancelImport}>
-                  取消
+                <button type="button" className="course-btn ghost" onClick={dismissBill}>
+                  先不看
                 </button>
               </div>
             </div>
-          ) : null}
-
-          <CourseTree rows={rows} />
+          ) : (
+            <CourseTree rows={rows} />
+          )}
         </div>
 
         <section className="course-main">

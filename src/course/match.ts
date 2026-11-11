@@ -15,6 +15,13 @@ export type MatchResult = {
   topicId: string
   /** 命中的分数：关键词长度，整条完全相同再加 1000。 */
   score: number
+  /**
+   * 命中的关键词原文（最多三个），用来解释「凭哪几个词认成这一章」。
+   *
+   * 只放能指认这一章的词；同一主题命中多个词时取自己最分高的那几条。
+   * 匹配不上的章名没有 hits——这里不编造理由。
+   */
+  hits: string[]
 }
 
 /** 关键词表：一条写法对应一个主题，同一主题可以有多种写法。 */
@@ -160,9 +167,16 @@ function normalize(rawTitle: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
-/** 关键词与输入都在归一化后的形态上比较，所以关键词表里存小写。 */
-const NORMALIZED_KEYWORDS: Keyword[] = KEYWORDS.map(({ word, topicId }) => ({
+/** 关键词与输入都在归一化后的形态上比较，所以关键词表里存小写。`label` 留着原字，好往界面上写。 */
+type NormalizedKeyword = {
+  word: string
+  label: string
+  topicId: string
+}
+
+const NORMALIZED_KEYWORDS: NormalizedKeyword[] = KEYWORDS.map(({ word, topicId }) => ({
   word: normalize(word),
+  label: word,
   topicId,
 }))
 
@@ -182,14 +196,24 @@ export function matchChapter(rawTitle: string): MatchResult | null {
   if (!text) return null
 
   let best: { topicId: string; score: number; length: number } | null = null
-  for (const { word, topicId } of NORMALIZED_KEYWORDS) {
+  // 每个主题各自攒一份命中证据：分数与词长都记下来，最后按同一把尺子排序。
+  const evidence = new Map<string, { label: string; score: number; length: number }[]>()
+  for (const { word, label, topicId } of NORMALIZED_KEYWORDS) {
     const score = scoreOf(text, word)
     if (score === 0) continue
+    const list = evidence.get(topicId) ?? []
+    list.push({ label, score, length: word.length })
+    evidence.set(topicId, list)
     // 分数一样时取更长的词；词长也一样就保留先出现的（表序即优先级）。
     if (!best || score > best.score || (score === best.score && word.length > best.length)) {
       best = { topicId, score, length: word.length }
     }
   }
 
-  return best ? { topicId: best.topicId, score: best.score } : null
+  if (!best) return null
+  const hits = (evidence.get(best.topicId) ?? [])
+    .sort((left, right) => right.score - left.score || right.length - left.length)
+    .slice(0, 3)
+    .map((item) => item.label)
+  return { topicId: best.topicId, score: best.score, hits }
 }

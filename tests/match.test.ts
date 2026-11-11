@@ -78,3 +78,37 @@ test('打分规则：完全一致最高，长词压过短词，空输入不猜',
   assert.equal(matchChapter(''), null)
   assert.equal(matchChapter('   '), null)
 })
+
+test('命中结果能解释自己：hits 非空、最多三个、且都是章名里真出现过的词', () => {
+  const normalize = (text: string) => text.replace(/[\s\u3000]+/g, '')
+
+  for (const chapter of BOOK_COMMUNICATION.chapters) {
+    const hit = matchChapter(chapter.rawTitle)
+    assert.ok(hit, `「${chapter.rawTitle}」没能匹配上`)
+    // 结论没变：还是回到原来那一章。
+    assert.equal(hit!.topicId, chapter.topicId)
+    assert.ok(Array.isArray(hit!.hits), 'hits 必须是数组')
+    assert.ok(hit!.hits.length >= 1 && hit!.hits.length <= 3, `hits 应是 1–3 个，实际 ${hit!.hits.length}`)
+    for (const word of hit!.hits) {
+      assert.ok(word.length >= 2, `命中的词太短：${word}`)
+      assert.ok(
+        normalize(chapter.rawTitle).includes(normalize(word)),
+        `「${word}」没在这条章名里出现过：${chapter.rawTitle}`,
+      )
+    }
+    // 同一个词不重复记。
+    assert.equal(new Set(hit!.hits).size, hit!.hits.length)
+  }
+})
+
+test('hits 也认外来写法：带前缀的长章名会把真正起作用的词列出来', () => {
+  const hit = matchChapter('第六章 数字基带传输系统（眼图）')
+  assert.ok(hit)
+  assert.equal(hit!.topicId, '6')
+  // hits 记的是真正起作用的整词（这里最长的三个），不是把章名拆成字。
+  assert.deepEqual(hit!.hits, ['数字基带传输系统', '数字基带传输', '基带传输'])
+  assert.ok(hit!.hits.every((word) => '第六章数字基带传输系统（眼图）'.includes(word)))
+
+  // 认不出来的还是 null，不硬凑 hits。
+  assert.equal(matchChapter('傅里叶变换'), null)
+})

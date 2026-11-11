@@ -2611,3 +2611,127 @@ video::-webkit-media-controls-overlay-play-button {
     flex-wrap: wrap;
   }
 }
+
+/* 教材栏：从课程视图里的一个按钮提到整页最上面的一条。 */
+.textbook-bar {
+  display: grid;
+  gap: 8px;
+  max-width: 1080px;
+  margin: 0 auto 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(16, 24, 34, 0.72);
+}
+
+.textbook-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.textbook-current {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.textbook-current strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.textbook-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.textbook-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.textbook-list {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.textbook-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.textbook-list-title {
+  flex: 1 1 200px;
+  color: var(--text);
+}
+
+.textbook-list-bill {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 导入后的账单：先列清楚认到了什么，再让人决定用不用。 */
+.course-bill {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(16, 24, 34, 0.86);
+}
+
+.course-bill-lines {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.course-bill-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.course-bill-list li {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.course-bill-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.course-bill-title {
+  color: var(--text);
+}
+
+.course-bill-evidence {
+  color: #6f8399;
+}
+
+.course-bill-list li.miss .course-bill-evidence {
+  color: #a2703f;
+}
