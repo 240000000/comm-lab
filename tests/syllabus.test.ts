@@ -57,7 +57,7 @@ const GOLDEN_READOUTS: Array<{ no: number; readouts: string[]; failed: boolean }
     failed: false,
   },
   { no: 8, readouts: ['谱效率=2.96 bit/s/Hz', '理论误码率=1.39e-4', '实测误码率=1.50e-4'], failed: false },
-  { no: 9, readouts: ['峰值信噪比（理论）=11.0 dB', '失配损失=0.00 dB', '误码率=1.91e-4'], failed: false },
+  { no: 9, readouts: ['峰值信噪比（理论）=11.0 dB', '失配损失=0.00 dB', '采样点信噪比=11.0 dB', '误码率=1.91e-4'], failed: false },
   { no: 10, readouts: ['混叠误差=0.00e+0', '量化信噪比=49.99 dB', 'PCM 码率=32.0 kb/s'], failed: false },
   { no: 11, readouts: ['最小距离 d=3', '可纠位数 t=1', '正确率（e = 1）=100.0%'], failed: false },
   {

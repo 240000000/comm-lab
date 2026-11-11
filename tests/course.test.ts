@@ -377,7 +377,9 @@ test('第 9 章：矩形波 Δt=0.4 损失 4.44 dB，数值 ρ 与解析 1−Δt
 
 test('第 9 章：三种波形在 Δt=0 的理论误码率彼此相等', () => {
   const chapter = chapterByNo(9)
-  const ber = [0, 1, 2].map((wave) => chapter.compute({ ...chapter.defaults, wave }).readouts[2].value)
+  const ber = [0, 1, 2].map(
+    (wave) => chapter.compute({ ...chapter.defaults, wave }).readouts.find((r) => r.label === '误码率')!.value,
+  )
   assert.equal(ber[1], ber[0])
   assert.equal(ber[2], ber[0])
   assert.equal(ber[0], '1.91e-4')
@@ -386,12 +388,40 @@ test('第 9 章：三种波形在 Δt=0 的理论误码率彼此相等', () => {
 test('第 9 章：实测误码率落在理论值的十分之一到十倍之间', () => {
   const chapter = chapterByNo(9)
   const view = chapter.compute(chapter.defaults)
-  const theory = Number(view.readouts[2].value)
-  const hint = view.readouts[2].hint
+  const ber = view.readouts.find((r) => r.label === '误码率')!
+  const theory = Number(ber.value)
+  const hint = ber.hint
   const match = /实测 ([0-9.e-]+)/.exec(hint)
   assert.ok(match, `读数 hint 里要有实测值，实际：${hint}`)
   const measured = Number(match![1])
   assert.ok(measured > theory / 10 && measured < theory * 10, `实测 ${measured} 与理论 ${theory} 差得太远`)
+})
+
+test('第 9 章：采样点信噪比按 10·log10(2ρ²γ) 现算，峰值那条不随 Δt 变', () => {
+  const chapter = chapterByNo(9)
+  const pick = (dt: number, label: string) => {
+    const view = chapter.compute({ ...chapter.defaults, dt })
+    return view.readouts.find((r) => r.label === label)!
+  }
+  // 峰值信噪比只与能量有关，三档必须逐字相同——这是本章原有的结论，不能被新读数带偏。
+  for (const dt of [0, 0.2, 0.4]) assert.equal(pick(dt, '峰值信噪比（理论）').value, '11.0 dB')
+
+  assert.equal(pick(0, '采样点信噪比').value, '11.0 dB')
+  // ρ(0.2 Ts) = 0.8 → 10·log10(2·0.64·6.31) = 9.07 dB，落在 9.1；不是 8.0（8.0 要 ρ≈0.707）。
+  assert.equal(pick(0.2, '采样点信噪比').value, '9.1 dB')
+  assert.equal(pick(0.4, '采样点信噪比').value, '6.6 dB')
+
+  const hint = pick(0.2, '采样点信噪比').hint
+  assert.ok(hint.includes('上限'), `hint 要说清峰值是上限，实际：${hint}`)
+  assert.ok(hint.includes('实际拿到'), `hint 要说清这个是实际拿到的，实际：${hint}`)
+
+  // 两个读数必须自洽：采样点信噪比 = 峰值信噪比 − 失配损失。
+  for (const dt of [0, 0.2, 0.4]) {
+    const peak = Number(pick(dt, '峰值信噪比（理论）').value.replace(' dB', ''))
+    const loss = Number(pick(dt, '失配损失').value.replace(' dB', ''))
+    const sample = Number(pick(dt, '采样点信噪比').value.replace(' dB', ''))
+    assert.ok(Math.abs(peak - loss - sample) < 0.06, `dt=${dt} 三个读数不自洽：${peak} − ${loss} ≠ ${sample}`)
+  }
 })
 
 test('第 12 章：四档级数的周期都等于 2^n−1', () => {
@@ -558,8 +588,9 @@ test('第 1 章：p = 0.99 时单次跌到 0.0145 bit、熵 0.0808 bit', () => {
   assert.ok(Math.abs(selfInfo(0.99) - 0.01450) < 1e-4)
   assert.ok(Math.abs(selfInfo(0.01) - 6.6439) < 1e-3)
   const chapter = chapterByNo(1)
+  // R84：p 是自由参数，正确口径下任何合法取值都不该判红——反例改由「计算口径」承担。
   const view = chapter.compute({ ...chapter.defaults, p: 0.99 })
-  assert.equal(view.failed, true)
+  assert.equal(view.failed, false)
   assert.equal(view.readouts[0].value, '0.01 bit')
   assert.match(view.readouts[1].value, /0\.081/)
   assert.match(view.conclusion, /平均/)
@@ -588,6 +619,45 @@ test('第 1 章：实测平均信息量贴近熵（n = 20 万、p = 0.3）', () 
   const measured = Number(view.readouts[2].value.replace(' bit', ''))
   assert.ok(Math.abs(measured - binaryEntropy(0.3)) < 0.02, `实测 ${measured} 与 H(0.3)=${binaryEntropy(0.3)} 差太远`)
   assert.equal(view.readouts[2].warn, false)
+})
+
+test('第 1 章：正确口径下任何合法 p 都不判红，反例改由「计算口径」承担', () => {
+  const chapter = chapterByNo(1)
+  for (const p of [0.01, 0.3, 0.5, 0.8, 0.99]) {
+    const view = chapter.compute({ ...chapter.defaults, p, basis: 0 })
+    assert.equal(view.failed, false, `p=${p} 是合法取值，正确口径下不该判红`)
+    assert.ok(!view.conclusion.includes('等于假设每个符号都同样罕见'), `p=${p} 的正确结论不该出现错档那句话`)
+  }
+})
+
+test('第 1 章：错档把单次信息量当平均，实测与熵差五倍以上', () => {
+  const chapter = chapterByNo(1)
+  const view = chapter.compute({ ...chapter.defaults, p: 0.99, basis: 1 })
+  assert.equal(view.failed, true)
+  const info = Number(view.readouts[0].value.replace(' bit', ''))
+  const entropy = Number(view.readouts[1].value.replace(' bit', ''))
+  const measured = Number(view.readouts[2].value.replace(' bit', ''))
+  // 错档的「实测均值」就是单次信息量本身（读数只有三位小数，取到三位再比）。
+  assert.ok(Math.abs(measured - Number(selfInfo(0.99).toFixed(3))) < 1e-9, `错档的实测均值就是 I(p)，实际 ${measured} vs ${selfInfo(0.99)}`)
+  assert.ok(Math.abs(info - Number(selfInfo(0.99).toFixed(2))) < 1e-9, `单次信息量读数应是 ${selfInfo(0.99)} 的两位小数`)
+  // p=0.99 时 I(p) 比 H(p) 小得多：0.014 bits 对 0.081 bits，差 5.9 倍（log 尺度上「差几倍」）。
+  const ratio = Math.max(measured / entropy, entropy / measured)
+  assert.ok(ratio >= 5, `错档的偏差只有 ${ratio.toFixed(2)} 倍，不够「差几倍」`)
+  assert.ok(view.conclusion.includes('单次'), `错档结论要出现「单次」，实际：${view.conclusion}`)
+  assert.ok(view.conclusion.includes('平均'), `错档结论要出现「平均」，实际：${view.conclusion}`)
+  assert.equal(view.readouts[2].warn, true)
+})
+
+test('第 1 章：失效档指向错档，默认档仍是正确的概率加权', () => {
+  const chapter = chapterByNo(1)
+  assert.equal(chapter.failPreset.basis, 1)
+  assert.equal(chapter.failPreset.p, 0.99)
+  assert.equal(chapter.compute(chapter.failPreset).failed, true)
+  const normal = chapter.compute({ ...chapter.defaults })
+  assert.equal(normal.failed, false)
+  assert.equal(normal.readouts[0].value, '1.00 bit')
+  assert.equal(normal.readouts[1].value, '1.000 bit')
+  assert.equal(normal.readouts[2].value, '1.000 bit')
 })
 
 test('第 11 章：e = 0 那根柱归正确纠回，静默放行只留多错模式', () => {
@@ -667,6 +737,38 @@ test('第 3 章：非平稳档的带外比例超过 90%', () => {
   assert.equal(view.failed, true)
   assert.equal(view.readouts[2].warn, true)
   assert.ok(view.conclusion.includes('平稳'))
+})
+
+test('第 3 章：非平稳档的理论均值随时间漂，读数不再是 0.000', () => {
+  const chapter = chapterByNo(3)
+  const drifted = chapter.compute({ kind: 2, timeIndex: 3, k: 100 })
+  const theory = drifted.readouts.find((r) => r.label === '理论统计平均')!
+  // 末时刻期望 E[x(T)] = c·T = 2 × 0.1 s = 0.200，报 0.000 与本章论点直接冲突。
+  assert.notEqual(theory.value, '0.000')
+  assert.equal(theory.value, '0.200')
+  assert.ok(theory.hint.includes('c·t'), `hint 要交代这个数的来历，实际：${theory.hint}`)
+
+  // 容许带的中心跟着这条理论均值走：0.200、0.200 + 4σ_T、0.200 − 4σ_T。
+  const drawn = drifted.guides!.map((g) => g.y.toFixed(3))
+  assert.deepEqual(drawn, ['0.200', '0.326', '0.074'])
+  // 带外比例仍是设计出来的失效信号。
+  const outside = drifted.readouts.find((r) => r.label.startsWith('带外比例'))!
+  assert.equal(outside.value, '92.0 %')
+  assert.equal(drifted.failed, true)
+
+  // 平稳档仍报 0.000——带心只在非平稳档移位。
+  for (const kind of [0, 1]) {
+    const still = chapter.compute({ kind, timeIndex: 3, k: 100 }).readouts.find((r) => r.label === '理论统计平均')!
+    assert.equal(still.value, '0.000', `kind=${kind} 是平稳过程，理论均值就该是 0`)
+  }
+})
+
+test('第 3 章：同一档连跑两次读数与结论逐字相同', () => {
+  const chapter = chapterByNo(3)
+  const a = chapter.compute({ kind: 2, timeIndex: 3, k: 100 })
+  const b = chapter.compute({ kind: 2, timeIndex: 3, k: 100 })
+  assert.equal(a.conclusion, b.conclusion)
+  assert.deepEqual(a.readouts.map((r) => r.value), b.readouts.map((r) => r.value))
 })
 
 test('第 3 章：σ_T 随观测时长按 1/√T 收窄', () => {

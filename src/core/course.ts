@@ -1412,6 +1412,12 @@ function computeMatch(params: Record<string, number>): CourseView {
       warn: loss > 1,
     },
     {
+      label: '采样点信噪比',
+      value: `${(snrDb - loss).toFixed(1)} dB`,
+      hint: `10·log10(2ρ²γ) = ${snrDb.toFixed(1)} − ${loss.toFixed(2)} = ${(snrDb - loss).toFixed(1)} dB；峰值信噪比是滤波器能给出的上限，采样点信噪比是这一次实际拿到的。`,
+      warn: snrDb - loss < 8,
+    },
+    {
       label: '误码率',
       value: exponent(theoryBer),
       hint: `理论 Q(√(2ρ²γ))；实测 ${exponent(measuredBer)}（${MATCH_SAMPLES} 比特）。`,
@@ -1818,6 +1824,19 @@ const infoSampleParam: CourseParam = {
   options: [...INFO_SAMPLE_NAMES],
 }
 
+/** 本章唯一的错法不是 p 取多少，而是「拿单次信息量当平均」这个口径。 */
+const INFO_BASES = ['按概率加权（对）', '拿单次信息量当平均（错）'] as const
+
+const infoBasisParam: CourseParam = {
+  key: 'basis',
+  label: '计算口径',
+  min: 0,
+  max: 1,
+  step: 1,
+  unit: '',
+  options: [...INFO_BASES],
+}
+
 function log2(x: number): number {
   return Math.log(x) / Math.LN2
 }
@@ -1847,9 +1866,11 @@ function computeInfo(params: Record<string, number>): CourseView {
   const p = Math.min(0.99, Math.max(0.01, Math.round((params.p ?? 0.5) * 100) / 100))
   const sampleIndex = Math.min(INFO_SAMPLES.length - 1, Math.max(0, Math.round(params.sample ?? 3)))
   const n = INFO_SAMPLES[sampleIndex]
+  const basis = Math.min(INFO_BASES.length - 1, Math.max(0, Math.round(params.basis ?? 0)))
   const info = selfInfo(p)
   const entropy = binaryEntropy(p)
-  const measured = sampleInfo(p, n)
+  // 口径错的时候不去抽样：直接把单次信息量当成平均信息量报上去，差多少倍一眼能看出来。
+  const measured = basis === 1 ? info : sampleInfo(p, n)
   const grid = Array.from({ length: INFO_POINTS }, (_, i) => (i + 1) / 100)
 
   const series: CourseSeries[] = [
@@ -1889,7 +1910,7 @@ function computeInfo(params: Record<string, number>): CourseView {
       label: '单次信息量 I(p)',
       value: `${info.toFixed(2)} bit`,
       hint: `−log2 p = ${info.toFixed(3)}；概率越大，这一次带来的信息越少，p → 1 时趋于 0。这一条是单次的理论值，下一条才是平均。`,
-      warn: info < entropy,
+      warn: false,
     },
     {
       label: '熵 H(p)',
@@ -1900,19 +1921,24 @@ function computeInfo(params: Record<string, number>): CourseView {
     {
       label: '实测平均信息量',
       value: `${measured.toFixed(3)} bit`,
-      hint: `抽 ${n.toLocaleString('en-US')} 个 0/1 样本，累计 −log2(该符号的概率) 再除以 n；理论上是 H(p) = ${entropy.toFixed(3)} bit，实测与它比 ${(measured / entropy).toFixed(3)} 倍。`,
-      warn: Math.abs(measured - entropy) > 0.05,
+      hint:
+        basis === 1
+          ? `这一档把单次信息量 I(p) = ${info.toFixed(3)} bit 直接当成平均信息量报上来，没有按 p 与 1−p 加权；真正的平均是 H(p) = ${entropy.toFixed(3)} bit，两者差 ${(info / entropy).toFixed(2)} 倍。`
+          : `抽 ${n.toLocaleString('en-US')} 个 0/1 样本，累计 −log2(该符号的概率) 再除以 n；理论上是 H(p) = ${entropy.toFixed(3)} bit，实测与它比 ${(measured / entropy).toFixed(3)} 倍。`,
+      warn: basis === 1 || Math.abs(measured - entropy) > 0.05,
     },
   ]
 
-  // 失效不设硬阈值：两条曲线只在 p = 0.5 相交，p > 0.5 时单次必然小于平均，
-  // 判据自己就从读数里长出来，不会哪天和屏幕上的数打架。
-  const failed = info < entropy
+  // 错法只有一处，且不在 p 上：p 是自由参数，任何合法取值都不该判红。
+  // 判据挂在「计算口径」上——拿单次信息量当平均，等于假设每个符号都和这一次一样罕见。
+  const failed = basis === 1
   let conclusion: string
-  if (failed) {
-    conclusion = `一个几乎必然发生的事件，单次只带 ${info.toFixed(2)} bit；可平均仍有 ${entropy.toFixed(3)} bit，因为那 ${Math.round((1 - p) * 100)}% 的「不发生」一次就值 ${(-log2(1 - p)).toFixed(2)} bit——一个事件的信息量，不等于整条源的信息量。`
+  if (basis === 1) {
+    conclusion = `把单次信息量当平均，等于假设每个符号都同样罕见：I(p) = ${info.toFixed(2)} bit，可真正的平均是 H(p) = ${entropy.toFixed(3)} bit，差 ${(info / entropy).toFixed(2)} 倍——平均要按 p 与 1−p 加权，不能拿单次顶上。`
   } else if (Math.abs(p - 0.5) < 0.02) {
     conclusion = `两条线都到 ${info.toFixed(2)} bit，这是标尺：一次抛硬币带走的信息量，正好等于整条源的平均。`
+  } else if (p > 0.5) {
+    conclusion = `一个几乎必然发生的事件，单次只带 ${info.toFixed(2)} bit；可平均仍有 ${entropy.toFixed(3)} bit，因为那 ${Math.round((1 - p) * 100)}% 的「不发生」一次就值 ${(-log2(1 - p)).toFixed(2)} bit——一个事件的信息量，不等于整条源的信息量。`
   } else {
     conclusion = `单次 ${info.toFixed(2)} bit 很值钱，可平均只有 ${entropy.toFixed(3)} bit，它太罕见了，摊到整条源上就只剩这点。`
   }
@@ -2001,6 +2027,8 @@ export type ProcessStats = {
   outside: number
   /** 同样条件下、若过程平稳时的理论 σ_T。 */
   sigmaTheory: number
+  /** 容许带的中心：平稳档为 0；非平稳档取末时刻期望 c·T。 */
+  center: number
 }
 
 /**
@@ -2038,8 +2066,11 @@ export function processStats(kind: number, timeMs: number, k: number): ProcessSt
   const mean = averages.reduce((sum, v) => sum + v, 0) / k
   const variance = averages.reduce((sum, v) => sum + (v - mean) ** 2, 0) / Math.max(1, k - 1)
   const sigmaTheory = processSigmaTheory(kind, timeMs)
-  const outside = averages.filter((v) => Math.abs(v) > 4 * sigmaTheory).length / k
-  return { averages, mean, sigma: Math.sqrt(variance), outside, sigmaTheory }
+  // 容许带的中心不能再钉死在 0 上：非平稳档的集合平均 E[x(t)] = c·t 本身就随时间漂，
+  // 带心取观测窗口末时刻的期望值 c·T，带外比例量的才是「时间平均跑偏多少」。
+  const center = kind === 2 ? (PROC_DRIFT * timeMs) / 1000 : 0
+  const outside = averages.filter((v) => Math.abs(v - center) > 4 * sigmaTheory).length / k
+  return { averages, mean, sigma: Math.sqrt(variance), outside, sigmaTheory, center }
 }
 
 function computeProcess(params: Record<string, number>): CourseView {
@@ -2056,7 +2087,7 @@ function computeProcess(params: Record<string, number>): CourseView {
   const outBand: Array<[number, number]> = []
   stats.averages.forEach((value, i) => {
     const point: [number, number] = [i + 1, value]
-    if (Math.abs(value) > band) outBand.push(point)
+    if (Math.abs(value - stats.center) > band) outBand.push(point)
     else inBand.push(point)
   })
 
@@ -2069,8 +2100,11 @@ function computeProcess(params: Record<string, number>): CourseView {
   const readouts: CourseReadout[] = [
     {
       label: '理论统计平均',
-      value: '0.000',
-      hint: '集合平均 E[x(t)]；三种过程都按 0 画参考线，时间平均该不该收敛到它，正是这一屏要验的事。',
+      value: stats.center === 0 ? '0.000' : stats.center.toFixed(3),
+      hint:
+        kind === 2
+          ? `E[x(t)] = c·t 随时间线性变化，这一档根本没有一个常数均值：容许带中心取观测窗口末时刻的期望值 c·T = ${PROC_DRIFT} × ${(timeMs / 1000).toFixed(3)} s = ${stats.center.toFixed(3)}，也就是这段时间里均值漂到的地方。`
+          : '集合平均 E[x(t)]；这一档平稳，E[x(t)] 恒为 0，时间平均该不该收敛到它，正是这一屏要验的事。',
       warn: false,
     },
     {
@@ -2082,14 +2116,14 @@ function computeProcess(params: Record<string, number>): CourseView {
     {
       label: '带外比例（±4σ_T 之外）',
       value: `${(stats.outside * 100).toFixed(1)} %`,
-      hint: `容许带取理论的 ±4·σ_T = ±${band.toFixed(3)}；比例高说明这些曲线的平均值根本不围着 0 转。`,
+      hint: `容许带取 ${stats.center === 0 ? '±4·σ_T' : `以 ${stats.center.toFixed(3)} 为中心、±4·σ_T`} = ${stats.center === 0 ? `±${band.toFixed(3)}` : `${(stats.center - band).toFixed(3)} … ${(stats.center + band).toFixed(3)}`}；比例高说明这些曲线的时间平均根本没围着理论均值转。`,
       warn: stats.outside > 0.5,
     },
   ]
 
   let conclusion: string
   if (kind === 2) {
-    conclusion = `均值在漂的时候，时间平均不再指向 0：${k} 条曲线各自偏在不同的地方，带外比例 ${(stats.outside * 100).toFixed(1)} %。时间平均能当统计平均用，前提是过程平稳；一旦均值在漂，抓一条曲线算出来的东西只属于那一段时间，换一条就不一样了。`
+    conclusion = `均值在漂的时候，时间平均不再指向同一个常数：理论均值 E[x(t)] = c·t 一路从 0 涨到 ${stats.center.toFixed(3)}，${k} 条曲线各自偏在不同的地方，取末时刻期望作带心后带外比例 ${(stats.outside * 100).toFixed(1)} %。时间平均能当统计平均用，前提是过程平稳；一旦均值在漂，抓一条曲线算出来的东西只属于那一段时间，换一条就不一样了。`
   } else if (kind === 1) {
     conclusion = `相关时间 ${PROC_CORR_MS} ms 的低通过程，${timeMs} ms 里只装得下约 ${Math.round((timeMs / 2) / PROC_CORR_MS)} 个独立样本，σ_T 涨到 ${stats.sigma.toFixed(3)}，是白噪声的 ${(stats.sigma / whiteSigma).toFixed(1)} 倍：相关时间越长，时间平均收敛越慢，一条曲线要观测得更久才顶用。`
   } else {
@@ -2099,9 +2133,12 @@ function computeProcess(params: Record<string, number>): CourseView {
   return {
     series,
     guides: [
-      { y: 0, label: '统计平均 0' },
-      { y: band, label: `+4σ_T = ${band.toFixed(3)}` },
-      { y: -band, label: `−4σ_T = ${(-band).toFixed(3)}` },
+      {
+        y: stats.center,
+        label: stats.center === 0 ? '统计平均 0' : `统计平均 ${stats.center.toFixed(3)}（末时刻 c·T）`,
+      },
+      { y: stats.center + band, label: `+4σ_T = ${(stats.center + band).toFixed(3)}` },
+      { y: stats.center - band, label: `−4σ_T = ${(stats.center - band).toFixed(3)}` },
     ],
     xLabel: `样本编号（1…${k}）`,
     yLabel: '时间平均',
@@ -2373,9 +2410,9 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     implemented: true,
     reason: '',
     question: '一个几乎必然发生的事件，告诉你的信息为什么几乎为零？',
-    params: [infoProbParam, infoSampleParam],
-    defaults: { p: 0.5, sample: 3 },
-    failPreset: { p: 0.99, sample: 3 },
+    params: [infoProbParam, infoSampleParam, infoBasisParam],
+    defaults: { p: 0.5, sample: 3, basis: 0 },
+    failPreset: { p: 0.99, sample: 3, basis: 1 },
     compute: computeInfo,
   },
   {
