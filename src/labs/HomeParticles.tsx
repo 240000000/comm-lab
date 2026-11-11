@@ -1,11 +1,16 @@
 import { useEffect, useRef } from 'react'
 import { syncCanvasSize } from './canvasSize'
 import { EYE_SAMPLES, EYE_TRACES, eyePoints } from './eyePoints'
+import { formAt } from './formCycle'
+import { spectrumPoints } from './spectrumPoints'
 
-// 首页整页那一层：两团三维眼图瀑布的粒子云，粒子只落在左下与右下，中间整片让给卡片。
+// 首页整页那一层：两团三维粒子云，粒子只落在左下与右下，中间整片让给卡片。
 //
-// 取点全在 eyePoints.ts 里一次算好（Float32Array），这里逐帧只做三件事：
-// 绕竖轴转一下、投影到屏幕上、再按深度从远到近铺点。没有 3D 库，也没有每帧 new。
+// 同一批粒子在两个形态之间循环变形（R78）：形态 A 是眼图瀑布、形态 B 是一叠频谱。
+// 两套点阵在 eyePoints.ts / spectrumPoints.ts 里各算一次，且用的是同一张网格
+// （同 trace、同 sample、同 x、同 z），所以下标 i 在两个形态里都指同一个粒子。
+// 这里逐帧只做四件事：按下标插值、绕竖轴转、投影、按深度从远到近铺点。
+// 没有 3D 库，也没有每帧 new。
 const NARROW_PX = 1280
 /** 60 条迹 × 100 列 = 6000 个点。隔一列取一列正好 3000，窄屏再减半。 */
 const STRIDE_WIDE = 2
@@ -37,7 +42,9 @@ export function HomeParticles() {
     if (!ctx) return
 
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const cloud = eyePoints()
+    // 两套点阵各算一次，之后逐帧只读不建。
+    const eye = eyePoints()
+    const spectrum = spectrumPoints()
     const half = EYE_TRACES / 2
     const sx = new Float32Array(MAX_PARTICLES)
     const sy = new Float32Array(MAX_PARTICLES)
@@ -64,12 +71,20 @@ export function HomeParticles() {
       if (syncCanvasSize(canvas, width, height, dpr)) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, width, height)
 
+      // 形态循环：w 是「离形态 B 有多近」，停 A 时 0、停 B 时 1、变形中按 smoothstep 走。
+      const form = formAt(elapsedMs)
+      const toB = form.to === 'spectrum'
+      const fromB = form.from === 'spectrum'
+      const w = toB ? (fromB ? 1 : form.t) : fromB ? 1 - form.t : 0
+      const wa = 1 - w
+
       const stride = window.innerWidth >= NARROW_PX ? STRIDE_WIDE : STRIDE_NARROW
       const spin = (elapsedMs / 14000) * Math.PI * 2
       let count = 0
 
       for (let zone = 0; zone < 2; zone += 1) {
         // 两团反向转：左边顺时针、右边逆时针，中间才不会连成一片糊。
+        // 变形过程中这一层照常转——两件事迭加，不是二选一。
         const ang = zone === 0 ? spin : -spin + Math.PI
         const ca = Math.cos(ang)
         const sa = Math.sin(ang)
@@ -81,9 +96,10 @@ export function HomeParticles() {
           const rowBase = trace * EYE_SAMPLES * 3
           for (let sample = 0; sample < EYE_SAMPLES; sample += stride) {
             const at = rowBase + sample * 3
-            const x = cloud[at]
-            const y = cloud[at + 1]
-            const z = cloud[at + 2]
+            // 同一个下标在两个形态里都有定义，所以这里只是两支线性组合，不新建数组。
+            const x = eye[at] * wa + spectrum[at] * w
+            const y = eye[at + 1] * wa + spectrum[at + 1] * w
+            const z = eye[at + 2] * wa + spectrum[at + 2] * w
             const rx = x * ca - z * sa
             const rz = x * sa + z * ca
             const depth = FOCUS / (FOCUS + rz * 0.55)
@@ -116,7 +132,7 @@ export function HomeParticles() {
     observer.observe(canvas)
 
     if (reduced.matches) {
-      // 关掉动效时只留静态一帧，不申请动画帧。
+      // 关掉动效时只画形态 A 的静态一帧：不循环、不申请动画帧。
       draw(0)
     } else {
       const tick = (now: number) => {
