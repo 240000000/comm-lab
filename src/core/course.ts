@@ -362,6 +362,13 @@ function computeModulation(params: Record<string, number>): CourseView {
   const beta = params.beta ?? 2
   const snrIn = params.snrIn ?? 25
   const fm = 1.5
+  // 教材里的调频指数 β 就是 D = Δf/fm。要让滑块上拖的 β 真的等于 D，消息得先
+  // 归一化到「导数峰值 = 1」，再让相位乘上 β·fm：这样瞬时频偏恰好是 β·fm，
+  // D = Δf/fm 才等于 β，Carson 上限 2(β+1)fm 才对得上。
+  // 归一化前这条消息的导数峰值是 1.2（单位 kHz，已除过 2π）。
+  const fmMsgPeak = 1.2
+  const fmMsg = (t: number) =>
+    (0.7 * Math.sin(2 * Math.PI * t) + (0.5 * Math.sin(2 * Math.PI * 1.5 * t)) / 1.5) / fmMsgPeak
   const fc = 8
   const fs = 64
   const total = 4
@@ -388,7 +395,7 @@ function computeModulation(params: Record<string, number>): CourseView {
       // 上边带：消息乘载波，减掉正交分量，下边带被抵消。
       sent.push(m * (msg[i] * Math.cos(2 * Math.PI * fc * t) - msgHat[i] * Math.sin(2 * Math.PI * fc * t)))
     } else {
-      const phi = 2 * Math.PI * fc * t + beta * (0.7 * Math.sin(2 * Math.PI * t) + (0.5 * Math.sin(2 * Math.PI * 1.5 * t)) / 1.5)
+      const phi = 2 * Math.PI * fc * t + beta * fm * fmMsg(t)
       phase.push(phi)
       sent.push(Math.cos(phi))
     }
@@ -403,7 +410,7 @@ function computeModulation(params: Record<string, number>): CourseView {
     const mix = sent.map((v, i) => 2 * v * Math.cos(2 * Math.PI * fc * (i * dt)))
     demod = idealLowpass(mix, 2, fs)
   } else {
-    // 理想鉴频器：相位求导，扣掉载频，剩下的就是 β·m(t)。
+    // 理想鉴频器：相位求导，扣掉载频，剩下的是 β·fm·m归一(t)。
     // 中心差分：取 i-1 与 i+1 两点，导数正好落在第 i 点上，不引入半样本延迟。
     demod = phase.map((_, i) => {
       const prev = phase[Math.max(i - 1, 0)]
@@ -411,7 +418,8 @@ function computeModulation(params: Record<string, number>): CourseView {
       const steps = i === 0 || i === phase.length - 1 ? 1 : 2
       return (next - prev) / (2 * Math.PI * dt * steps) - fc
     })
-    demod = demod.map((v) => v / Math.max(beta, 0.2))
+    // 除以 β·fm 才能还原归一化后的消息；β 或 fm 很小时留一个下限防止数值炸开。
+    demod = demod.map((v) => v / Math.max(beta * fm, 0.2))
   }
 
   // 对齐幅度后再比失真，免得只比缩放。前后各留 12% 不比较，避开滤波器起停的边界。
@@ -981,13 +989,16 @@ function shootBits(scheme: number, ebn0Db: number, phaseDeg: number): number {
     const bit = rng.next() < 0.5 ? 0 : 1
     let wrong: boolean
     if (scheme === 3) {
-      // 差分相干：拿前一个码元当参考，判据是两个采样相乘的符号。
-      // 乘积把两路噪声各算一次，等效噪声方差减半，所以幅度取 √(2γ)，
-      // 这样蒙特卡洛才落在 0.5·exp(−Eb/N0) 这条理论线上。
+      // 差分相干：拿前一个码元当参考，判据是复相关 Re(r1·conj(r2)) 的符号。
+      // 参考码元与当前码元各带一路独立的复噪声（实虚各 N(0,1)，噪声功率 2），
+      // 幅度取 √(2γ) 使每码元 Es = 2γ，于是 Eb/N0 = Es/2 = γ。
+      // 两条支路都带噪声，判决量的信噪比才真的是 γ，蒙特卡洛才落在 0.5·exp(−Eb/N0) 上。
       const a = Math.sqrt(2 * gamma)
-      const r1 = a + rng.gauss()
-      const r2 = (bit === 1 ? a : -a) + rng.gauss()
-      const product = r1 * r2
+      const r1Re = a + rng.gauss()
+      const r1Im = rng.gauss()
+      const r2Re = (bit === 1 ? a : -a) + rng.gauss()
+      const r2Im = rng.gauss()
+      const product = r1Re * r2Re + r1Im * r2Im
       wrong = bit === 1 ? product < 0 : product > 0
     } else if (scheme === 0) {
       // 单极性 OOK：σ=1 时 Eb = 2γ，峰值幅度取 A = 2√(γ·loss)，
@@ -1030,7 +1041,10 @@ function computeBandpass(params: Record<string, number>): CourseView {
   const gammaNow = 10 ** (ebn0Db / 10)
   const gainDb = 10 * Math.log10(fskGammaFor(theoryBer) / gammaNow)
   const phaseLostDb = -10 * Math.log10(coherentLoss(phaseDeg))
-  const collapsed = phaseDeg >= 40 && Math.abs(gainDb) < 0.5
+  // 只有「单支路 + cos²φ 损失」的相干检测（2PSK / 2ASK）才会被相位误差拖到与 2FSK 打平。
+  // 2FSK 在本模型里两路正交、判决只用一路幅度，理论式与仿真都不含 cos²φ 这一项，
+  // φ 对它零影响，所以不能把它也判成 collapsed。
+  const collapsed = scheme !== 1 && phaseDeg >= 40 && Math.abs(gainDb) < 0.5
 
   const deviate = measuredBer > 0 && (measuredBer > theoryBer * 3 || measuredBer < theoryBer / 3)
   const errors = Math.round(measuredBer * BAND_SAMPLES)
@@ -1069,7 +1083,10 @@ function computeBandpass(params: Record<string, number>): CourseView {
   if (collapsed) {
     conclusion = `相位误差 45 度吃掉了整整 3 dB，2PSK 现在和 2FSK 打平：增益 ${gainDb.toFixed(1)} dB，曲线退到 2FSK 上，那个「省 3 dB」的结论就没了。`
   } else if (scheme === 1) {
-    conclusion = `2FSK 自己就是基准，增益 0.0 dB；同样误码率下 2PSK 只要 ${Math.max(0, ebn0Db - 3.01).toFixed(1)} dB，差的正是那 3 dB。`
+    conclusion =
+      phaseDeg > 0
+        ? `2FSK 不需要相干载波相位：两路正交各走各的，接收端比的是两路能量谁大，φ 只让两路一起缩一点，判决门限跟着缩，误码率不动。理论式和实测里都没有 cos²φ 这一项，相位误差 ${phaseDeg} 度对它零影响，实测仍贴着 Q(√(Eb/N0))。`
+        : `2FSK 自己就是基准，增益 0.0 dB；同样误码率下 2PSK 只要 ${Math.max(0, ebn0Db - 3.01).toFixed(1)} dB，差的正是那 3 dB。`
   } else if (phaseDeg > 0) {
     conclusion = `相位误差 ${phaseDeg} 度先吃掉 ${phaseLostDb.toFixed(2)} dB，剩下的才是 ${label} 相对 2FSK 的净增益 ${gainDb.toFixed(1)} dB。`
   } else {

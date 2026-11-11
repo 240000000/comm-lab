@@ -231,6 +231,20 @@ test('第 7 章：φ=45 的 2PSK 与 φ=0 的 2FSK 落在同一个量级（那 3
   assert.ok(Math.abs(ratio - 1) < 0.01, `cos²45° 把 2PSK 的 3 dB 优势全吃掉，比值应约 1，实际 ${ratio}`)
 })
 
+test('第 7 章：2FSK 不含 cos²φ，φ=45 时既不标红也不说「吃掉 3 dB」', () => {
+  const chapter = chapterByNo(7)
+  const fsk = chapter.compute({ scheme: 1, ebn0Db: 8, phaseDeg: 45 })
+  // 两路正交各走各的，接收端比能量，相位误差对判决量没有影响：理论式就是 Q(√γ)，与 φ 无关。
+  assert.equal(fsk.failed, false, '2FSK 的相干检测不含 cos²φ，不该被相位误差判死')
+  assert.ok(!fsk.conclusion.includes('3 dB'), `2FSK 结论不该出现「3 dB」，实际：${fsk.conclusion}`)
+  assert.match(fsk.conclusion, /零影响|不需要相干载波相位/)
+  assert.equal(fsk.readouts[0].value, '6.00e-3', '2FSK 的理论误码率与相位误差无关')
+  // 对照组：同样 45 度，2PSK 确实被 cos²φ 吃掉 3 dB，那句话得留着。
+  const psk = chapter.compute({ scheme: 2, ebn0Db: 8, phaseDeg: 45 })
+  assert.equal(psk.failed, true)
+  assert.match(psk.conclusion, /3 dB/)
+})
+
 test('第 7 章：2ASK 与 2FSK 在 8 dB 打平，2PSK 比它们低约 3 dB（2 到 2.5 倍）', () => {
   const chapter = chapterByNo(7)
   const ask = Number(chapter.compute({ ...chapter.defaults, scheme: 0 }).readouts[0].value)
@@ -254,6 +268,34 @@ test('第 7 章：2ASK 的蒙特卡洛实测落在理论值的十分之一到十
   const measured = Number(view.readouts[1].value)
   assert.ok(measured > theory / 10 && measured < theory * 10, `实测 ${measured} 与理论 ${theory} 差得太远`)
   assert.equal(view.series[4].marker, true)
+})
+
+test('第 7 章：2DPSK 走复相关，4/6/8 dB 的实测贴着 0.5·exp(−γ)（0.6–1.6 倍）', () => {
+  const chapter = chapterByNo(7)
+  const rows = [4, 6, 8].map((ebn0Db) => {
+    const view = chapter.compute({ scheme: 3, ebn0Db, phaseDeg: 0 })
+    const theory = Number(view.readouts[0].value)
+    const measured = Number(view.readouts[1].value)
+    return { ebn0Db, theory, measured, ratio: measured / theory }
+  })
+  for (const row of rows) {
+    // 理论式必须还是 0.5·exp(−γ)：γ = 10^(Eb/N0/10)。
+    const gamma = 10 ** (row.ebn0Db / 10)
+    // 读数只保留三位有效数字，容差按 1% 给。
+    assert.ok(
+      Math.abs(row.theory - 0.5 * Math.exp(-gamma)) / row.theory < 0.01,
+      `${row.ebn0Db} dB 的理论值 ${row.theory} 偏离 0.5·exp(−γ)`,
+    )
+    // 复相关：两条支路各来一路独立噪声，判决量 Re(r1·conj(r2))，比值应当落在 1 附近。
+    // 改成两个实数相乘会丢掉正交支路的噪声，比值系统性偏小到 0.5 左右。
+    assert.ok(
+      row.ratio >= 0.6 && row.ratio <= 1.6,
+      `${row.ebn0Db} dB 的实测/理论 = ${row.ratio.toFixed(3)}，落在 0.6–1.6 之外`,
+    )
+  }
+  // 10 dB 以上不比：20000 比特只够出几比特错，比值是统计噪声不是物理。
+  const high = chapter.compute({ scheme: 3, ebn0Db: 10, phaseDeg: 0 })
+  assert.ok(Number(high.readouts[1].value) * 20000 < 40, '10 dB 的错比特数太少，不能拿来比')
 })
 
 test('第 7 章失效档：增益 0.0 dB 标红、结论改口；默认档 3.0 dB 不报红', () => {
@@ -735,13 +777,28 @@ test('第 5 章：β=1、25 dB 输入时输出信噪比落在 32.8 dB 附近', (
   assert.ok(Math.abs(b3.out - 45.3) < 0.2, `β=3 的输出信噪比 ${b3.out} dB，偏离 45.3 超过 0.2 dB`)
 })
 
+test('第 5 章：FM 的 β 就是调频指数 D，β=2 时 Carson 上限 9.00 kHz、输出 40.6 dB', () => {
+  const chapter = chapterByNo(5)!
+  const view = chapter.compute({ mode: 3, m: 0.6, beta: 2, snrIn: 25 })
+  const out = Number.parseFloat(view.readouts.find((r) => r.label === '输出信噪比')!.value)
+  // 消息归一化到导数峰值 1 之后 D=Δf/fm=β，制度增益 3β²(β+1)=36 → 15.56 dB → 25+15.56。
+  assert.ok(Math.abs(out - 40.6) < 0.2, `β=2 的输出信噪比 ${out} dB，偏离 40.6 超过 0.2 dB`)
+  // Carson 上限 2(β+1)·fm = 2·3·1.5 = 9.00 kHz；98% 能量带宽实测 7.00 kHz，占 78%，在 30% 以内不报黄。
+  const band = view.readouts.find((r) => r.label === '占用带宽')!
+  assert.equal(band.value, '7.00 kHz')
+  assert.equal(band.warn, false, '实测占理论 78%，偏离不到 30%，不该报黄')
+  assert.match(view.conclusion, /Carson 上限 9\.00 kHz/)
+  assert.match(view.conclusion, /78%/)
+})
+
 test('第 5 章：带宽 warn 是双向的，实测比理论小 30% 以上也报红', () => {
   const chapter = chapterByNo(5)!
-  // β=1 的 98% 能量带宽只有 Carson 上限的 50%，旧的单向判据不会报。
+  // 消息归一化之后，β=1 的 98% 能量带宽只有 Carson 上限的 67%（4.00 / 6.00 kHz），
+  // 偏离超过 30%，旧的单向判据（只报超出）不会报。
   const fm = chapter.compute({ mode: 3, m: 0.6, beta: 1, snrIn: 25 })
   const band = fm.readouts.find((r) => r.label === '占用带宽')!
-  assert.equal(band.warn, true, 'FM 带宽只占理论的 50%，双向判据应该报黄')
-  assert.ok(band.hint.includes('实测占理论的 50%'))
+  assert.equal(band.warn, true, 'FM 带宽只占理论的 67%，双向判据应该报黄')
+  assert.ok(band.hint.includes('实测占理论的 67%'))
   // 三档单音调制都正好铺满理论带宽，不该报。
   for (const mode of [0, 1, 2]) {
     const view = chapter.compute({ mode, m: 0.6, beta: 1, snrIn: 25 })
