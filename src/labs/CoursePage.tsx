@@ -15,6 +15,7 @@ import {
   type CourseParam,
   type CourseView,
 } from '../core/course.ts'
+import { chartLabel } from './chartLabel.ts'
 import { CourseChart } from './CourseChart.tsx'
 import { CourseLegend } from './CourseLegend.tsx'
 import { ParamSlider } from './ParamSlider.tsx'
@@ -168,6 +169,12 @@ const ChapterScreen = memo(function ChapterScreen({
       <div className="course-chart">
         <CourseLegend series={view.series} />
         <CourseChart
+          label={chartLabel({
+            no: chapter.no,
+            title: chapter.title,
+            question: chapter.question,
+            readouts: view.readouts,
+          })}
           series={view.series}
           xLabel={view.xLabel}
           yLabel={view.yLabel}

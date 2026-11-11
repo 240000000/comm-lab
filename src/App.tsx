@@ -88,7 +88,6 @@ export default function App() {
         </p>
         <div className="cta">
           <span className="badge">v0.11 · 三个实验台、任务模式与课程视图</span>
-          <a href="#/course">课程视图 →</a>
           <a href="https://github.com/240000000/comm-lab" target="_blank" rel="noreferrer">
             源码仓库
           </a>

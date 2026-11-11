@@ -48,6 +48,7 @@ export function CourseChart({
   yTicks,
   markerX,
   markerLabel,
+  label,
 }: {
   series: CourseSeries[]
   xLabel: string
@@ -63,6 +64,8 @@ export function CourseChart({
   /** 竖参考线：第 12 章用它指出「当前取的是第几根柱」；不传就没有这条线，其它章零影响。 */
   markerX?: number
   markerLabel?: string
+  /** 读屏器读的那句话（chartLabel 拼的）；画布本身对读屏器是空白，必须由外面传进来。 */
+  label: string
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   // 宽度只量一次、之后读缓存：clientWidth 会强制浏览器同步重排，
@@ -439,7 +442,15 @@ export function CourseChart({
     return () => observer.disconnect()
   }, [])
 
-  return <canvas className="course-canvas" ref={ref} style={{ height: cssHeight }} />
+  return (
+    <canvas
+      className="course-canvas"
+      ref={ref}
+      role="img"
+      aria-label={label}
+      style={{ height: cssHeight }}
+    />
+  )
 }
 
 /** 章节显式给的刻度按原值写：0.01 就写 0.01，不补零成 0.010。 */
