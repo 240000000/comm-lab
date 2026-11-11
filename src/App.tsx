@@ -7,7 +7,7 @@ import { OfdmPage } from './labs/OfdmPage'
 import { MissionPage } from './labs/MissionPage'
 import { CoursePage } from './labs/CoursePage'
 import { HomeBackdrop } from './labs/HomeBackdrop'
-import { HomeCurve } from './labs/HomeCurve'
+import { HomeParticles } from './labs/HomeParticles'
 
 const modules = [
   {
@@ -72,7 +72,7 @@ export default function App() {
   return (
     <div className="home">
       <HomeBackdrop />
-      <HomeCurve />
+      <HomeParticles />
       <main className="shell">
         <header className="hero">
         <p className="eyebrow">通信原理 · 交互实验室</p>

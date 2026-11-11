@@ -2221,6 +2221,8 @@ a.card {
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  /* 底部留出一条 160 px 的窄带，让最下面一排粒子露出来，不被页脚压断。 */
+  padding-bottom: 160px;
 }
 
 .home-backdrop {
@@ -2238,34 +2240,18 @@ a.card {
   z-index: 1;
 }
 
-/* 首页左下角的螺旋线：独立 canvas，与右上角的点云各转各的。
-   压着内容的只有 overlay 层，这块画布整体躺在页面左右留白里——宽度由留白算出来：
-   留白 = (100vw − min(1080px, 100vw − 48px)) / 2，再减 24 px 的呼吸量，
-   所以 1440 时 156 px、1920 时封顶 300 px，一个像素也不进卡片区域。
-   右侧只留 8% 的柔和收边，不用大段渐隐去遮丑。 */
-.home-curve {
+/* 首页底层粒子：一块铺满整个首页的 canvas，跟 .home-backdrop 一样是 absolute inset:0、
+   z-index 0，靠 DOM 顺序压在点云之上、卡片之下（.home .shell 仍然是 z-index 1，不动）。
+   两块粒子云由 JS 摆在左下与右下，中间那一竖条留给卡片。 */
+.home-particles {
   position: absolute;
-  left: 0;
-  bottom: 0;
-  z-index: 1;
+  inset: 0;
+  z-index: 0;
   display: block;
-  width: clamp(120px, calc((100vw - min(1080px, 100vw - 48px)) / 2 - 24px), 300px);
-  height: min(56vh, 520px);
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  opacity: 0.65;
-  -webkit-mask-image: linear-gradient(to right, #000 92%, transparent 100%);
-  mask-image: linear-gradient(to right, #000 92%, transparent 100%);
-  transition: opacity 240ms ease;
 }
-
-/* 窄到 1280 px 以下，左右边距只剩 24 px，曲线会整块钻到卡片底下、只露一条边，
-   没有视觉意义，所以直接淡掉。 */
-@media (max-width: 1279.98px) {
-  .home-curve {
-    opacity: 0;
-  }
-}
-
 
 /* 原生控件自带的加载转圈与页面转圈重复，隐藏原生那个，保留 CSS 转圈。 */
 video::-webkit-media-controls-loading-panel,
