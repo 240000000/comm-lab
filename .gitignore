@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 用户放在工作区、不入库的文件
+评语.txt
