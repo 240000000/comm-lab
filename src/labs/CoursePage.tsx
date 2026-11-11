@@ -22,16 +22,15 @@ import { ParamSlider } from './ParamSlider.tsx'
 import {
   DEFAULT_BOOK_ID,
   UNCOVERED_NOTE,
-  addBook,
   billOf,
   bookById,
   bookFromOutline,
   defaultShelfBook,
   evidenceOf,
   isPlayable,
-  removeBook,
 } from '../course/shelf.ts'
 import type { ShelfBook } from '../course/shelf.ts'
+import { importBook, removeBookById, setActive, useShelf } from '../course/shelfStore.ts'
 
 const START_CHAPTER = 2
 
@@ -236,15 +235,14 @@ export function CoursePage() {
   const dragRef = useRef(createDragCoalescer<Record<string, number>>())
   const paramsRef = useRef(params)
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
-  // 书架只在内存里：导入的章名和书一样不落地，刷新就回到默认那本。
-  const [shelf, setShelf] = useState<ShelfBook[]>(() => [defaultShelfBook()])
-  const [activeId, setActiveId] = useState<string>(DEFAULT_BOOK_ID)
+  // 书架提到模块级（shelfStore）：首页和这里读同一份；仍然只在内存里，刷新回默认那本。
+  const { books, activeId } = useShelf()
   const [bill, setBill] = useState<BillState | null>(null)
   const [switching, setSwitching] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const slowTimer = useRef<number | null>(null)
 
-  const book = bookById(shelf, activeId)
+  const book = bookById(books, activeId)
   const usingDefault = book.id === DEFAULT_BOOK_ID
   const billStat = bill ? billOf(bill.book) : null
 
@@ -323,7 +321,7 @@ export function CoursePage() {
         }
         const title = fileName.replace(/\.pdf$/i, '')
         const added = bookFromOutline(title, outline.toBook(entries), `imported-${Date.now()}`)
-        setShelf((prev) => addBook(prev, added))
+        importBook(added)
         setBill({ fileName, book: added })
         setImportState({ status: 'idle' })
       } catch (error) {
@@ -347,7 +345,7 @@ export function CoursePage() {
 
   const useThisBook = useCallback(() => {
     if (!bill) return
-    setActiveId(bill.book.id)
+    setActive(bill.book.id)
     pick(firstPlayable(bill.book))
     setBill(null)
     setSwitching(false)
@@ -357,20 +355,19 @@ export function CoursePage() {
 
   const switchBook = useCallback(
     (id: string) => {
-      const target = bookById(shelf, id)
-      setActiveId(target.id)
+      const target = bookById(books, id)
+      setActive(target.id)
       pick(firstPlayable(target))
       setSwitching(false)
     },
-    [firstPlayable, pick, shelf],
+    [firstPlayable, pick, books],
   )
 
   const dropBook = useCallback(
     (id: string) => {
       if (id === DEFAULT_BOOK_ID) return
-      setShelf((prev) => removeBook(prev, id))
+      removeBookById(id)
       if (id === activeId) {
-        setActiveId(DEFAULT_BOOK_ID)
         pick(firstPlayable(defaultShelfBook()))
       }
     },
@@ -459,7 +456,7 @@ export function CoursePage() {
         </p>
         {switching ? (
           <ul className="textbook-list">
-            {shelf.map((item) => {
+            {books.map((item) => {
               const stat = billOf(item)
               return (
                 <li key={item.id}>
