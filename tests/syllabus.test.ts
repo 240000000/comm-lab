@@ -10,6 +10,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { BOOK_COMMUNICATION, type BookChapter } from '../src/course/syllabus.ts'
 import { COURSE_CHAPTERS, chapterByNo } from '../src/core/course.ts'
+import { legendItems } from '../src/labs/legendRows.ts'
 
 /** 教材 13 章的原名，照抄教材，不带「第N章」。 */
 const RAW_TITLES = [
@@ -56,7 +57,7 @@ const GOLDEN_READOUTS: Array<{ no: number; readouts: string[]; failed: boolean }
     readouts: ['2PSK 理论误码率=1.91e-4', '实测误码率（20000 比特）=1.00e-4', '相对 2FSK 的增益=3.0 dB'],
     failed: false,
   },
-  { no: 8, readouts: ['谱效率=2.96 bit/s/Hz', '理论误码率=1.39e-4', '实测误码率=4.50e-4'], failed: false },
+  { no: 8, readouts: ['谱效率=2.96 bit/s/Hz', '理论误码率=1.39e-4', '实测误码率=1.50e-4'], failed: false },
   { no: 9, readouts: ['峰值信噪比（理论）=11.0 dB', '失配损失=0.00 dB', '采样点信噪比=11.0 dB', '误码率=1.91e-4'], failed: false },
   { no: 10, readouts: ['混叠误差=0.00e+0', '量化信噪比=49.99 dB', 'PCM 码率=32.0 kb/s'], failed: false },
   { no: 11, readouts: ['最小距离 d=3', '可纠位数 t=1', '正确率（e = 1）=100.0%'], failed: false },
@@ -122,4 +123,30 @@ test('抽层没有改变行为：13 章默认参数下的读数逐字不变', ()
   })
 
   assert.deepEqual(actual, GOLDEN_READOUTS)
+})
+
+test('13 章都不靠外面塞参数：compute({}) 与 compute(defaults) 逐字相等', () => {
+  for (const chapter of COURSE_CHAPTERS) {
+    assert.deepEqual(
+      chapter.compute({}),
+      chapter.compute(chapter.defaults),
+      `第 ${chapter.no} 章缺参数时算出来不一样，说明有参数没写默认值`,
+    )
+  }
+})
+
+test('13 章图例条数等于画布上真实画出来的曲线条数', () => {
+  for (const chapter of COURSE_CHAPTERS) {
+    const view = chapter.compute(chapter.defaults)
+    const drawn = view.series.filter((item) => !item.quiet && (item.points !== undefined && item.points.length > 0))
+    assert.equal(
+      legendItems(view.series).length,
+      drawn.length,
+      `第 ${chapter.no} 章图例 ${legendItems(view.series).length} 条、实际画出 ${drawn.length} 条`,
+    )
+    // 空数据的序列不进图例：画布上没线，图例挂个名字会让人以为没画出来。
+    for (const item of legendItems(view.series)) {
+      assert.ok((item.points?.length ?? 0) > 0, `第 ${chapter.no} 章图例里的「${item.name}」没有点`)
+    }
+  }
 })

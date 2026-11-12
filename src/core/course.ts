@@ -63,6 +63,8 @@ export type CourseView = {
   stack?: boolean
   /** 参考线：虚线横线加一行标注（第 12 章的 −1/N）。 */
   guides?: Array<{ y: number; label: string }>
+  /** 标注贴哪边。默认左对齐；「一条线压着一族柱」的图放右上角更不挡数据。 */
+  guideLabelAlign?: 'left' | 'right'
   /** 竖参考线：标出「当前取的是第几根柱」（第 12 章的 τ）。只做渲染，不碰任何 compute。 */
   markerX?: number
   markerLabel?: string
@@ -663,35 +665,55 @@ function computeSource(params: Record<string, number>): CourseView {
   // 本例信号正好铺满量程，所以信噪比只会比同位数均匀量化低、不会高；高出来就是压扩没生效。
   const snrFail = companding === 1 ? compandDelta >= 0 : Math.abs(snrError) > 0.02
 
-  // 抽样 → 量化 → 零阶保持 → 减掉原信号：主图画量化误差 e(t) = 重建 − 原信号。
-  // 台阶高度由位数决定、台阶宽度由抽样率决定、压扩把台阶按幅度重新分配，三个参数各自都改这条线；
-  // 原来那张「重建波形」图只有台阶疏密一个维度，压扩几乎看不出来。
-  // 三条读数仍由上面那条 8192 点密网格与解析式算出，不经过这里的误差曲线。
+  // 抽样 → 量化 → 零阶保持：主图画两条阶梯——原信号 s(t) 与量化重建波形。
+  // 台阶高度由位数决定（3 位时 0.25，8 位时 0.0078），台阶宽度由抽样率决定，
+  // 压扩把台阶按幅度重新分配；三个参数各自都动这条线。
+  // 横轴只画前 8 个抽样间隔：位数一降，台阶立刻有半个屏幕高；8 位时看不见
+  // 是物理事实（0.0078 在图上不到 2 px），位数对小信号的意义交给下面那条
+  // SQNR 读数去说，不靠换一张图表达。
+  // 三条读数仍由上面那条 8192 点密网格与解析式算出，不经过这里的阶梯。
   const sampleCount = Math.max(2, Math.round(ratio * fh * duration))
   const sampleStep = duration / sampleCount
-  // 主图画的是量化误差 e(t) = 量化后的样值 − 原信号。只在采样时刻取值：零阶保持的中段
-  // 误差属于「保持误差」（fs=4 时有 ±1.0 那么大），量纲上不是量化误差，塞进 ±0.05 的
-  // 纵轴会整条出框，也没有哪个参数是它的自变量。
-  const errorCurve: Array<[number, number]> = []
-  for (let k = 0; k < sampleCount; k += 1) {
+  const shown = Math.min(8, sampleCount)
+  const spanEnd = shown * sampleStep
+  // 零阶保持的阶梯点：每个抽样间隔给「本样值 → 下一个样值」两段水平线。
+  const stairPoints = (values: number[]): Array<[number, number]> => {
+    const out: Array<[number, number]> = []
+    for (let k = 0; k < values.length; k += 1) {
+      const t = k * sampleStep
+      const next = (k + 1) * sampleStep
+      out.push([t, values[k]])
+      out.push([next, values[k]])
+    }
+    return out
+  }
+  const exactValues: number[] = []
+  const rebuiltValues: number[] = []
+  for (let k = 0; k < shown; k += 1) {
     const t = k * sampleStep
     const exact = Math.cos(2 * Math.PI * fh * t)
-    errorCurve.push([t, quantize(exact) - exact])
+    exactValues.push(exact)
+    rebuiltValues.push(quantize(exact))
   }
 
   const series: CourseSeries[] = [
     {
-      name: `抽样时刻量化误差（${Math.round(bits)} bit${companding === 1 ? '，A 律' : ''}）`,
+      name: '原信号 s(t)',
+      color: '#8fb3d1',
+      points: stairPoints(exactValues),
+    },
+    {
+      name: `抽样重建（${Math.round(bits)} bit，零阶保持）`,
       color: '#3ce3c6',
-      points: errorCurve,
+      points: stairPoints(rebuiltValues),
     },
   ]
 
   return {
     series,
     xLabel: '时间 t / s',
-    yLabel: '量化误差 e(t)',
-    yRange: [-0.05, 0.05],
+    yLabel: '幅度',
+    xRange: [0, spanEnd],
     readouts: [
       {
         label: '混叠误差',
@@ -767,8 +789,9 @@ function eyeSample(t: number, symbols: number[], alpha: number, echo: number): n
 }
 
 function computeEye(params: Record<string, number>): CourseView {
-  const alpha = params.alpha
-  const snrDb = params.eyeSnrDb
+  // 这两个参数没传时算不出眼图，按章表默认档兜底，别让 compute({}) 出 NaN。
+  const alpha = params.alpha ?? 0.35
+  const snrDb = params.eyeSnrDb ?? 20
   const echo = params.multipath === 1 ? 0.5 : 0
   const timing = Math.min(0.5, Math.max(0, params.timing ?? 0))
   const seed = EYE_SEED + Math.round(alpha * 100) * 7 + Math.round(snrDb) * 3 + Math.round(echo * 10) + Math.round(timing * 100) * 11
@@ -913,7 +936,7 @@ const mParam: CourseParam = { key: 'm', label: '调制度 m', min: 0.1, max: 1.5
 const betaParam: CourseParam = { key: 'beta', label: '调频指数 β', min: 0.5, max: 8, step: 0.5, unit: '' }
 const snrParam: CourseParam = { key: 'snrIn', label: '输入信噪比', min: 0, max: 30, step: 1, unit: 'dB' }
 const fsParam: CourseParam = { key: 'fs', label: '抽样率 fs / f_H', min: 1, max: 8, step: 0.2, unit: '' }
-const bitsParam: CourseParam = { key: 'bits', label: '量化位数 n', min: 8, max: 12, step: 1, unit: 'bit' }
+const bitsParam: CourseParam = { key: 'bits', label: '量化位数 n', min: 3, max: 12, step: 1, unit: 'bit' }
 const compandParam: CourseParam = { key: 'compand', label: 'A 律压扩', min: 0, max: 1, step: 1, unit: '', options: ['关', '开'] }
 
 /** 13 章目录。顺序与教材一致，未实现的原因写清楚，不藏。 */
@@ -1021,7 +1044,8 @@ function shootBits(scheme: number, ebn0Db: number, phaseDeg: number): number {
 }
 
 function computeBandpass(params: Record<string, number>): CourseView {
-  const scheme = Math.min(3, Math.max(0, Math.round(params.scheme ?? 0)))
+  // 没传档位时按章表默认的 2PSK 兜底；默认 0 会把「没参数」算成 2ASK。
+  const scheme = Math.min(3, Math.max(0, Math.round(params.scheme ?? 2)))
   const ebn0Db = Math.min(12, Math.max(0, Math.round(params.ebn0Db ?? 8)))
   const phaseDeg = Math.min(45, Math.max(0, Math.round((params.phaseDeg ?? 0) / 5) * 5))
   const label = BAND_SCHEMES[scheme]
@@ -1171,17 +1195,16 @@ function grayOf(index: number): number {
   return index ^ (index >> 1)
 }
 
-/** 成型滤波前后各取几个码元参与卷积。±8 个码元足以盖住 α=0.05 的旁瓣尾巴。 */
-const QAM_ISI_SPAN = 8
-
-/** 固定的采样偏差（单位：码元周期）。稍有偏差，邻符号的尾巴就会漏进来。 */
-const QAM_SAMPLE_OFFSET = 0.03
-
-/** 蒙特卡洛：升余弦成型 → 采偏 0.03T 采样 → 判 I/Q → 格雷映射数错比特。 */
+/**
+ * 蒙特卡洛：逐符号独立加噪 → 判 I/Q → 格雷映射数错比特。
+ * 链路里没有成型滤波，也不设采样偏差：理想误码率本来就不随滚降系数变，
+ * 想让 α 去动 BER 曲线，只能靠人造码间串扰，那是画出来的假偏差。
+ * α 的真实作用在带宽上——同样带宽里能塞多少比特——所以它体现在横轴
+ * （C/N 相对 Eb/N0 的平移）上，见 computeQam 里的 shiftDb。
+ */
 function shootQam(
   order: number,
   ebn0Db: number,
-  alpha: number,
 ): { ber: number; errors: number; bits: number } {
   const rng = createRng(QAM_SEED + order * 131 + Math.round(ebn0Db) * 7)
   const gamma = 10 ** (ebn0Db / 10)
@@ -1189,34 +1212,18 @@ function shootQam(
   const side = Math.round(Math.sqrt(order))
   // 每维噪声方差取 1（即 N0 = 2），电平间隔 d 由平均符号能量 Es = k·Eb 定出。
   const d = Math.sqrt((3 * k * gamma) / (order - 1))
-  // 前后各留 QAM_ISI_SPAN 个符号当上下文，首尾符号才卷积得到完整的邻符号尾巴。
-  const total = QAM_SAMPLES + 2 * QAM_ISI_SPAN
-  const sent: number[] = []
-  for (let i = 0; i < total; i += 1) sent.push(Math.floor(rng.next() * order))
   const levelI = (index: number) => 2 * (index % side) - (side - 1)
   const levelQ = (index: number) => 2 * Math.floor(index / side) - (side - 1)
-  // 成型权重只跟 (α, 采样偏差) 有关，一次算好复用，省掉每个符号里的三角运算。
-  const weight: number[] = []
-  for (let j = -QAM_ISI_SPAN; j <= QAM_ISI_SPAN; j += 1) {
-    weight.push(raisedCosine(j + QAM_SAMPLE_OFFSET, alpha))
-  }
   let errors = 0
   for (let m = 0; m < QAM_SAMPLES; m += 1) {
-    let shapedI = 0
-    let shapedQ = 0
-    for (let j = 0; j < weight.length; j += 1) {
-      const symbol = sent[m + j]
-      shapedI += levelI(symbol) * weight[j]
-      shapedQ += levelQ(symbol) * weight[j]
-    }
-    const ri = shapedI * d + rng.gauss()
-    const rq = shapedQ * d + rng.gauss()
+    const symbol = Math.floor(rng.next() * order)
+    const ri = levelI(symbol) * d + rng.gauss()
+    const rq = levelQ(symbol) * d + rng.gauss()
     const di = Math.min(side - 1, Math.max(0, Math.round((ri / d + (side - 1)) / 2)))
     const dq = Math.min(side - 1, Math.max(0, Math.round((rq / d + (side - 1)) / 2)))
     const decided = dq * side + di
-    const expected = sent[m + QAM_ISI_SPAN]
-    if (decided !== expected) {
-      let diff = grayOf(expected) ^ grayOf(decided)
+    if (decided !== symbol) {
+      let diff = grayOf(symbol) ^ grayOf(decided)
       while (diff > 0) {
         errors += diff & 1
         diff >>= 1
@@ -1235,20 +1242,28 @@ function computeQam(params: Record<string, number>): CourseView {
   const label = QAM_LABELS[mod]
   const k = Math.log2(order)
 
+  // 横轴换成 C/N：C/N = (Eb/N0)·log₂M/(1+α)，成型滤波多出来的带宽全在这里。
+  // 每条曲线按自己的 log₂M/(1+α) 平移，所以四档位移互不相同：α 从 0.05 拉到 0.9，
+  // 同一条曲线横移 10log10(1.90/1.05) = 2.58 dB，滑块一拖整族曲线跟着走。
+  // 读数仍按 Eb/N0 报——那是链路本身的指标，不随带宽怎么定义而变。
+  const shiftDb = 10 * Math.log10(k / (1 + alpha))
   const series: CourseSeries[] = QAM_ORDERS.map((value, index) => ({
     name: QAM_LABELS[index],
     color: QAM_COLORS[index],
-    points: Array.from({ length: QAM_POINTS }, (_, i) => [i, qamTheory(value, i)] as [number, number]),
+    points: Array.from(
+      { length: QAM_POINTS },
+      (_, i) => [i + 10 * Math.log10(Math.log2(value) / (1 + alpha)), qamTheory(value, i)] as [number, number],
+    ),
   }))
 
   const theoryBer = qamTheory(order, ebn0Db)
-  const shot = shootQam(order, ebn0Db, alpha)
+  const shot = shootQam(order, ebn0Db)
   const measuredBer = shot.ber
   series.push({
     name: `${label} 实测`,
     color: QAM_COLORS[mod],
     marker: true,
-    points: [[ebn0Db, measuredBer]],
+    points: [[ebn0Db + shiftDb, measuredBer]],
   })
 
   const efficiency = k / (1 + alpha)
@@ -1257,9 +1272,9 @@ function computeQam(params: Record<string, number>): CourseView {
   const gammaSameBer = qamGammaFor(16, theoryBer)
   const extraDb = 10 * Math.log10(gammaNow / gammaSameBer)
   const extra64 = 10 * Math.log10(qamGammaFor(64, theoryBer) / gammaSameBer)
-  // 成型滤波 + 固定 0.03T 采样偏差之后，实测总比「不含成型」的理想理论高 3~4 倍，
-  // 这条阈值放到 4.5 倍：真正坏掉的链路会远超它，正常档不再无故标红。
-  const deviate = measuredBer > 0 && (measuredBer > theoryBer * 4.5 || measuredBer < theoryBer / 4.5)
+  // 链路里没有人造码间串扰，实测与理论只剩蒙特卡洛抖动：20,000 个符号
+  // （12 dB 下约 12 个错）本来就该落在 3 倍以内，所以判据回到 3 倍。
+  const deviate = measuredBer > 0 && (measuredBer > theoryBer * 3 || measuredBer < theoryBer / 3)
   const failed = mod === 3 && theoryBer > 0.01
 
   const readouts: CourseReadout[] = [
@@ -1296,7 +1311,7 @@ function computeQam(params: Record<string, number>): CourseView {
 
   return {
     series,
-    xLabel: 'Eb/N0（dB）',
+    xLabel: 'C/N（dB）',
     yLabel: '误码率 Pb',
     logY: true,
     readouts,
@@ -1425,7 +1440,7 @@ function computeMatch(params: Record<string, number>): CourseView {
   }))
   const noiseRng = createRng(MATCH_SEED + wave * 17 + Math.round(dt * 100) * 3 + ebn0Db * 7 + 1)
   series.push({
-    name: `接收噪声实现（σ = ${sigma.toFixed(3)}）`,
+    name: `含噪匹配滤波输出（σ = ${sigma.toFixed(3)}）`,
     color: '#ffd166',
     dashed: true,
     points: Array.from({ length: MATCH_POINTS }, (_, i) => {
@@ -1606,11 +1621,14 @@ function computeMseq(params: Record<string, number>): CourseView {
   const distinct = [...new Set(auto.map((v) => v.toFixed(9)))].length
   const failed = period !== full
 
+  // 画两个周期：R(τ) 以 N 为周期，τ=N 那里又是一根顶到 1 的杆，
+  // 「周期」是画出来的而不是读出来的——一眼能看见第二根尖峰就在 N 处。
+  const shown = 2 * period
   const series: CourseSeries[] = [
     {
       name: `R(τ) · n=${level}（N=${period}）· ${tapsText}抽头 ${taps.join(',')}`,
       color: '#5ad1a5',
-      points: auto.map((v, i) => [i, v] as [number, number]),
+      points: Array.from({ length: shown }, (_, i) => [i, auto[i % period]] as [number, number]),
     },
   ]
 
@@ -1671,9 +1689,13 @@ function computeMseq(params: Record<string, number>): CourseView {
     conclusion,
     failed,
     bars: true,
-    // x 轴钉死在 [0,127]：级数换档时 N 的长短一眼能看出来，而不是每档都自动铺满画布。
-    xRange: [0, 127],
+    // x 轴由 N 现算：正好铺满两个周期，换级数时轴跟着变，但「两根尖峰相隔 N」永远看得见。
+    xRange: [0, shown - 1],
+    // 纵轴固定，只给旁瓣与峰值留一点余量：换档时柱高不重新标定，比较才成立。
+    yRange: [-1.5 / period, 1.05],
+    yTicks: [0, theorySide, 1],
     guides: [{ y: theorySide, label: `−1/N = ${theorySide.toFixed(5)}：其余 ${period - 1} 根柱都在这条线上` }],
+    guideLabelAlign: 'right',
     markerX: tau,
     markerLabel: `τ = ${tau}`,
   }
@@ -2434,9 +2456,12 @@ export function pllResidual(trace: number[], tail = 10): number {
 }
 
 function computePll(params: Record<string, number>): CourseView {
-  const gain = Math.min(pllGainParam.max, Math.max(pllGainParam.min, params.k))
-  const theta0 = Math.min(pllThetaParam.max, Math.max(pllThetaParam.min, params.theta0))
-  const sigma = Math.min(pllNoiseParam.max, Math.max(pllNoiseParam.min, params.sigma))
+  // 三个参数都带默认值：compute({}) 与 compute(defaults) 必须逐字相等。
+  // 少了 ?? 就是 NaN，夹紧之后变成 min/max 的怪值，判据还会把环路判成发散——
+  // 一个没传参数的调用不该让整页变红。
+  const gain = Math.min(pllGainParam.max, Math.max(pllGainParam.min, params.k ?? 0.6))
+  const theta0 = Math.min(pllThetaParam.max, Math.max(pllThetaParam.min, params.theta0 ?? 2))
+  const sigma = Math.min(pllNoiseParam.max, Math.max(pllNoiseParam.min, params.sigma ?? 0))
 
   const trace = pllTrace(gain, theta0, sigma, PLL_SEED)
   const lockStep = pllLockStep(trace)

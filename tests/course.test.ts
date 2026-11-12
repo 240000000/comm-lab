@@ -440,9 +440,11 @@ test('第 12 章：非零延迟的自相关全等于 −1/N，整条曲线只有
   const view = chapter.compute(chapter.defaults)
   const points = view.series[0].points
   const period = Number(view.readouts[0].value)
-  assert.equal(points.length, period)
+  assert.equal(points.length, period * 2, '横轴画两个周期，N 的长短才看得出来')
   assert.equal(points[0][1], 1)
+  assert.equal(points[period][1], 1, '第二个周期的 τ=N 又顶回 1')
   for (const [tau, value] of points.slice(1)) {
+    if (tau === period) continue
     assert.ok(Math.abs(value - -1 / period) < 1e-12, `τ=${tau} 的自相关是 ${value}，应为 ${-1 / period}`)
   }
   const distinct = new Set(points.map(([, v]) => v.toFixed(12)))
@@ -1358,31 +1360,49 @@ test('图例折行：quiet 的 series 不进图例也不参与折行', () => {
   assert.equal(layout.totalRows, 1)
 })
 
-test('第 10 章：主图画的是量化误差 e(t)，抽样率与位数都改它', () => {
+test('第 10 章：主图是两条零阶保持阶梯，位数与抽样率都改它', () => {
   const chapter = chapterByNo(10)!
-  const errOf = (patch: Record<string, number>) => chapter.compute({ ...chapter.defaults, ...patch }).series[0]
-  const peak = (s: { points: Array<[number, number]> }) => Math.max(...s.points.map(([, y]) => Math.abs(y)))
-  const base = errOf({})
-  assert.match(base.name, /抽样时刻量化误差/)
-  assert.match(base.name, /8 bit/, 'series 名要带当前位数')
-  // 只在采样时刻取误差：fs=4、4 秒 → 4·fs = 16 个采样点。
-  assert.equal(base.points.length, 16, '误差曲线每个采样点一个值')
-  // 位数越多台阶越细：12 bit 的误差峰值得掉到 8 bit 的 1/10 以下。
-  const fine = errOf({ bits: 12 })
-  assert.match(fine.name, /12 bit/)
-  assert.ok(peak(fine) < peak(base) / 10, `12 bit 误差峰值 ${peak(fine)} 没有明显小于 8 bit 的 ${peak(base)}`)
-  // 抽样率改的是采样点的疏密：fs=8 点数翻倍，且每个点的误差取值跟着变。
-  const fast = errOf({ fs: 8 })
-  assert.equal(fast.points.length, 32, 'fs=8 时采样点翻倍')
-  assert.notDeepEqual(fast.points.slice(0, 16).map(([, y]) => y), base.points.map(([, y]) => y))
-  const slow = errOf({ fs: 1 })
-  assert.equal(slow.points.length, 4, 'fs=1 时只有每周期 1 个采样点')
-  // 纵轴钉死 ±0.05，换章节参数不会自己缩放。
-  assert.deepEqual(chapter.compute(chapter.defaults).yRange, [-0.05, 0.05])
-  // A 律压扩也是一条独立口径：台阶按幅度重排，误差曲线与均匀量化不同。
-  const companded = errOf({ compand: 1 })
-  assert.match(companded.name, /A 律/)
-  assert.notDeepEqual(companded.points.map(([, y]) => y), base.points.map(([, y]) => y))
+  const viewOf = (patch: Record<string, number>) => chapter.compute({ ...chapter.defaults, ...patch })
+  // 台阶误差：同一条竖线的上下两点，重建值减原信号值，取绝对值最大。
+  const stepErr = (patch: Record<string, number>) => {
+    const view = viewOf(patch)
+    const exact = view.series[0].points.filter((_, index) => index % 2 === 1)
+    const rebuilt = view.series[1].points.filter((_, index) => index % 2 === 1)
+    return Math.max(...rebuilt.map(([, y], index) => Math.abs(y - exact[index][1])))
+  }
+  const base = viewOf({})
+  assert.equal(base.series.length, 2, '原信号一条、抽样重建一条')
+  assert.equal(base.series[0].name, '原信号 s(t)')
+  assert.match(base.series[1].name, /抽样重建（8 bit，零阶保持）/, 'series 名要带当前位数')
+  // 零阶保持：每个抽样间隔画两个折点，先横到下一时刻，再竖到下一个值。
+  assert.equal(base.series[0].points.length, 16, '前 8 个抽样间隔 × 每段两个折点')
+  assert.equal(base.series[1].points.length, 16)
+  for (let i = 0; i < base.series[0].points.length; i += 2) {
+    assert.equal(base.series[0].points[i][1], base.series[0].points[i + 1][1], '同一段里高度不变')
+    assert.equal(base.series[1].points[i][1], base.series[1].points[i + 1][1])
+  }
+  assert.deepEqual(base.xRange, [0, 2], '横轴只画前 8 个抽样间隔')
+  assert.equal(base.yRange, undefined, '纵轴跟着数据走，不再钉死 ±0.05')
+  // 位数改的是台阶高度：3 bit 约 0.14，8 bit 约 0.004，12 bit 约 0.0002。
+  const coarse = stepErr({ bits: 3 })
+  const fine = stepErr({ bits: 12 })
+  assert.ok(coarse > 0.1 && coarse < 0.2, `3 bit 的台阶误差应在 0.125 附近，实测 ${coarse}`)
+  assert.ok(fine < 0.001, `12 bit 的台阶误差应细到看不见，实测 ${fine}`)
+  assert.ok(fine < coarse / 100, '位数每加 3 位，台阶就该矮一个量级')
+  assert.match(viewOf({ bits: 3 }).series[1].name, /3 bit/)
+  // 抽样率改的是把时间轴压到前 8 个抽样间隔：fs=8 → 1 s，fs=1 → 4 s。
+  const fast = viewOf({ fs: 8 })
+  const slow = viewOf({ fs: 1 })
+  assert.deepEqual(fast.xRange, [0, 1], 'fs=8 时 8 个间隔只占 1 s')
+  assert.equal(fast.series[0].points.length, 16)
+  assert.deepEqual(slow.xRange, [0, 4], 'fs=1 时 8 个间隔要 4 s')
+  assert.equal(slow.series[0].points.length, 8, 'fs=1 时总共只有 4 个抽样点')
+  // A 律压扩也是一条独立口径：台阶按幅度重排，重建值与均匀量化不同。
+  const companded = viewOf({ compand: 1 })
+  assert.notDeepEqual(
+    companded.series[1].points.map(([, y]) => y),
+    base.series[1].points.map(([, y]) => y),
+  )
 })
 
 
@@ -1405,10 +1425,10 @@ test('第 10 章：压扩档的重建链里确实走了 A 律压扩', () => {
   const chapter = chapterByNo(10)!
   const uniform = chapter.compute({ fs: 1.4, bits: 8, compand: 0 })
   const companded = chapter.compute({ fs: 1.4, bits: 8, compand: 1 })
-  const u = uniform.series[0].points
-  const c = companded.series[0].points
+  const u = uniform.series[1].points
+  const c = companded.series[1].points
   assert.equal(c.length, u.length, '两档的抽样点数该一样')
-  // 主图是量化误差 e(t)：压扩改变台阶间距，误差曲线跟着变，两档逐点最多差多少就是压扩进没进链路的证据。
+  // 主图的第二条是抽样重建：压扩改变台阶间距，重建值跟着变，两档逐点最多差多少就是压扩进没进链路的证据。
   let worst = 0
   for (let i = 0; i < u.length; i += 1) worst = Math.max(worst, Math.abs(u[i][1] - c[i][1]))
   // 压扩把台阶按幅度重新分配，不是平移抽样时刻：差异量级 5e-3。
@@ -1420,17 +1440,17 @@ test('第 10 章：压扩档的重建链里确实走了 A 律压扩', () => {
   )
 })
 
-test('第 9 章：接收噪声那条线一直在，失配那条只在 dt>0 时出现', () => {
+test('第 9 章：含噪匹配滤波输出那条线一直在，失配那条只在 dt>0 时出现', () => {
   const chapter = chapterByNo(9)
   const onTime = chapter.compute({ ...chapter.defaults, dt: 0 })
   const late = chapter.compute({ ...chapter.defaults, dt: 0.3 })
-  assert.equal(onTime.series.length, 4, 'dt=0 时是三条波形加一条接收噪声实现')
-  assert.ok(onTime.series.some((s) => s.name.startsWith('接收噪声实现')))
+  assert.equal(onTime.series.length, 4, 'dt=0 时是三条波形加一条含噪匹配滤波输出')
+  assert.ok(onTime.series.some((s) => s.name.startsWith('含噪匹配滤波输出')))
   assert.ok(!onTime.series.some((s) => s.name === '失配后的相关输出'))
   assert.equal(late.series.length, 5, 'dt>0 时再多出失配那条')
   const mismatch = late.series.find((s) => s.name === '失配后的相关输出')
   assert.equal(mismatch?.dashed, true)
-  const noise = onTime.series.find((s) => s.name.startsWith('接收噪声实现'))
+  const noise = onTime.series.find((s) => s.name.startsWith('含噪匹配滤波输出'))
   assert.match(noise?.name ?? '', /σ = 0\.\d{3}/)
   assert.equal(noise?.dashed, true)
   assert.ok((noise?.points.length ?? 0) > 0, '噪声折线要有采样点')

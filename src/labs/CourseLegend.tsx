@@ -7,9 +7,10 @@
  * 所以这里改成普通网页元素：一行排不下自动换行，宽度跟着容器走。
  */
 import type { CourseSeries } from '../core/course.ts'
+import { legendItems } from './legendRows.ts'
 
 export function CourseLegend({ series }: { series: CourseSeries[] }) {
-  const items = series.filter((s) => !s.quiet)
+  const items = legendItems(series)
   if (items.length === 0) return null
 
   return (

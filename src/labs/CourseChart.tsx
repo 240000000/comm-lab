@@ -44,6 +44,7 @@ export function CourseChart({
   bars = false,
   stack = false,
   guides,
+  guideLabelAlign = 'left',
   xTicks,
   yTicks,
   markerX,
@@ -61,6 +62,7 @@ export function CourseChart({
   bars?: boolean
   stack?: boolean
   guides?: Array<{ y: number; label: string }>
+  guideLabelAlign?: 'left' | 'right'
   /** 章节自己指定刻度；传了就用传进来的，不传就走下面的自动算法。 */
   xTicks?: number[]
   yTicks?: number[]
@@ -300,15 +302,17 @@ export function CourseChart({
         const above = gy - 4 > PAD.top + 10
         // 上下沿成对出现时只在上沿写字：两条线挨得太近，写两遍会糊成一团。
         if (!g.label) continue
-        ctx.textAlign = 'left'
+        const right = guideLabelAlign === 'right'
+        ctx.textAlign = right ? 'right' : 'left'
         ctx.textBaseline = above ? 'bottom' : 'top'
         // 标注底下垫一层底色：数据点常常正好压在这条线上，不垫就看不清字。
         const labelW = ctx.measureText(g.label).width
         const labelY = above ? gy - 4 : gy + 4
         ctx.fillStyle = 'rgba(9, 15, 22, 0.78)'
-        ctx.fillRect(PAD.left + 3, above ? labelY - 11 : labelY - 1, labelW + 6, 13)
+        const labelLeft = right ? PAD.left + plotW - labelW - 6 : PAD.left + 3
+        ctx.fillRect(labelLeft, above ? labelY - 11 : labelY - 1, labelW + 6, 13)
         ctx.fillStyle = '#8fa7b8'
-        ctx.fillText(g.label, PAD.left + 6, labelY)
+        ctx.fillText(g.label, right ? PAD.left + plotW - 3 : PAD.left + 6, labelY)
       }
     }
 
@@ -352,6 +356,11 @@ export function CourseChart({
           ctx.moveTo(px(x), base)
           ctx.lineTo(px(x), tip)
           ctx.stroke()
+          // 顶端点一个实心圆：两根顶到 1 的尖峰相隔 N，靠圆点才数得清是哪两根。
+          ctx.beginPath()
+          ctx.arc(px(x), tip, 2.1, 0, Math.PI * 2)
+          ctx.fillStyle = s.color
+          ctx.fill()
         }
       }
     }
@@ -434,7 +443,7 @@ export function CourseChart({
       ctx.setLineDash([])
     }
     ctx.globalAlpha = 1
-  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides, xTicks, yTicks, markerX, markerLabel, xRange, yRange, highlightX])
+  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides, guideLabelAlign, xTicks, yTicks, markerX, markerLabel, xRange, yRange, highlightX])
 
   // 画的时候用的是最新的 draw，所以尺寸回调里不必重建 observer。
   const drawRef = useRef(draw)

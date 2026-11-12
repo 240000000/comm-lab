@@ -11,7 +11,17 @@
  * 估出来偏宽（第 1 章在 279 像素容器里估成两行、实测一行），方向是安全的：
  * 凡是这里判「放得下」的，浏览器一定也放得下。
  */
-export type LegendItem = { name: string; quiet?: boolean }
+export type LegendItem = { name: string; quiet?: boolean; points?: readonly unknown[] }
+
+/**
+ * 图例里该出现哪些条目——折行计算与 CourseLegend 必须走这同一个判据。
+ * 两处各写一份过滤，迟早会分叉：一边少算一条，折行宽度和实际条数就对不上。
+ * 空数据序列不进图例：第 3 章某些档位的集合是空的，画布上没线，
+ * 图例里却挂着名字，读者会以为图没画出来。
+ */
+export function legendItems<T extends LegendItem>(series: T[]): T[] {
+  return series.filter((item) => !item.quiet && (item.points === undefined || item.points.length > 0))
+}
 
 export const LEGEND_FONT_SIZE = 12
 export const LEGEND_MARK_WIDTH = 26
@@ -52,7 +62,7 @@ export type LegendLayout = {
  * overflow 置真，交给调用方决定怎么提示。
  */
 export function legendRows<T extends LegendItem>(series: T[], maxWidth: number): LegendLayout {
-  const items = series.filter((item) => !item.quiet)
+  const items = legendItems(series)
   const rows: number[] = []
   const widths: number[] = []
   let count = 0
