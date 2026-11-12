@@ -449,15 +449,18 @@ test('第 12 章：非零延迟的自相关全等于 −1/N，整条曲线只有
   assert.equal(distinct.size, 2, `自相关只该有两个值，实际 ${distinct.size} 个`)
 })
 
-test('第 12 章：换初始状态只搬相移，自相关序列一模一样', () => {
+test('第 12 章：换抽头就是换多项式，自相关不再只有峰值和旁瓣两个值', () => {
   const chapter = chapterByNo(12)
-  const base = chapter.compute({ ...chapter.defaults, initOpt: 0 }).series[0].points.map(([, v]) => v)
-  for (const initOpt of [1, 2]) {
-    const other = chapter.compute({ ...chapter.defaults, initOpt }).series[0].points.map(([, v]) => v)
-    assert.equal(other.length, base.length)
-    for (let i = 0; i < base.length; i += 1) assert.ok(Math.abs(other[i] - base[i]) < 1e-12, `initOpt=${initOpt} 第 ${i} 个延迟对不上`)
-  }
+  const prim = chapter.compute(chapter.defaults)
+  const bad = chapter.compute({ ...chapter.defaults, taps: 1 })
+  assert.equal(prim.readouts[0].value, '127')
+  assert.ok(Number(bad.readouts[0].value) < 127, '非本原抽头的周期必须短于 2^7-1')
+  const primValues = new Set(prim.series[0].points.map(([, v]) => v.toFixed(6)))
+  assert.equal(primValues.size, 2, '本原抽头下自相关只有峰值和旁瓣两个值')
+  const badValues = new Set(bad.series[0].points.map(([, v]) => v.toFixed(6)))
+  assert.ok(badValues.size > 2, `非本原抽头要冒出更多自相关值，实际 ${badValues.size} 种`)
 })
+
 
 test('第 12 章：非本原抽头让周期掉下来，自相关冒出第三个值', () => {
   const chapter = chapterByNo(12)
@@ -484,22 +487,31 @@ test('第 12 章：拖 τ 时图上标出当前第几根柱，读数跟着走', 
   assert.equal(pick(moved), '-0.00787')
 })
 
-test('第 12 章：换初态改的是序列本身，三档前 8 位互不相同', () => {
+test('第 12 章：读数与前 8 位跟着抽头走，不只跟着位数走', () => {
   const chapter = chapterByNo(12)
-  const prefixes = [0, 1, 2].map((initOpt) => {
-    const view = chapter.compute({ ...chapter.defaults, initOpt })
-    return view.readouts.find((r) => r.label === '序列前 8 位')?.value ?? ''
-  })
-  assert.equal(new Set(prefixes).size, 3, `三档初态的前 8 位应互不相同，实际 ${prefixes.join(' / ')}`)
-  for (const prefix of prefixes) assert.match(prefix, /^[01]{8}$/)
+  const prim = chapter.compute(chapter.defaults)
+  const bad = chapter.compute({ ...chapter.defaults, taps: 1 })
+  const prefixOf = (view: { readouts: Array<{ label: string; value: string }> }) =>
+    view.readouts.find((r) => r.label.startsWith('序列前 8 位'))?.value ?? ''
+  assert.equal(prefixOf(prim), '11111110')
+  assert.match(prefixOf(bad), /^[01]{8}$/)
+  // 全 1 初态下两种抽头的前 8 位恰好都是 1 后接一个 0；真正把它们分开的是周期与自相关取值。
+  assert.equal(bad.readouts[0].value, '35', '非本原抽头的周期是 35')
+  const spread = (view: typeof prim) => new Set(view.series[0].points.map(([, y]) => y.toFixed(6))).size
+  assert.equal(spread(prim), 2, '本原抽头的自相关只有峰值和旁瓣两个值')
+  assert.ok(spread(bad) > 2, `非本原抽头要冒出更多自相关值，实际 ${spread(bad)}`)
+  assert.equal(bad.readouts[0].label, '周期 N（非本原抽头）')
+  assert.match(bad.series[0].name, /非本原抽头/)
+  assert.match(prim.series[0].name, /n=7（N=127）/)
 })
 
-test('第 12 章：结论句说明换初态只换相位、两个值来自反馈多项式', () => {
+
+test('第 12 章：结论句说明两个值来自反馈多项式，切到非本原就掉下来', () => {
   const chapter = chapterByNo(12)
-  const view = chapter.compute(chapter.defaults)
-  assert.match(view.conclusion, /换初态只换序列的相位/)
-  assert.match(view.conclusion, /来自反馈多项式/)
+  assert.match(chapter.compute(chapter.defaults).conclusion, /来自本原抽头/)
+  assert.match(chapter.compute(chapter.failPreset).conclusion, /掉到 35/)
 })
+
 
 test('第 12 章：竖参考线只有这一章有，别的章不传就没有', () => {
   const other = chapterByNo(2)
@@ -1346,30 +1358,33 @@ test('图例折行：quiet 的 series 不进图例也不参与折行', () => {
   assert.equal(layout.totalRows, 1)
 })
 
-test('第 10 章：抽样重建是零阶保持的阶梯，拐点数跟着抽样率走', () => {
+test('第 10 章：主图画的是量化误差 e(t)，抽样率与位数都改它', () => {
   const chapter = chapterByNo(10)!
-  const stair = (fs: number) => chapter.compute({ ...chapter.defaults, fs }).series[1]
-  for (const fs of [2, 4, 8]) {
-    const series = stair(fs)
-    const points = series.points
-    // 每根柱画两次（起点与保持终点），所以点数 = 2 × 抽样点数。
-    assert.equal(points.length, 2 * Math.round(fs * 4), `fs=${fs} 的点数不对`)
-    assert.ok(series.name.includes('零阶保持'), '图例没标出这是零阶保持')
-    for (let i = 0; i + 1 < points.length; i += 2) {
-      assert.equal(points[i][1], points[i + 1][1], `fs=${fs} 第 ${i / 2} 段不是平的`)
-      assert.ok(points[i + 1][0] > points[i][0], '保持段没有宽度')
-    }
-  }
-  // fs=2 时正好踩在奈奎斯特上，阶梯与正弦差得最狠；fs=8 时明显跟上。
-  const dev = (fs: number) => {
-    const points = stair(fs).points
-    let worst = 0
-    for (const [x, y] of points) worst = Math.max(worst, Math.abs(y - Math.cos(2 * Math.PI * x)))
-    return worst
-  }
-  assert.ok(dev(2) > dev(8) + 0.5, `fs=2 的偏差 ${dev(2)} 没有明显大于 fs=8 的 ${dev(8)}`)
-  assert.ok(dev(8) > 0.1, 'fs=8 的阶梯也不该和正弦严丝合缝，零阶保持本身有保持误差')
+  const errOf = (patch: Record<string, number>) => chapter.compute({ ...chapter.defaults, ...patch }).series[0]
+  const peak = (s: { points: Array<[number, number]> }) => Math.max(...s.points.map(([, y]) => Math.abs(y)))
+  const base = errOf({})
+  assert.match(base.name, /量化误差 e\(t\)/)
+  assert.match(base.name, /8 bit/, 'series 名要带当前位数')
+  // 只在采样时刻取误差：fs=4、4 秒 → 4·fs = 16 个采样点。
+  assert.equal(base.points.length, 16, '误差曲线每个采样点一个值')
+  // 位数越多台阶越细：12 bit 的误差峰值得掉到 8 bit 的 1/10 以下。
+  const fine = errOf({ bits: 12 })
+  assert.match(fine.name, /12 bit/)
+  assert.ok(peak(fine) < peak(base) / 10, `12 bit 误差峰值 ${peak(fine)} 没有明显小于 8 bit 的 ${peak(base)}`)
+  // 抽样率改的是采样点的疏密：fs=8 点数翻倍，且每个点的误差取值跟着变。
+  const fast = errOf({ fs: 8 })
+  assert.equal(fast.points.length, 32, 'fs=8 时采样点翻倍')
+  assert.notDeepEqual(fast.points.slice(0, 16).map(([, y]) => y), base.points.map(([, y]) => y))
+  const slow = errOf({ fs: 1 })
+  assert.equal(slow.points.length, 4, 'fs=1 时只有每周期 1 个采样点')
+  // 纵轴钉死 ±0.05，换章节参数不会自己缩放。
+  assert.deepEqual(chapter.compute(chapter.defaults).yRange, [-0.05, 0.05])
+  // A 律压扩也是一条独立口径：台阶按幅度重排，误差曲线与均匀量化不同。
+  const companded = errOf({ compand: 1 })
+  assert.match(companded.name, /A 律/)
+  assert.notDeepEqual(companded.points.map(([, y]) => y), base.points.map(([, y]) => y))
 })
+
 
 test('第 10 章：重建链换成抽样-量化之后，三个读数逐字没变', () => {
   const chapter = chapterByNo(10)!
@@ -1390,13 +1405,14 @@ test('第 10 章：压扩档的重建链里确实走了 A 律压扩', () => {
   const chapter = chapterByNo(10)!
   const uniform = chapter.compute({ fs: 1.4, bits: 8, compand: 0 })
   const companded = chapter.compute({ fs: 1.4, bits: 8, compand: 1 })
-  const u = uniform.series[1].points
-  const c = companded.series[1].points
+  const u = uniform.series[0].points
+  const c = companded.series[0].points
   assert.equal(c.length, u.length, '两档的抽样点数该一样')
+  // 主图是量化误差 e(t)：压扩改变台阶间距，误差曲线跟着变，两档逐点最多差多少就是压扩进没进链路的证据。
   let worst = 0
   for (let i = 0; i < u.length; i += 1) worst = Math.max(worst, Math.abs(u[i][1] - c[i][1]))
-  // 压扩改变的是台阶间距，不是抽样时刻：差异只在小幅度区出现，量级 5e-3。
-  assert.ok(worst > 0.003, `A 律与均匀的阶梯差 ${worst} 太小，压扩可能没进重建链`)
+  // 压扩把台阶按幅度重新分配，不是平移抽样时刻：差异量级 5e-3。
+  assert.ok(worst > 0.003, `A 律与均匀的量化误差曲线差 ${worst} 太小，压扩可能没进重建链`)
   assert.equal(
     companded.readouts.find((r) => r.label === '量化信噪比（A 律）')?.value,
     '38.59 dB',
@@ -1404,16 +1420,22 @@ test('第 10 章：压扩档的重建链里确实走了 A 律压扩', () => {
   )
 })
 
-test('第 9 章：失配那条曲线只在 dt>0 时出现，且是虚线', () => {
-  const chapter = chapterByNo(9)!
+test('第 9 章：接收噪声那条线一直在，失配那条只在 dt>0 时出现', () => {
+  const chapter = chapterByNo(9)
   const onTime = chapter.compute({ ...chapter.defaults, dt: 0 })
-  assert.equal(onTime.series.length, 3, 'dt=0 时不该多出一条重合的线')
-  assert.equal(onTime.series.some((s) => s.name === '失配后的相关输出'), false)
-  const late = chapter.compute({ ...chapter.defaults, dt: 0.4 })
-  assert.equal(late.series.length, 4)
-  const mismatch = late.series.find((s) => s.name === '失配后的相关输出')!
-  assert.equal(mismatch.dashed, true, '第四条该是虚线，否则和实线糊在一起')
+  const late = chapter.compute({ ...chapter.defaults, dt: 0.3 })
+  assert.equal(onTime.series.length, 4, 'dt=0 时是三条波形加一条接收噪声实现')
+  assert.ok(onTime.series.some((s) => s.name.startsWith('接收噪声实现')))
+  assert.ok(!onTime.series.some((s) => s.name === '失配后的相关输出'))
+  assert.equal(late.series.length, 5, 'dt>0 时再多出失配那条')
+  const mismatch = late.series.find((s) => s.name === '失配后的相关输出')
+  assert.equal(mismatch?.dashed, true)
+  const noise = onTime.series.find((s) => s.name.startsWith('接收噪声实现'))
+  assert.match(noise?.name ?? '', /σ = 0\.\d{3}/)
+  assert.equal(noise?.dashed, true)
+  assert.ok((noise?.points.length ?? 0) > 0, '噪声折线要有采样点')
 })
+
 
 test('第 9 章：失配把相关峰推后 dt、压到 ρ 倍，读数仍是 4.44 dB', () => {
   const chapter = chapterByNo(9)!

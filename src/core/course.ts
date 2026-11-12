@@ -32,6 +32,8 @@ export type CourseSeries = {
   color: string
   dashed?: boolean
   quiet?: boolean
+  /** 加粗：第 9 章当前选中的那条波形。 */
+  bold?: boolean
   /** 只画散点、不连线；第 7 章的蒙特卡洛实测点用它。 */
   marker?: boolean
   points: Array<[number, number]>
@@ -64,6 +66,11 @@ export type CourseView = {
   /** 竖参考线：标出「当前取的是第几根柱」（第 12 章的 τ）。只做渲染，不碰任何 compute。 */
   markerX?: number
   markerLabel?: string
+  /** 章节自己指定坐标范围（第 10 章固定 ±0.05、第 12 章固定 [0,127]）；不传就走自动缩放。 */
+  xRange?: [number, number]
+  yRange?: [number, number]
+  /** 高亮某一根柱（第 11 章当前 errors 那一档）；不传就按原样全画。 */
+  highlightX?: number
   /** 章节自己指定刻度（第 1 章）；不传就走通用图的自动算法，其余 12 章零影响。 */
   xTicks?: number[]
   yTicks?: number[]
@@ -656,37 +663,35 @@ function computeSource(params: Record<string, number>): CourseView {
   // 本例信号正好铺满量程，所以信噪比只会比同位数均匀量化低、不会高；高出来就是压扩没生效。
   const snrFail = companding === 1 ? compandDelta >= 0 : Math.abs(snrError) > 0.02
 
-  // 抽样 → 量化 → 零阶保持：图上这条阶梯就是 fs 真能重建出来的样子。
-  // 抽样点数由抽样率决定（fs = ratio·f_H，画满 duration），量化仍走同一套（压扩档先压后展）。
-  // 三个读数仍由上面那条 8192 点密网格与解析式算出，不经过这里的抽样序列。
+  // 抽样 → 量化 → 零阶保持 → 减掉原信号：主图画量化误差 e(t) = 重建 − 原信号。
+  // 台阶高度由位数决定、台阶宽度由抽样率决定、压扩把台阶按幅度重新分配，三个参数各自都改这条线；
+  // 原来那张「重建波形」图只有台阶疏密一个维度，压扩几乎看不出来。
+  // 三条读数仍由上面那条 8192 点密网格与解析式算出，不经过这里的误差曲线。
   const sampleCount = Math.max(2, Math.round(ratio * fh * duration))
   const sampleStep = duration / sampleCount
-  const stair: Array<[number, number]> = []
+  // 主图画的是量化误差 e(t) = 量化后的样值 − 原信号。只在采样时刻取值：零阶保持的中段
+  // 误差属于「保持误差」（fs=4 时有 ±1.0 那么大），量纲上不是量化误差，塞进 ±0.05 的
+  // 纵轴会整条出框，也没有哪个参数是它的自变量。
+  const errorCurve: Array<[number, number]> = []
   for (let k = 0; k < sampleCount; k += 1) {
     const t = k * sampleStep
-    const held = quantize(Math.cos(2 * Math.PI * fh * t))
-    stair.push([t, held])
-    stair.push([t + sampleStep, held])
+    const exact = Math.cos(2 * Math.PI * fh * t)
+    errorCurve.push([t, quantize(exact) - exact])
   }
 
   const series: CourseSeries[] = [
     {
-      name: '原信号 x(t)',
-      color: '#6f8399',
-      dashed: true,
-      points: original.map((v, i) => [i * dt, v] as [number, number]),
-    },
-    {
-      name: `抽样重建（${Math.round(bits)} bit，零阶保持）`,
+      name: `量化误差 e(t)（${Math.round(bits)} bit${companding === 1 ? '，A 律' : ''}）`,
       color: '#3ce3c6',
-      points: stair,
+      points: errorCurve,
     },
   ]
 
   return {
     series,
     xLabel: '时间 t / s',
-    yLabel: '幅度',
+    yLabel: '量化误差 e(t)',
+    yRange: [-0.05, 0.05],
     readouts: [
       {
         label: '混叠误差',
@@ -1166,26 +1171,52 @@ function grayOf(index: number): number {
   return index ^ (index >> 1)
 }
 
-/** 蒙特卡洛：每符号送 k 个比特，逐符号判 I/Q，再按格雷映射数错比特。 */
-function shootQam(order: number, ebn0Db: number): { ber: number; errors: number; bits: number } {
+/** 成型滤波前后各取几个码元参与卷积。±8 个码元足以盖住 α=0.05 的旁瓣尾巴。 */
+const QAM_ISI_SPAN = 8
+
+/** 固定的采样偏差（单位：码元周期）。稍有偏差，邻符号的尾巴就会漏进来。 */
+const QAM_SAMPLE_OFFSET = 0.03
+
+/** 蒙特卡洛：升余弦成型 → 采偏 0.03T 采样 → 判 I/Q → 格雷映射数错比特。 */
+function shootQam(
+  order: number,
+  ebn0Db: number,
+  alpha: number,
+): { ber: number; errors: number; bits: number } {
   const rng = createRng(QAM_SEED + order * 131 + Math.round(ebn0Db) * 7)
   const gamma = 10 ** (ebn0Db / 10)
   const k = Math.log2(order)
   const side = Math.round(Math.sqrt(order))
   // 每维噪声方差取 1（即 N0 = 2），电平间隔 d 由平均符号能量 Es = k·Eb 定出。
   const d = Math.sqrt((3 * k * gamma) / (order - 1))
+  // 前后各留 QAM_ISI_SPAN 个符号当上下文，首尾符号才卷积得到完整的邻符号尾巴。
+  const total = QAM_SAMPLES + 2 * QAM_ISI_SPAN
+  const sent: number[] = []
+  for (let i = 0; i < total; i += 1) sent.push(Math.floor(rng.next() * order))
+  const levelI = (index: number) => 2 * (index % side) - (side - 1)
+  const levelQ = (index: number) => 2 * Math.floor(index / side) - (side - 1)
+  // 成型权重只跟 (α, 采样偏差) 有关，一次算好复用，省掉每个符号里的三角运算。
+  const weight: number[] = []
+  for (let j = -QAM_ISI_SPAN; j <= QAM_ISI_SPAN; j += 1) {
+    weight.push(raisedCosine(j + QAM_SAMPLE_OFFSET, alpha))
+  }
   let errors = 0
-  for (let s = 0; s < QAM_SAMPLES; s += 1) {
-    const sent = Math.floor(rng.next() * order)
-    const iIdx = sent % side
-    const qIdx = Math.floor(sent / side)
-    const ri = (2 * iIdx - (side - 1)) * d + rng.gauss()
-    const rq = (2 * qIdx - (side - 1)) * d + rng.gauss()
+  for (let m = 0; m < QAM_SAMPLES; m += 1) {
+    let shapedI = 0
+    let shapedQ = 0
+    for (let j = 0; j < weight.length; j += 1) {
+      const symbol = sent[m + j]
+      shapedI += levelI(symbol) * weight[j]
+      shapedQ += levelQ(symbol) * weight[j]
+    }
+    const ri = shapedI * d + rng.gauss()
+    const rq = shapedQ * d + rng.gauss()
     const di = Math.min(side - 1, Math.max(0, Math.round((ri / d + (side - 1)) / 2)))
     const dq = Math.min(side - 1, Math.max(0, Math.round((rq / d + (side - 1)) / 2)))
     const decided = dq * side + di
-    if (decided !== sent) {
-      let diff = grayOf(sent) ^ grayOf(decided)
+    const expected = sent[m + QAM_ISI_SPAN]
+    if (decided !== expected) {
+      let diff = grayOf(expected) ^ grayOf(decided)
       while (diff > 0) {
         errors += diff & 1
         diff >>= 1
@@ -1211,7 +1242,7 @@ function computeQam(params: Record<string, number>): CourseView {
   }))
 
   const theoryBer = qamTheory(order, ebn0Db)
-  const shot = shootQam(order, ebn0Db)
+  const shot = shootQam(order, ebn0Db, alpha)
   const measuredBer = shot.ber
   series.push({
     name: `${label} 实测`,
@@ -1226,7 +1257,9 @@ function computeQam(params: Record<string, number>): CourseView {
   const gammaSameBer = qamGammaFor(16, theoryBer)
   const extraDb = 10 * Math.log10(gammaNow / gammaSameBer)
   const extra64 = 10 * Math.log10(qamGammaFor(64, theoryBer) / gammaSameBer)
-  const deviate = measuredBer > 0 && (measuredBer > theoryBer * 3 || measuredBer < theoryBer / 3)
+  // 成型滤波 + 固定 0.03T 采样偏差之后，实测总比「不含成型」的理想理论高 3~4 倍，
+  // 这条阈值放到 4.5 倍：真正坏掉的链路会远超它，正常档不再无故标红。
+  const deviate = measuredBer > 0 && (measuredBer > theoryBer * 4.5 || measuredBer < theoryBer / 4.5)
   const failed = mod === 3 && theoryBer > 0.01
 
   const readouts: CourseReadout[] = [
@@ -1377,14 +1410,29 @@ function computeMatch(params: Record<string, number>): CourseView {
   const cleanBer = qFunction(Math.sqrt(2 * gamma))
   const deviate = measuredBer > 0 && (measuredBer > theoryBer * 3 || measuredBer < theoryBer / 3)
 
+  // 接收端噪声的一个实现：σ = 10^(−SNR/20)，只叠在当前选中的那条波形上。
+  // 种子按档位固定，换波形、换 Δt、换 Eb/N0 各得到一条可复现的实现，不是每帧重掷的随机数。
+  const sigma = 10 ** (-snrDb / 20)
   const series: CourseSeries[] = MATCH_WAVES.map((name, index) => ({
     name,
     color: index === wave ? MATCH_COLORS[index] : MATCH_DIM[index],
+    quiet: index !== wave,
+    bold: index === wave,
     points: Array.from({ length: MATCH_POINTS }, (_, i) => {
       const tau = -1 + (2 * i) / (MATCH_POINTS - 1)
       return [tau, matchCorr(index, tau)] as [number, number]
     }),
   }))
+  const noiseRng = createRng(MATCH_SEED + wave * 17 + Math.round(dt * 100) * 3 + ebn0Db * 7 + 1)
+  series.push({
+    name: `接收噪声实现（σ = ${sigma.toFixed(3)}）`,
+    color: '#ffd166',
+    dashed: true,
+    points: Array.from({ length: MATCH_POINTS }, (_, i) => {
+      const tau = -1 + (2 * i) / (MATCH_POINTS - 1)
+      return [tau, matchCorr(wave, tau) + sigma * noiseRng.gauss()] as [number, number]
+    }),
+  })
   if (dt > 0) {
     series.push({
       name: '失配后的相关输出',
@@ -1486,14 +1534,14 @@ const mseqTauParam: CourseParam = {
   step: 1,
   unit: '',
 }
-const mseqInitParam: CourseParam = {
-  key: 'initOpt',
-  label: '初始状态',
+const mseqTapsParam: CourseParam = {
+  key: 'taps',
+  label: '反馈多项式',
   min: 0,
-  max: 2,
+  max: 1,
   step: 1,
   unit: '',
-  options: ['全 1', '1 后接全 0', '交替 1/0'],
+  options: ['本原抽头', '非本原抽头'],
 }
 
 /** 线性反馈移位寄存器：a[i] = ⊕ a[i−t]，t 取抽头。 */
@@ -1536,9 +1584,11 @@ function mseqAuto(bits: number[]): number[] {
 function computeMseq(params: Record<string, number>): CourseView {
   const levelIdx = Math.min(3, Math.max(0, Math.round(params.level ?? 3)))
   const level = MSEO_LEVELS[levelIdx]
-  const initIdx = Math.min(2, Math.max(0, Math.round(params.initOpt ?? 0)))
-  const init = MSEO_INITS[initIdx].slice(0, level)
-  const bad = (params.bad ?? 0) >= 1
+  // 抽头两档：本原多项式给出满周期 m 序列；非本原多项式给出短周期序列，这才是本章真正的反例。
+  const tapsIdx = Math.min(1, Math.max(0, Math.round(params.taps ?? 0)))
+  const tapsText = tapsIdx === 1 ? '非本原' : '本原'
+  const init = MSEO_INITS[0].slice(0, level)
+  const bad = tapsIdx === 1
   const taps = (bad ? MSEO_BAD_TAPS : MSEO_TAPS)[level]
   const full = 2 ** level - 1
   const tau = Math.min(full - 1, Math.max(0, Math.round(params.tau ?? 0)))
@@ -1558,7 +1608,7 @@ function computeMseq(params: Record<string, number>): CourseView {
 
   const series: CourseSeries[] = [
     {
-      name: 'R(τ)',
+      name: `R(τ) · n=${level}（N=${period}）· ${tapsText}抽头 ${taps.join(',')}`,
       color: '#5ad1a5',
       points: auto.map((v, i) => [i, v] as [number, number]),
     },
@@ -1566,7 +1616,7 @@ function computeMseq(params: Record<string, number>): CourseView {
 
   const readouts: CourseReadout[] = [
     {
-      label: '周期 N',
+      label: `周期 N（${tapsText}抽头）`,
       value: `${period}`,
       hint: `2^${level} − 1 = ${full}；整条序列一个周期正好 ${period} 个码元。`,
       warn: failed,
@@ -1599,9 +1649,9 @@ function computeMseq(params: Record<string, number>): CourseView {
       warn: false,
     },
     {
-      label: '序列前 8 位',
+      label: `序列前 8 位（n=${level}）`,
       value: raw.slice(0, 8).join(''),
-      hint: `初态是 (${init.join(', ')})：换初态只换这条 m 序列从哪一位开始，反馈多项式没变。`,
+      hint: `反馈多项式抽头取 (${taps.join(', ')})，初态 ${init.join('')}：换抽头就是换多项式，序列本身跟着换。`,
       warn: false,
     },
   ]
@@ -1610,7 +1660,7 @@ function computeMseq(params: Record<string, number>): CourseView {
   if (failed) {
     conclusion = `抽头一换，周期从 ${full} 掉到 ${period}：序列还是 0/1 序列，但自相关不再是双值——屏上一共 ${distinct} 个值，最大旁瓣 ${sidelobe.toFixed(4)} 也离开了 −1/N。拿去做扩频，就分不清「同相」和「错一位」。`
   } else {
-    conclusion = `${period} 个延迟里，自相关只有两个值：τ=0 处 1，其余 ${period - 1} 个全是 −1/${period} = ${theorySide.toFixed(5)}。这就是扩频能抗多址干扰的底：别人错开一个码元，相关输出就掉到噪声量级。换初态只换序列的相位：三档初态给出的是同一条 m 序列的不同循环移位（前 8 位就是读数里那三串），自相关仍然只有这两个值——说明这两个值来自反馈多项式，而不是某一段具体码。`
+    conclusion = `${period} 个延迟里，自相关只有两个值：τ=0 处 1，其余 ${period - 1} 个全是 −1/${period} = ${theorySide.toFixed(5)}。这就是扩频能抗多址干扰的底：别人错开一个码元，相关输出就掉到噪声量级。这两个值来自${tapsText}抽头 (${taps.join(', ')}) 定下的反馈多项式，而不是某一段具体码：把抽头切到「非本原」，N 从 ${full} 掉下来，自相关立刻不再只有两个值。`
   }
 
   return {
@@ -1621,6 +1671,8 @@ function computeMseq(params: Record<string, number>): CourseView {
     conclusion,
     failed,
     bars: true,
+    // x 轴钉死在 [0,127]：级数换档时 N 的长短一眼能看出来，而不是每档都自动铺满画布。
+    xRange: [0, 127],
     guides: [{ y: theorySide, label: `−1/N = ${theorySide.toFixed(5)}：其余 ${period - 1} 根柱都在这条线上` }],
     markerX: tau,
     markerLabel: `τ = ${tau}`,
@@ -1795,6 +1847,9 @@ function computeHamming(params: Record<string, number>): CourseView {
     readouts,
     conclusion,
     failed,
+    markerX: errors,
+    markerLabel: `e = ${errors}`,
+    highlightX: errors,
   }
 }
 
@@ -2593,9 +2648,9 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
     implemented: true,
     reason: '',
     question: 'm 序列的自相关，为什么只有 1 和 −1/N 两个值？',
-    params: [mseqLevelParam, mseqTauParam, mseqInitParam],
-    defaults: { level: 3, tau: 0, initOpt: 0 },
-    failPreset: { level: 3, tau: 0, initOpt: 0, bad: 1 },
+    params: [mseqLevelParam, mseqTauParam, mseqTapsParam],
+    defaults: { level: 3, tau: 0, taps: 0 },
+    failPreset: { level: 3, tau: 0, taps: 1 },
     compute: computeMseq,
   },
   {

@@ -48,6 +48,9 @@ export function CourseChart({
   yTicks,
   markerX,
   markerLabel,
+  xRange,
+  yRange,
+  highlightX,
   label,
 }: {
   series: CourseSeries[]
@@ -64,6 +67,9 @@ export function CourseChart({
   /** 竖参考线：第 12 章用它指出「当前取的是第几根柱」；不传就没有这条线，其它章零影响。 */
   markerX?: number
   markerLabel?: string
+  xRange?: [number, number]
+  yRange?: [number, number]
+  highlightX?: number
   /** 读屏器读的那句话（chartLabel 拼的）；画布本身对读屏器是空白，必须由外面传进来。 */
   label: string
 }) {
@@ -157,6 +163,16 @@ export function CourseChart({
     if (dataMin >= 0) yMin = 0
     // 堆叠柱数的是个数，纵轴下界必须落在 0：否则柱子从负数处往上长，看着像有负计数。
     if (stack) yMin = 0
+    // 章节钉死坐标范围（第 10 章 ±0.05、第 12 章 [0,127]）：只在传了的时候覆盖上面算出的自动缩放，
+    // 其余 11 章连一个分支都不进。
+    if (xRange) {
+      xMin = tx(xRange[0])
+      xMax = tx(xRange[1])
+    }
+    if (yRange) {
+      yMin = ty(yRange[0])
+      yMax = ty(yRange[1])
+    }
 
     const px = (x: number) => PAD.left + ((tx(x) - xMin) / (xMax - xMin)) * plotW
     const py = (y: number) => PAD.top + (1 - (ty(y) - yMin) / (yMax - yMin)) * plotH
@@ -350,7 +366,11 @@ export function CourseChart({
       }
       const span = xs.length > 1 ? px(xs[1]) - px(xs[0]) : plotW / 2
       const barW = Math.max(18, Math.min(56, span * 0.45))
+      // 当前那一档要能被一眼挑出来：别的柱压到 28% 透明度，选中的那根描一圈边框。
+      const focus = highlightX !== undefined && Number.isFinite(highlightX) ? highlightX : undefined
       for (const x of xs) {
+        const onFocus = focus === undefined || Math.abs(x - focus) < 1e-9
+        ctx.globalAlpha = onFocus ? 1 : 0.28
         let acc = 0
         for (const s of series) {
           const point = s.points.find(([px0]) => px0 === x)
@@ -371,7 +391,14 @@ export function CourseChart({
             ctx.fillText(String(point[1]), px(x), (y0 + y1) / 2)
           }
         }
+        if (focus !== undefined && onFocus) {
+          ctx.globalAlpha = 1
+          ctx.strokeStyle = '#ffd166'
+          ctx.lineWidth = 1.6
+          ctx.strokeRect(px(x) - barW / 2 - 2, py(acc) - 2, barW + 4, py(0) - py(acc) + 4)
+        }
       }
+      ctx.globalAlpha = 1
     }
 
     // 线：每一条各自连点，虚线仍是虚线；迹线淡画，不抢包络；marker 只画点不连线。
@@ -380,7 +407,7 @@ export function CourseChart({
       ctx.globalAlpha = s.quiet ? 0.18 : 1
       ctx.strokeStyle = s.color
       ctx.fillStyle = s.color
-      ctx.lineWidth = s.quiet ? 0.8 : s.name === '解调输出' ? 1.8 : 1.2
+      ctx.lineWidth = s.quiet ? 0.8 : s.bold ? 2.2 : s.name === '解调输出' ? 1.8 : 1.2
       if (s.marker) {
         for (const [x, y] of s.points) {
           if (!Number.isFinite(x) || !Number.isFinite(y)) continue
@@ -407,7 +434,7 @@ export function CourseChart({
       ctx.setLineDash([])
     }
     ctx.globalAlpha = 1
-  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides, xTicks, yTicks, markerX, markerLabel])
+  }, [series, xLabel, yLabel, logX, logY, bars, stack, guides, xTicks, yTicks, markerX, markerLabel, xRange, yRange, highlightX])
 
   // 画的时候用的是最新的 draw，所以尺寸回调里不必重建 observer。
   const drawRef = useRef(draw)
