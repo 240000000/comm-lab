@@ -1155,7 +1155,7 @@ const qamModParam: CourseParam = {
 }
 const qamEbn0Param: CourseParam = {
   key: 'ebn0Db',
-  label: 'Eb/N0',
+  label: 'Eb/N0（按它取值，图上按 C/N 展开）',
   min: 0,
   max: 20,
   step: 1,
@@ -1247,6 +1247,8 @@ function computeQam(params: Record<string, number>): CourseView {
   // 同一条曲线横移 10log10(1.90/1.05) = 2.58 dB，滑块一拖整族曲线跟着走。
   // 读数仍按 Eb/N0 报——那是链路本身的指标，不随带宽怎么定义而变。
   const shiftDb = 10 * Math.log10(k / (1 + alpha))
+  // 读数按 Eb/N0 报（链路指标），图上横轴是 C/N——两个口径同时写出来，免得读数和横坐标对不上。
+  const dualAxis = `按 Eb/N0 取值：Eb/N0 ${ebn0Db.toFixed(1)} dB，图上折算 C/N ${(ebn0Db + shiftDb).toFixed(1)} dB。`
   const series: CourseSeries[] = QAM_ORDERS.map((value, index) => ({
     name: QAM_LABELS[index],
     color: QAM_COLORS[index],
@@ -1281,19 +1283,19 @@ function computeQam(params: Record<string, number>): CourseView {
     {
       label: '谱效率',
       value: `${efficiency.toFixed(2)} bit/s/Hz`,
-      hint: `log₂M/(1+α) = ${k}/(1+${alpha.toFixed(2)})；滚降越小，同样带宽里塞的比特越多。`,
+      hint: `log₂M/(1+α) = ${k}/(1+${alpha.toFixed(2)})；滚降越小，同样带宽里塞的比特越多。${dualAxis}`,
       warn: false,
     },
     {
       label: '理论误码率',
       value: exponent(theoryBer),
-      hint: `(4/k)(1−1/√M)·Q(√(3k·Eb/((M−1)N0)))，k = ${k}；M=4 时退化成 2PSK 的 Q(√(2Eb/N0))。`,
+      hint: `(4/k)(1−1/√M)·Q(√(3k·Eb/((M−1)N0)))，k = ${k}；M=4 时退化成 2PSK 的 Q(√(2Eb/N0))。${dualAxis}`,
       warn: failed,
     },
     {
       label: '实测误码率',
       value: measuredBer === 0 ? '0（本批没出错）' : exponent(measuredBer),
-      hint: `${shot.errors} / ${shot.bits} 比特判错；与理论比 ${measuredBer === 0 ? '本批没出错' : `${(measuredBer / theoryBer).toFixed(2)} 倍`}`,
+      hint: `${shot.errors} / ${shot.bits} 比特判错；与理论比 ${measuredBer === 0 ? '本批没出错' : `${(measuredBer / theoryBer).toFixed(2)} 倍`}。${dualAxis}`,
       warn: deviate || failed,
     },
   ]
@@ -1308,6 +1310,8 @@ function computeQam(params: Record<string, number>): CourseView {
   } else {
     conclusion = `${label} 每赫兹只传 ${efficiency.toFixed(2)} bit，比 16QAM 少 ${Math.abs(moreBits).toFixed(0)}% 的比特，省下 ${Math.abs(extraDb).toFixed(1)} dB。`
   }
+  // 横轴是 C/N，α 变大会把整条曲线往左推，读起来像「滚降越大越好」——代价记在带宽利用率里。
+  conclusion += `别把左移读成「滚降越大越好」：同样带宽里能塞的比特率是 log₂M/(1+α) = ${efficiency.toFixed(2)} bit/s/Hz，α 越大这个数越小。滚降是拿带宽换旁瓣，不是白捡的 dB。`
 
   return {
     series,
