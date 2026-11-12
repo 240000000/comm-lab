@@ -23,6 +23,9 @@ import {
   chapterByNo,
   pllLockStep,
   pllResidual,
+  pllTheoryResidual,
+  pllTheoryText,
+  pllVerdict,
   pllStep,
   pllTrace,
   processSigmaTheory,
@@ -865,8 +868,36 @@ test('第 13 章：K=2.40 越过收敛边界，60 步后仍在振荡而不是单
   assert.equal(pllLockStep(trace), null)
   const view = chapterByNo(13)!.compute({ k: 2.4, theta0: 2, sigma: 0 })
   assert.equal(view.failed, true)
-  assert.equal(view.readouts[2].value, '没锁住')
+  assert.equal(view.readouts[2].value, '发散')
   assert.ok(view.conclusion.includes('放大'))
+})
+
+test('第 13 章：理论稳态残余按 σ/√(2K−K²) 报，K ≥ 2 报发散', () => {
+  // σ = 0 时理论值就是 0；K ≥ 2 时没有稳态，返回 null。
+  assert.equal(pllTheoryResidual(0.6, 0), 0)
+  assert.equal(pllTheoryResidual(2.5, 0.1), null)
+  assert.equal(pllTheoryResidual(2, 0.1), null)
+  assert.equal(pllTheoryText(2.5, 0.1), '发散，无稳态')
+  // 0.1 / √(2·0.6 − 0.36) = 0.1 / √0.84 ≈ 0.109109
+  assert.ok(Math.abs(pllTheoryResidual(0.6, 0.1)! - 0.1091089) < 1e-6)
+  assert.equal(pllTheoryText(0.6, 0.1), '0.109')
+  assert.equal(pllTheoryText(1.5, 0.1), '0.115')
+})
+
+test('第 13 章：八格判定表——K=0.6、σ=0.1 锁住，K=2.5 发散，K=0.05、σ=0 未收敛', () => {
+  const verdictOf = (k: number, sigma: number) => pllVerdict(k, pllTrace(k, 2, sigma, 20261112), sigma)
+  assert.equal(verdictOf(0.05, 0), '未收敛')
+  assert.equal(verdictOf(0.6, 0), '锁住')
+  assert.equal(verdictOf(0.6, 0.1), '锁住')
+  assert.equal(verdictOf(1.5, 0), '锁住')
+  assert.equal(verdictOf(1.5, 0.1), '锁住')
+  assert.equal(verdictOf(2.5, 0), '发散')
+  assert.equal(verdictOf(2.5, 0.1), '发散')
+  // 判定与读数一致：只有「锁住」才不是 failed。
+  for (const k of [0.05, 0.6, 1.5, 2.5]) {
+    const view = chapterByNo(13)!.compute({ k, theta0: 2, sigma: 0 })
+    assert.equal(view.failed, view.readouts[2].value !== '锁住')
+  }
 })
 
 test('第 13 章：K=0.05 太慢，60 步后还在 ±0.02 外面', () => {

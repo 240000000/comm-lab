@@ -245,7 +245,7 @@ core 分成 11 个文件而不是一个大文件，理由同样是可核对：�
 
 ### 2.3 测试用 node 自带的 runner
 
-这台机器装依赖出过问题，vitest 一次要拉一百多个包；项目本身又是零测试依赖的。Node 24 默认开启类型擦除，`node --test` 能直接跑 `.ts`，所以 `package.json` 里只有一行 `"test": "node --test"`，测试放 `tests/*.test.ts`，28 个文件、`npm test` 报 343 条，本机热跑 `duration_ms` 1629.9，干净克隆里墙钟 2.5 s。
+这台机器装依赖出过问题，vitest 一次要拉一百多个包；项目本身又是零测试依赖的。Node 24 默认开启类型擦除，`node --test` 能直接跑 `.ts`，所以 `package.json` 里只有一行 `"test": "node --test"`，测试放 `tests/*.test.ts`，29 个文件、`npm test` 报 347 条，本机热跑 `duration_ms` 1629.9，干净克隆里墙钟 2.5 s。
 
 代价说清楚：没有快照测试、没有覆盖率报告、没有并发隔离，断言只有 `node:assert`；测试文件里的 import 也必须带 `.ts` 扩展名；`grep -c "^test("` 数出来的行数会比实际用例少，因为子测试与循环生成的用例不在顶层。换来的是 `npm ci` 只装 28 个包（`package-lock.json` 里 90 条 `node_modules/` 记录，其余 62 条是 oxlint、rollup、esbuild 各平台的二进制，npm 只取当前平台那一个），整条依赖树小到可以一眼看完。
 
@@ -323,7 +323,7 @@ npm run dev
 | `git clone --depth 1` | 6.42 s | 只取最新一次提交 |
 | `npm ci` | 1.95 s | 装 28 个包（lockfile 里另有 62 条平台二进制记录） |
 | `npm run build` | 1.22 s | 46 个模块，`tsc -b` 加 vite |
-| `npm test` | 2.5 s | 343 条用例 |
+| `npm test` | 2.5 s | 347 条用例 |
 
 `npm run dev` 起在终端打印的地址（本机是 `http://localhost:5183/`），打开后进 `#/qam`，看到的就是第一张图：16QAM 的 16 个点、旁边的 4 位格雷码标签、默认 12 dB 的琥珀色点云，下面三个读数和一条 0–20 dB 的误码率曲线。
 
@@ -343,7 +343,7 @@ npm run dev
 
 如果四步里任何一步失败，README 的常见问题表列了三种：`npm ci` 失败先删 `node_modules` 改用 `npm install`；页面空白先看控制台，通常是 Node 低于 24；只有线上 404 是 `base` 路径问题，本地不会复现。
 
-不开浏览器也能验一半：`npm test` 会告诉你 343 条过没过；`npm run build` 会告诉你产物有多大（本轮 `dist/assets/index-*.js` 约 314 kB、`index-*.css` 约 27 kB，哈希随内容变）。剩下的一半只能打开看——点云、曲线、标签位置这些没有断言。
+不开浏览器也能验一半：`npm test` 会告诉你 347 条过没过；`npm run build` 会告诉你产物有多大（本轮 `dist/assets/index-*.js` 约 314 kB、`index-*.css` 约 27 kB，哈希随内容变）。剩下的一半只能打开看——点云、曲线、标签位置这些没有断言。
 
 ### 3.2 Node 版本与零新增依赖
 
@@ -357,7 +357,7 @@ npm run dev
 
 没有通信库、没有数值库、没有绘图库——星座图、曲线、时域波形都是 canvas 手画，FFT、Viterbi、QAM 映射都在 `src/core/` 里手写。这一条不是自证，上面三条命令就是证据。
 
-代码检查用的是 oxlint，一个 Rust 写的 linter，体积小、不需要再装一堆 ESLint 插件，`npm run lint` 报的是"0 warnings and 0 errors"（扫描文件数随源码增删变，不写死）。它不是测试的替代品，只保证没有未使用变量、没有明显写错的地方；真正的逻辑靠 343 条测试。
+代码检查用的是 oxlint，一个 Rust 写的 linter，体积小、不需要再装一堆 ESLint 插件，`npm run lint` 报的是"0 warnings and 0 errors"（扫描文件数随源码增删变，不写死）。它不是测试的替代品，只保证没有未使用变量、没有明显写错的地方；真正的逻辑靠 347 条测试。
 
 "运行时不调模型、不联网"也能当场验：打开开发者工具的 Network 面板，四页各点一遍，除了本地静态文件没有任何请求；`src/` 里搜不到 `fetch`、`XMLHttpRequest`、`WebSocket`，也没有任何 base URL 常量。这一条比说"纯前端"有用，因为它是可观察的行为，不是架构描述。
 
@@ -441,6 +441,7 @@ npm run dev
 | R31 | R31 | 本条提交 | 第 6 章失败判据去硬阈值，按眼高/ISI/误码率三分支；4 dB 才闭眼 |
 | R32 | R32 | 本条提交 | 第 7 章四档误码率同画对数轴、蒙特卡洛 20000；φ=45° 增益 0.0 dB |
 | R33 | R33 | 本条提交 | 2ASK 改单极性 OOK（理论 Q(√(Eb/N0))、门限 √γ）；8 dB 6.00e-3 |
+| R92 | R92 | 本条提交 | 理论曲线不再夹平在画布下沿（低于 1e-6 就断笔；BPSK 10.75 dB、QPSK 13.75 dB 起断，16QAM/64QAM 在 0–20 dB 内到不了下沿）；横轴刻度改用 `niceTicks`，0.5 dB 步长也有 4 根以上；第 13 章 σ>0 报理论稳态残余 σ/√(2K−K²)，判据分锁住/未收敛/残余过大/发散；测试 343→347 |
 | R91 | R91 | 本条提交 | 技术报告补进 R81–R90 四块：周期脉冲串七个峰、节级匹配 296 条书签 144 条命中与扁平书签、首页两模式与两处刻意的不同步、判据三修（2DPSK 复相关 / 2FSK 相位 / FM 按 D=β）；新配三张截图（首页默认、首页扩展、课程视图 1360）；正文 CJK 净增 209 字，页数等 11/13 重导时核 |
 | R90 | R90 | 本条提交 | 教材匹配从章名降到节名：`pdfOutline` 吐三级书签（扁平书签按标题编号归章）、`src/course/sections.ts` 按节投票（≥2 票认章、平票章号小者得）、`evidenceOf` 印出触发节名；通信原理 296 条书签命中 144 条、13 章 `topicId` 仍 1–13；带节合成书可玩 0→3；测试 335→343 |
 | R89 | R89 | 本条提交 | 删掉 hero 里重复的「课程视图 →」入口（R88 已删，本轮核实为空、无改动）；书架从 `CoursePage` 的 `useState` 提到 `src/course/shelfStore.ts`（`useSyncExternalStore`，`{ books, activeId }`，纯内存不落盘），首页与课程视图读同一份；扩展面板拆成 `ShelfPanel` 与 `ModulePanel`（书架一行一本、四个数由 `billOf` 现算，模块四列＝章 / 书上原字标题 / 命中词 / 状态，不可玩灰显「暂无仿真」），导入走真 file input、四条失败分支各一句人话；13 章读数与 R88 逐字相同；测试 329→335 |

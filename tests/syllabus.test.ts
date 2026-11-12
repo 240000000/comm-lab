@@ -72,7 +72,7 @@ const GOLDEN_READOUTS: Array<{ no: number; readouts: string[]; failed: boolean }
     ],
     failed: false,
   },
-  { no: 13, readouts: ['剩余相位误差（实测 / 理论）=0.000 / 0.000', '收敛步数=7', '环路锁定=锁住'], failed: false },
+  { no: 13, readouts: ['末段残余（实测 / 理论）=0.000 / 0.000', '收敛步数=7', '锁定判定=锁住'], failed: false },
 ]
 
 test('教材目录：13 章、序号连续、原名是教材原字', () => {

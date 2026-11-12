@@ -1,11 +1,12 @@
 /**
  * BER–SNR 曲线。
  *
- * 横轴信噪比是线性的（0–20 dB，每格 4 dB），纵轴误比特率是对数的（1 → 1e-6）。
+ * 横轴信噪比是线性的（0–20 dB，刻度由 niceTicks 选），纵轴误比特率是对数的（1 → 1e-6）。
  * 理论值画虚线，实测画成点：实心点表示这批样本里真的测到了错，
  * 空心点表示一个错都没有——那种位置不能用 log(0) 画，也不该硬连成一条线，
  * 所以只画一个空心圈，摆在「这批样本能分辨到的最低位」上（1 / 比对过的比特数）。
  */
+import { berTicks } from './berTicks.ts'
 import { syncCanvasSize } from './canvasSize'
 import { useEffect, useRef } from 'react'
 import type { CurvePoint } from '../core/curve'
@@ -93,9 +94,8 @@ export function BerCurveChart({ points, fromDb, toDb, order }: Props) {
     }
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    for (const tick of points) {
-      if ((tick.snrDb - fromDb) % 4 !== 0) continue
-      ctx.fillText(`${tick.snrDb}`, toX(tick.snrDb), PAD_TOP + plotH + 9)
+    for (const tick of berTicks(fromDb, toDb)) {
+      ctx.fillText(`${tick}`, toX(tick), PAD_TOP + plotH + 9)
     }
     ctx.textAlign = 'center'
     ctx.fillText('信噪比 Es/N0 (dB)', PAD_LEFT + plotW / 2, PAD_TOP + plotH + 30)
@@ -106,18 +106,28 @@ export function BerCurveChart({ points, fromDb, toDb, order }: Props) {
     ctx.fillText('误比特率 BER', 0, 0)
     ctx.restore()
 
-    // 理论曲线：一条虚线，全程连贯。
+    // 理论曲线：掉出画布下沿（1e-6）就抬笔，下一段有效点重新起笔。
+    // 以前是 Math.max(theory, 1e-6) 把它摁在底边上平推，看上去像「误码率停在
+    // 1e-6 不动」，其实那一段是真的比 1e-6 还低、画不出来了。
     ctx.save()
     ctx.setLineDash([5, 4])
     ctx.strokeStyle = COLOR.theory
     ctx.lineWidth = 1.5
     ctx.beginPath()
-    points.forEach((point, index) => {
+    let pen = false
+    for (const point of points) {
+      if (!Number.isFinite(point.theory) || point.theory < 1e-6) {
+        pen = false
+        continue
+      }
       const x = toX(point.snrDb)
-      const y = toY(Math.max(point.theory, 1e-6))
-      if (index === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    })
+      const y = toY(point.theory)
+      if (pen) ctx.lineTo(x, y)
+      else {
+        ctx.moveTo(x, y)
+        pen = true
+      }
+    }
     ctx.stroke()
     ctx.restore()
 

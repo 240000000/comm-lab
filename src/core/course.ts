@@ -2338,6 +2338,41 @@ export function pllLockStep(trace: number[]): number | null {
 }
 
 /** 最后 10 步 |θ| 的平均：这就是「稳态」在屏幕上的样子。 */
+/**
+ * 理论稳态残余（RMS）。
+ *
+ * 每步灌 σ 的白噪声、环路以 1−K 的乘数往回拉，稳态方差是 σ² / (2K − K²)，
+ * 开方就是 RMS；σ = 0 时当然是 0。K ≥ 2 时环路把误差放大，稳态不存在，返回 null。
+ */
+export function pllTheoryResidual(gain: number, sigma: number): number | null {
+  if (!(gain > 0) || gain >= 2) return null
+  if (sigma === 0) return 0
+  return sigma / Math.sqrt(2 * gain - gain * gain)
+}
+
+/** 理论值的显示口径：0 报 0.000，发散报字符串，其余三位小数。 */
+export function pllTheoryText(gain: number, sigma: number): string {
+  const theory = pllTheoryResidual(gain, sigma)
+  return theory === null ? '发散，无稳态' : theory.toFixed(3)
+}
+
+export type PllVerdict = '锁住' | '未收敛' | '残余过大' | '发散'
+
+/**
+ * 判定：K ≥ 2 直接判发散；否则看末段——末 10 步平均 |θ| 比前 10 步还在掉超过
+ * 15% 就算还没收敛；稳住了再看残余是否落在 max(3×理论, 0.02) 以内。
+ */
+export function pllVerdict(gain: number, trace: number[], sigma: number): PllVerdict {
+  const theory = pllTheoryResidual(gain, sigma)
+  if (theory === null) return '发散'
+  const tail = pllResidual(trace, 10)
+  // 已经在允许带里就别再问「还掉不掉」：K < 1 时误差本来就按 1−K 的乘数一直
+  // 指数下降，拿下降率当判据会把已经进带的默认档也判成未收敛。
+  if (tail <= Math.max(3 * theory, 0.02)) return '锁住'
+  const prev = pllResidual(trace.slice(0, -10), 10)
+  return prev > 0 && (prev - tail) / prev > 0.15 ? '未收敛' : '残余过大'
+}
+
 export function pllResidual(trace: number[], tail = 10): number {
   const slice = trace.slice(Math.max(0, trace.length - tail))
   return slice.reduce((sum, v) => sum + Math.abs(v), 0) / slice.length
@@ -2350,10 +2385,11 @@ function computePll(params: Record<string, number>): CourseView {
 
   const trace = pllTrace(gain, theta0, sigma, PLL_SEED)
   const lockStep = pllLockStep(trace)
-  const locked = lockStep !== null
   const residual = pllResidual(trace)
   const multiplier = 1 - gain
-  const converges = Math.abs(multiplier) < 1
+  const theoryText = pllTheoryText(gain, sigma)
+  const verdict = pllVerdict(gain, trace, sigma)
+  const residualBand = Math.max(3 * (pllTheoryResidual(gain, sigma) ?? 0), 0.02)
 
   // 淡迹线先入数组、主迹线最后画，读数的这一条才压在最上面。
   const series: CourseSeries[] = []
@@ -2376,10 +2412,10 @@ function computePll(params: Record<string, number>): CourseView {
 
   const readouts: CourseReadout[] = [
     {
-      label: '剩余相位误差（实测 / 理论）',
-      value: `${residual.toFixed(3)} / 0.000`,
-      hint: '理论稳态误差是 0：无噪声时 θ(n+1) = θ(n) − K·sin θ(n) 的不动点就是 θ = 0；实测取第 51–60 步 |θ| 的平均。',
-      warn: !locked || residual > PLL_BAND,
+      label: '末段残余（实测 / 理论）',
+      value: `${residual.toFixed(3)} / ${theoryText}`,
+      hint: '实测取第 51–60 步 |θ| 的平均；理论是噪声下的稳态残余 RMS，不是零——σ = 0 时才是 0.000，σ > 0 时是 σ/√(2K−K²)，K ≥ 2 时环路发散、没有稳态。',
+      warn: verdict !== '锁住',
     },
     {
       label: '收敛步数',
@@ -2388,18 +2424,20 @@ function computePll(params: Record<string, number>): CourseView {
       warn: lockStep === null,
     },
     {
-      label: '环路锁定',
-      value: locked ? '锁住' : '没锁住',
-      hint: `理论上收敛条件是 |1−K| < 1，也就是 0 < K < 2；当前 K = ${gain.toFixed(2)}，误差乘数 1−K = ${multiplier.toFixed(2)}。这一屏是一阶数字锁相环的抽象模型：对应教材 13.2 载波同步与 13.3 码元同步里的环路，教材没有同名小节，这里只演示一件事——增益决定收不收敛。`,
-      warn: !locked,
+      label: '锁定判定',
+      value: verdict,
+      hint: `K ≥ 2 直接判发散；否则末 10 步平均 |θ| 比前 10 步还在掉超过 15% 算未收敛；稳住了且不超过 max(3×理论, 0.02) = ${residualBand.toFixed(3)} 算锁住，超了算残余过大。当前 K = ${gain.toFixed(2)}，误差乘数 1−K = ${multiplier.toFixed(2)}。这一屏是一阶数字锁相环的抽象模型：对应教材 13.2 载波同步与 13.3 码元同步里的环路，教材没有同名小节，这里只演示一件事——增益决定收不收敛、噪声决定残余多大。`,
+      warn: verdict !== '锁住',
     },
   ]
 
   let conclusion: string
-  if (!converges) {
-    conclusion = `K = ${gain.toFixed(2)} 时 |1−K| = ${Math.abs(multiplier).toFixed(2)} > 1，一阶环把相位误差越放越大：θ 在正负之间来回摆、摆幅还在长，60 步走完根本没进 ±0.02 的判定带。增益越过 2，环路把误差放大而不是抹平，锁相环不是随便给个增益就能锁上。`
-  } else if (!locked) {
-    conclusion = `K = ${gain.toFixed(2)} 时 |1−K| = ${Math.abs(multiplier).toFixed(2)} < 1，收是收敛的，但每步只抹掉 ${(100 * gain).toFixed(0)}% 的误差，60 步后还剩 ${residual.toFixed(3)} 弧度，还在 ±0.02 的判定带外面。增益太小不是锁不上，是 60 步里来不及锁。`
+  if (verdict === '发散') {
+    conclusion = `K = ${gain.toFixed(2)} 时 |1−K| = ${Math.abs(multiplier).toFixed(2)} > 1，一阶环把相位误差越放越大：θ 在正负之间来回摆、摆幅还在长，60 步走完根本没进 ±0.02 的判定带。增益越过 2，环路把误差放大而不是抹平，锁相环不是随便给个增益就能锁上——这种参数下连稳态残余都不存在，理论值只能写「发散」。`
+  } else if (verdict === '未收敛') {
+    conclusion = `K = ${gain.toFixed(2)} 时 |1−K| = ${Math.abs(multiplier).toFixed(2)} < 1，收是收敛的，但每步只抹掉 ${(100 * gain).toFixed(0)}% 的误差，末 10 步平均还在往下掉——60 步后还剩 ${residual.toFixed(3)} 弧度，判定带外。增益太小不是锁不上，是 60 步里来不及锁。`
+  } else if (verdict === '残余过大') {
+    conclusion = `K = ${gain.toFixed(2)} 时环路是收敛的，但噪声一直灌进来：末 10 步平均残余 ${residual.toFixed(3)} 弧度，超过 max(3×理论 ${theoryText}，0.02) = ${residualBand.toFixed(3)} 的允许带。稳态残余的理论值是 σ/√(2K−K²)，不是零——要压小它，只能减小 σ 或者换更大的 K。`
   } else {
     conclusion = `接收端和解调端各自有一个时钟，相位对不上，判出来的符号就整段错位——所以要先追相位，再谈判决。K = ${gain.toFixed(2)} 时误差乘数 1−K = ${multiplier.toFixed(2)}，θ₀ = ${theta0.toFixed(2)} 弧度在第 ${lockStep} 步就落进 ±0.02，60 步后只剩 ${residual.toFixed(3)}。一阶环的好处就是这个乘数能一眼算出来：|1−K| < 1，也就是 0 < K < 2，才收敛。`
     if (sigma > 0) {
@@ -2417,7 +2455,7 @@ function computePll(params: Record<string, number>): CourseView {
     ],
     readouts,
     conclusion,
-    failed: !locked,
+    failed: verdict !== '锁住',
   }
 }
 
