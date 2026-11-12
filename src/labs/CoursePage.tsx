@@ -24,7 +24,7 @@ import {
   UNCOVERED_NOTE,
   billOf,
   bookById,
-  bookFromOutline,
+  bookFromSections,
   defaultShelfBook,
   evidenceOf,
   isPlayable,
@@ -320,7 +320,7 @@ export function CoursePage() {
           return
         }
         const title = fileName.replace(/\.pdf$/i, '')
-        const added = bookFromOutline(title, outline.toBook(entries), `imported-${Date.now()}`)
+        const added = bookFromSections(title, entries, `imported-${Date.now()}`)
         importBook(added)
         setBill({ fileName, book: added })
         setImportState({ status: 'idle' })

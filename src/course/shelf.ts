@@ -10,7 +10,8 @@
  */
 
 import { chapterByNo } from '../core/course.ts'
-import type { OutlinedBook } from './pdfOutline.ts'
+import type { OutlinedBook, OutlineEntry } from './pdfOutline.ts'
+import { assignTopics, groupSections } from './sections.ts'
 import { BOOK_COMMUNICATION } from './syllabus.ts'
 
 /** 书架上的一章：目录上长什么样，以及它认到了哪一章。 */
@@ -23,6 +24,8 @@ export type ShelfChapter = {
   topicId: string | null
   /** 认出来时凭的关键词，最多三个；认不到就是空数组。 */
   hits: string[]
+  /** 这一章是靠哪几条节名认出来的（R90）；章名认的章没有这个字段。 */
+  sectionHits?: string[]
 }
 
 /** 书架上的一本书。 */
@@ -80,6 +83,26 @@ export function bookFromOutline(title: string, outline: OutlinedBook, id: string
   }
 }
 
+/**
+ * R90 的新路：从三级目录条目包成书架上的一本。
+ *
+ * 归属规则全在 sections.ts 里（节名投票 ≥2 条才算、否则退章名），这里只做搬运，
+ * 所以「凭什么认这一章」和「怎么裁决抢主题」两件事在测试里能分开钉。
+ */
+export function bookFromSections(title: string, entries: OutlineEntry[], id: string): ShelfBook {
+  return {
+    id,
+    title,
+    chapters: assignTopics(groupSections(entries)).map((chapter) => ({
+      no: chapter.no,
+      rawTitle: chapter.rawTitle,
+      topicId: chapter.topicId,
+      hits: chapter.hits,
+      sectionHits: chapter.sectionHits,
+    })),
+  }
+}
+
 /** 这一章对应的是不是真有一屏能玩（主题存在且 course.ts 里确实有那一章）。 */
 export function isPlayable(chapter: ShelfChapter): boolean {
   if (!chapter.topicId) return false
@@ -99,12 +122,15 @@ export function billOf(book: ShelfBook): ShelfBill {
 /**
  * 一章的匹配证据，直接可以印在账单上。
  *
- * 认到的写「→ 章节名，命中「词」「词」」，认不到的只写一句「未识别到对应模型」——
- * 不猜「大概是第几章」，猜错比不认更糟。
+ * 认到的写「→ 章节名，命中「词」「词」」，节名认的写「→ 章节名，节名命中「5.4.3 小信噪比…」」——
+ * 后者才是这一轮想要的：评审查得到底是哪一节把它认出来的。
+ * 认不到的只写一句「未识别到对应模型」，不猜「大概是第几章」，猜错比不认更糟。
  */
 export function evidenceOf(chapter: ShelfChapter): string {
   if (!isPlayable(chapter)) return MISSING_MATCH
   const topic = chapterByNo(Number(chapter.topicId))!
+  const sectionWords = (chapter.sectionHits ?? []).map((word) => `「${word}」`).join('')
+  if (sectionWords) return `→ ${topic.title}，节名命中${sectionWords}`
   const words = chapter.hits.map((word) => `「${word}」`).join('')
   return words ? `→ ${topic.title}，命中${words}` : `→ ${topic.title}`
 }

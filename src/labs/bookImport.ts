@@ -1,12 +1,12 @@
 /**
  * 首页书架用的「选一个 PDF → 认出一本书」。
  *
- * 流程与课程视图里那段一致：只读书签树与前几页文字层，认出来的章交给 bookFromOutline。
+ * 流程与课程视图里那段一致：只读书签树与前几页文字层，认出来的章交给 bookFromSections。
  * 解析层整套懒加载——pdfjs 与关键词表只有真的选了文件才进客户端。
  *
  * 失败只说人话，不谈实现：三种情况各有各的说法，不合并成「导入失败」。
  */
-import { bookFromOutline, type ShelfBook } from '../course/shelf.ts'
+import { bookFromSections, type ShelfBook } from '../course/shelf.ts'
 
 export const MAX_PDF_BYTES = 250 * 1024 * 1024
 
@@ -34,7 +34,7 @@ export async function readBookFile(file: File, id: string): Promise<BookImportRe
     const entries = await outline.parsePdfOutline(await file.arrayBuffer())
     if (entries.length === 0) return { ok: false, message: NO_OUTLINE_MESSAGE }
     const title = file.name.replace(/\.pdf$/i, '')
-    return { ok: true, book: bookFromOutline(title, outline.toBook(entries), id) }
+    return { ok: true, book: bookFromSections(title, entries, id) }
   } catch (error) {
     return {
       ok: false,

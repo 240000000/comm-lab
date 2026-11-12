@@ -20,6 +20,10 @@ import { BOOK_COMMUNICATION } from './syllabus.ts'
 export type OutlineEntry = {
   rawTitle: string
   page: number | null
+  /** 书签层级：0 章、1 节、2 小节。老的调用方不写这个字段，按章处理。 */
+  depth?: 0 | 1 | 2
+  /** 这一条挂在哪一章下面；章级条目自己就是自己的章号，落在章外的是 null。 */
+  chapterNo?: number | null
 }
 
 /**
@@ -99,35 +103,77 @@ export function isChapterTitle(rawTitle: string): boolean {
 }
 
 /** 书签树的内部形态：标题 + 原始 dest，dest 要拿 doc 才能换成页码。 */
-type ChapterHit = {
+export type OutlineHit = {
   rawTitle: string
   dest: unknown
+  /** 0 章、1 节、2 小节——小节之下还往深里嵌的，一律压到 2。 */
+  depth: 0 | 1 | 2
+  /** 挂在哪一章下面；章级条目自己就是自己的章号，落在章外的是 null。 */
+  chapterNo: number | null
 }
 
-function walkOutline(nodes: unknown, out: ChapterHit[]): void {
+function walkOutline(nodes: unknown, out: OutlineHit[], parentDepth: number, chapterNo: number | null): void {
   if (!Array.isArray(nodes)) return
   for (const node of nodes) {
     if (!node || typeof node !== 'object') continue
     const item = node as OutlineNode
     const rawTitle = typeof item.title === 'string' ? item.title.trim() : ''
-    if (rawTitle && isChapterTitle(rawTitle)) {
-      out.push({ rawTitle, dest: item.dest ?? null })
-    }
-    // 章级条目的子项是节，递归下去也不会被认成章，留着无害。
-    walkOutline(item.items, out)
+    const ownNo = rawTitle ? chapterNumberOf(rawTitle) : null
+    // 章靠标题认（第N章 / Chapter N），节与小节靠嵌套层级定，不靠标题里有没有「4.3」。
+    const depth: 0 | 1 | 2 = ownNo !== null ? 0 : parentDepth === 0 ? 1 : 2
+    const ownChapter = depth === 0 ? ownNo : chapterNo
+    if (rawTitle) out.push({ rawTitle, dest: item.dest ?? null, depth, chapterNo: ownChapter })
+    walkOutline(item.items, out, depth, ownChapter)
   }
 }
 
+/** 「1.2」「1.2.3」这类节编号：给出它属于哪一章、是节还是小节；不是这种写法返回 null。 */
+export function sectionNumberOf(rawTitle: string): { chapterNo: number; depth: 1 | 2 } | null {
+  const match = /^(\d{1,2})\s*[.．]\s*(\d{1,2})(?:\s*[.．]\s*(\d{1,2}))?/.exec(rawTitle.trim())
+  if (!match) return null
+  return { chapterNo: Number(match[1]), depth: match[3] === undefined ? 1 : 2 }
+}
+
 /**
- * 第一步：从书签树里挑出章级条目。
+ * 修一遍归属：真书的书签常常是平的——第1章、1.1、1.1.1 全在同一层。
+ *
+ * 所以节归哪一章不能只看缩进：标题里写着「5.4.3」就按编号认（这是最硬的证据），
+ * 没编号的（「本章小结」「习题」）跟着前面最近的那一章走，开头封面/目录那种落在章外，留 null。
+ */
+function normalizeHits(hits: OutlineHit[]): OutlineHit[] {
+  let lastChapter: number | null = null
+  return hits.map((hit) => {
+    const ownNo = chapterNumberOf(hit.rawTitle)
+    if (ownNo !== null) {
+      lastChapter = ownNo
+      return { ...hit, depth: 0, chapterNo: ownNo }
+    }
+    const numbered = sectionNumberOf(hit.rawTitle)
+    if (numbered) return { ...hit, depth: numbered.depth, chapterNo: numbered.chapterNo }
+    return { ...hit, chapterNo: lastChapter, depth: hit.depth === 0 ? 2 : hit.depth }
+  })
+}
+
+/**
+ * 第一步：从书签树里把三级条目全收下来。
  *
  * 纯函数：只看树本身，不碰 pdf.js、不读页码，所以页码一律是 null——
  * 页码要拿 doc 解 dest，那是 parsePdfOutline 的活。
  */
+export function sectionEntriesFromOutline(nodes: unknown): OutlineEntry[] {
+  const hits: OutlineHit[] = []
+  walkOutline(nodes, hits, -1, null)
+  return normalizeHits(hits).map((hit) => ({
+    rawTitle: hit.rawTitle,
+    page: null,
+    depth: hit.depth,
+    chapterNo: hit.chapterNo,
+  }))
+}
+
+/** 只留章级条目——没改签名的那条老路要的还是这一份。 */
 export function chapterEntriesFromOutline(nodes: unknown): OutlineEntry[] {
-  const hits: ChapterHit[] = []
-  walkOutline(nodes, hits)
-  return hits.map((hit) => ({ rawTitle: hit.rawTitle, page: null }))
+  return sectionEntriesFromOutline(nodes).filter((entry) => (entry.depth ?? 0) === 0)
 }
 
 /**
@@ -157,18 +203,21 @@ export function chaptersFromTextLines(lines: string[]): OutlineEntry[] {
  */
 export function toBook(entries: OutlineEntry[]): OutlinedBook {
   const byTitle = new Map(BOOK_COMMUNICATION.chapters.map((chapter) => [chapter.rawTitle, chapter]))
-  const chapters = entries.map<OutlinedChapter>((entry) => {
-    const no = chapterNumberOf(entry.rawTitle)
-    const matched = matchChapter(entry.rawTitle)
-    const handWritten = no === null ? byTitle.get(entry.rawTitle.trim()) : undefined
-    return {
-      no: no ?? handWritten?.no ?? null,
-      rawTitle: entry.rawTitle,
-      topicId: matched?.topicId ?? handWritten?.topicId ?? null,
-      hits: matched?.hits ?? [],
-      page: entry.page,
-    }
-  })
+  // 只认章级条目：R90 之后 parsePdfOutline 会把节也一起吐出来，别把节当章。
+  const chapters = entries
+    .filter((entry) => (entry.depth ?? 0) === 0)
+    .map<OutlinedChapter>((entry) => {
+      const no = chapterNumberOf(entry.rawTitle)
+      const matched = matchChapter(entry.rawTitle)
+      const handWritten = no === null ? byTitle.get(entry.rawTitle.trim()) : undefined
+      return {
+        no: no ?? handWritten?.no ?? null,
+        rawTitle: entry.rawTitle,
+        topicId: matched?.topicId ?? handWritten?.topicId ?? null,
+        hits: matched?.hits ?? [],
+        page: entry.page,
+      }
+    })
   return {
     id: `${BOOK_COMMUNICATION.id}-pdf`,
     title: BOOK_COMMUNICATION.title,
@@ -300,12 +349,18 @@ async function readOutline(
     throw error
   }
   try {
-    const hits: ChapterHit[] = []
-    walkOutline(await doc.getOutline(), hits)
-    if (hits.length > 0) {
+    const hits: OutlineHit[] = []
+    walkOutline(await doc.getOutline(), hits, -1, null)
+    const ordered = normalizeHits(hits)
+    if (ordered.length > 0) {
       const entries: OutlineEntry[] = []
-      for (const hit of hits) {
-        entries.push({ rawTitle: hit.rawTitle, page: await resolvePage(doc, hit.dest) })
+      for (const hit of ordered) {
+        entries.push({
+          rawTitle: hit.rawTitle,
+          page: await resolvePage(doc, hit.dest),
+          depth: hit.depth,
+          chapterNo: hit.chapterNo,
+        })
       }
       return entries
     }
