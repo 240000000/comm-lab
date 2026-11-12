@@ -30,7 +30,8 @@ import {
   isPlayable,
 } from '../course/shelf.ts'
 import type { ShelfBook } from '../course/shelf.ts'
-import { importBook, removeBookById, setActive, useShelf } from '../course/shelfStore.ts'
+import { getShelf, importBook, markPdfSaved, noteStorage, removeBookById, setActive, useShelf } from '../course/shelfStore.ts'
+import { saveOriginalPdf } from './bookStorage.ts'
 
 const START_CHAPTER = 2
 
@@ -235,7 +236,7 @@ export function CoursePage() {
   const dragRef = useRef(createDragCoalescer<Record<string, number>>())
   const paramsRef = useRef(params)
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
-  // 书架提到模块级（shelfStore）：首页和这里读同一份；仍然只在内存里，刷新回默认那本。
+  // 书架提到模块级（shelfStore）：首页和这里读同一份，落盘在本机 IndexedDB（刷新后还在）。
   const { books, activeId } = useShelf()
   const [bill, setBill] = useState<BillState | null>(null)
   const [switching, setSwitching] = useState(false)
@@ -324,6 +325,15 @@ export function CoursePage() {
         importBook(added)
         setBill({ fileName, book: added })
         setImportState({ status: 'idle' })
+        // 目录已经进内存、也落了盘；原文件按开关与空间另存，存不下不影响这本书能不能用。
+        noteStorage(null)
+        if (!getShelf().keepPdf) {
+          noteStorage('这次只存了目录（「导入时同时保存原文件」关着）')
+          return
+        }
+        const saved = await saveOriginalPdf(file, added.id)
+        if (saved.status === 'saved') markPdfSaved(added.id, saved.bytes)
+        else noteStorage(saved.message)
       } catch (error) {
         setImportState({
           status: 'failed',

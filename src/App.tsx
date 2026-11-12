@@ -9,8 +9,19 @@ import { CoursePage } from './labs/CoursePage'
 import { HomeBackdrop } from './labs/HomeBackdrop'
 import { HomeParticles } from './labs/HomeParticles'
 import { bookById, nextBookId } from './course/shelf'
-import { getShelf, importBook, removeBookById, setActive, useShelf } from './course/shelfStore'
+import {
+  getShelf,
+  hydrate,
+  importBook,
+  markPdfSaved,
+  noteStorage,
+  removeBookById,
+  setActive,
+  setKeepPdf,
+  useShelf,
+} from './course/shelfStore'
 import { readBookFile, type BookImportState } from './labs/bookImport'
+import { saveOriginalPdf } from './labs/bookStorage'
 import { ShelfPanel } from './labs/ShelfPanel'
 import { ModulePanel } from './labs/ModulePanel'
 
@@ -50,12 +61,20 @@ export default function App() {
   // 首页两种模式：默认模式就是原来那四张卡，扩展模式放教材导入与课程视图入口。
   // 只活在组件里，不写 hash——冻结期不动路由，URL 记不住模式。
   const [homeMode, setHomeMode] = useState<'default' | 'extra'>('default')
-  // 书架是模块级状态（shelfStore）：这一页与课程视图读同一份，仍然只在内存里。
+  // 书架是模块级状态（shelfStore）：这一页与课程视图读同一份，落盘在 IndexedDB。
   const shelf = useShelf()
   const activeBook = bookById(shelf.books, shelf.activeId)
   const [importState, setImportState] = useState<BookImportState>({ status: 'idle' })
+  // 正在往本机存原文件的文件名；存的过程可能几秒，面板要显示出来。
+  const [savingName, setSavingName] = useState<string | null>(null)
+
+  // 挂载时读一次本机书架。读完之前面板说「正在读取」，课程视图照旧用默认那本渲染。
+  useEffect(() => {
+    void hydrate()
+  }, [])
 
   // 选完文件就地变成一本书：解析成功才进书架并切过去，失败只说人话，书架不动。
+  // 目录先落盘，原文件按开关与空间另存——存不下不影响这一轮用这本书。
   const importFile = async (file: File) => {
     setImportState({ status: 'parsing', fileName: file.name })
     const result = await readBookFile(file, nextBookId(getShelf().books))
@@ -66,6 +85,16 @@ export default function App() {
     importBook(result.book)
     setActive(result.book.id)
     setImportState({ status: 'idle' })
+    noteStorage(null)
+    if (!shelf.keepPdf) {
+      noteStorage('这次只存了目录（「导入时同时保存原文件」关着）')
+      return
+    }
+    setSavingName(file.name)
+    const saved = await saveOriginalPdf(file, result.book.id)
+    setSavingName(null)
+    if (saved.status === 'saved') markPdfSaved(result.book.id, saved.bytes)
+    else noteStorage(saved.message)
   }
 
   useEffect(() => {
@@ -156,9 +185,16 @@ export default function App() {
             books={shelf.books}
             activeId={shelf.activeId}
             importState={importState}
+            ready={shelf.ready}
+            storedIds={shelf.storedIds}
+            pdfBytes={shelf.pdfBytes}
+            keepPdf={shelf.keepPdf}
+            savingName={savingName}
+            persistNote={shelf.persistNote}
             onPick={setActive}
             onRemove={removeBookById}
             onImport={importFile}
+            onToggleKeepPdf={setKeepPdf}
           />
 
           <ModulePanel book={activeBook} />
@@ -174,7 +210,9 @@ export default function App() {
             <span className="card-enter">进入 →</span>
           </a>
 
-          <p className="home-extra-note">只读你的目录，不读正文；PDF 不上传、不落盘。</p>
+          <p className="home-extra-note">
+            只读你的目录，不读正文；PDF 不上传，原文件只存在这台机器的浏览器里。
+          </p>
         </section>
       )}
 
