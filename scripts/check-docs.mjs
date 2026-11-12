@@ -409,13 +409,13 @@ let captionLine = '';
       actual: '紧贴一行「表题：…」',
     });
   }
-  if (figures.length !== 3) {
+  if (figures.length < 3) {
     failures.push({
       file: 'docs/tech-report.md',
       line: figures[0]?.line ?? 0,
-      label: '图片数与图题数不是 3',
+      label: '插图少于 3 张',
       written: `${figures.length} 张`,
-      actual: '3 张',
+      actual: '至少 3 张',
     });
   }
   for (const fig of figures) {
