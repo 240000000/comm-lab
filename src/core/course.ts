@@ -681,7 +681,7 @@ function computeSource(params: Record<string, number>): CourseView {
 
   const series: CourseSeries[] = [
     {
-      name: `量化误差 e(t)（${Math.round(bits)} bit${companding === 1 ? '，A 律' : ''}）`,
+      name: `抽样时刻量化误差（${Math.round(bits)} bit${companding === 1 ? '，A 律' : ''}）`,
       color: '#3ce3c6',
       points: errorCurve,
     },

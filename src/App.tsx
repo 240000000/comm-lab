@@ -58,7 +58,8 @@ const modules = [
 
 export default function App() {
   const [route, setRoute] = useState<Route>(currentRoute)
-  // 首页两种模式：默认模式就是原来那四张卡，扩展模式放教材导入与课程视图入口。
+  // 首页两种模式：默认模式就是原来那四张卡，扩展模式放教材导入与功能模块表。
+  // 进课程视图的唯一入口是书架上的某本书：点它就把那本设为当前书并跳过去。
   // 只活在组件里，不写 hash——冻结期不动路由，URL 记不住模式。
   const [homeMode, setHomeMode] = useState<'default' | 'extra'>('default')
   // 书架是模块级状态（shelfStore）：这一页与课程视图读同一份，落盘在 IndexedDB。
@@ -72,6 +73,13 @@ export default function App() {
   useEffect(() => {
     void hydrate()
   }, [])
+
+  // 点书架上的书：先把它设为当前书，再跳课程视图。
+  // 路由是手写 hash，改 location.hash 会触发 hashchange，上面的监听会重渲染。
+  const enterCourse = (id: string) => {
+    setActive(id)
+    window.location.hash = '#/course'
+  }
 
   // 选完文件就地变成一本书：解析成功才进书架并切过去，失败只说人话，书架不动。
   // 目录先落盘，原文件按开关与空间另存——存不下不影响这一轮用这本书。
@@ -191,28 +199,13 @@ export default function App() {
             keepPdf={shelf.keepPdf}
             savingName={savingName}
             persistNote={shelf.persistNote}
-            onPick={setActive}
+            onPick={enterCourse}
             onRemove={removeBookById}
             onImport={importFile}
             onToggleKeepPdf={setKeepPdf}
           />
 
           <ModulePanel book={activeBook} />
-
-          <a className="course-entry" href="#/course">
-            <div className="card-head">
-              <span className="card-index">05</span>
-              <h2>课程视图 · 13 章</h2>
-            </div>
-            <p className="card-desc">
-              左树 13 章，每一章一屏：一句话问题、两三个滑块、一张图、三个读数、一句话结论。
-            </p>
-            <span className="card-enter">进入 →</span>
-          </a>
-
-          <p className="home-extra-note">
-            只读你的目录，不读正文；PDF 不上传，原文件只存在这台机器的浏览器里。
-          </p>
         </section>
       )}
 

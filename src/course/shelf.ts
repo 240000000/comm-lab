@@ -158,3 +158,90 @@ export function nextBookId(shelf: ShelfBook[]): string {
   while (shelf.some((item) => item.id === `imported-${index}`)) index += 1
   return `imported-${index}`
 }
+
+/**
+ * 扩展模式那张功能模块表的行轴：13 条功能，固定不变。
+ *
+ * 行轴固定、不跟着书走，是因为这张表想回答的问题不是「这本书有什么」，而是
+ * 「这个作品覆盖了通信原理的哪些功能、这本书又对上了哪些」。书换成一本只认得出
+ * 两章的外文书，行数还是 13 行，变的只是状态列——覆盖的少了，一眼就能看出来。
+ *
+ * `no` 就是课程视图那一章的章号：点一行就去那一章，取了书也照样能点。
+ */
+export type ModuleFunction = {
+  /** 对应课程视图的章号（1–13）。 */
+  no: number
+  /** 功能名，一行一条。 */
+  name: string
+}
+
+export const MODULE_FUNCTIONS: ModuleFunction[] = [
+  { no: 1, name: '信息量与熵' },
+  { no: 2, name: '确知信号的能量谱与功率谱' },
+  { no: 3, name: '各态历经与统计平均' },
+  { no: 4, name: '信道容量与香农公式' },
+  { no: 5, name: '模拟调制的噪声性能' },
+  { no: 6, name: '眼图与码间串扰' },
+  { no: 7, name: '2ASK·2FSK·2PSK 的误码率' },
+  { no: 8, name: 'QAM 与 OFDM 的谱效率' },
+  { no: 9, name: '最佳接收与匹配滤波' },
+  { no: 10, name: '抽样、量化与 PCM' },
+  { no: 11, name: '汉明码的纠错能力' },
+  { no: 12, name: 'm 序列与正交编码' },
+  { no: 13, name: '锁相环的锁定' },
+]
+
+/** 本书没有识别到这一条功能时，状态格里给的那句话。 */
+export const MISSING_FUNCTION = '本书未涉及'
+
+/** 未涉及的那一行还能点，鼠标停上去说清楚点进去看到的是什么。 */
+export const MISSING_FUNCTION_HINT = '本书未识别到这一章，仍可进入默认示例'
+
+/** 功能模块表的一行：一条功能 + 本书里承担它的那一章（没有就是 null）。 */
+export type CoverageRow = {
+  /** 功能对应的课程视图章号。 */
+  no: number
+  /** 功能名。 */
+  name: string
+  /** 本书里接住这条功能的章；没接住就是 null。 */
+  chapter: ShelfChapter | null
+  /** 命中词或未涉及提示，直接进单元格的 title。 */
+  title: string
+}
+
+/** 13 条功能里本书覆盖了几条、剩下几条，以及书里还有几章认不出来。 */
+export type Coverage = {
+  /** 覆盖的功能条数。 */
+  covered: number
+  /** 未涉及的功能条数。 */
+  missing: number
+  /** 本书里认不出模型的章数（这些章不占功能行，但要在表底交代一句）。 */
+  unknown: number
+  rows: CoverageRow[]
+}
+
+/**
+ * 把一本书的章摊到 13 条固定功能上。
+ *
+ * 一章只接一条功能：`topicId` 就是课程视图的章号，所以「哪一章覆盖哪条功能」
+ * 是同一张表的两面，不另造一套映射。认不出模型的章（`topicId` 为空或对不上）
+ * 不算覆盖，但要在 `unknown` 里数出来——表底那句「本书另有 K 章未识别」就是它。
+ */
+export function coverageOf(book: ShelfBook): Coverage {
+  const rows: CoverageRow[] = MODULE_FUNCTIONS.map((item) => {
+    const chapter = book.chapters.find((entry) => entry.topicId === String(item.no) && isPlayable(entry))
+    return {
+      no: item.no,
+      name: item.name,
+      chapter: chapter ?? null,
+      title: chapter ? evidenceOf(chapter) : MISSING_FUNCTION_HINT,
+    }
+  })
+  const covered = rows.filter((row) => row.chapter !== null).length
+  return {
+    covered,
+    missing: rows.length - covered,
+    unknown: book.chapters.filter((chapter) => !isPlayable(chapter)).length,
+    rows,
+  }
+}

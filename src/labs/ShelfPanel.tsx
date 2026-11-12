@@ -77,6 +77,7 @@ export function ShelfPanel({
                 type="button"
                 className="shelf-pick"
                 aria-current={active ? 'true' : undefined}
+                aria-label={`进入《${book.title}》的课程视图`}
                 onClick={() => onPick(book.id)}
               >
                 <span className="shelf-book">{book.title}</span>
@@ -84,6 +85,7 @@ export function ShelfPanel({
                   {bill.total} 章 · 可玩 {bill.playable} · 未覆盖 {bill.uncovered}
                 </span>
                 <span className="shelf-status">{status}</span>
+                <span className="shelf-enter">进入 →</span>
               </button>
               {book.id === DEFAULT_BOOK_ID ? (
                 <span className="shelf-default">默认</span>
@@ -125,6 +127,11 @@ export function ShelfPanel({
 
       <p className="shelf-memory">
         书架存在这台机器的浏览器里（IndexedDB）：目录随时读，原文件按上面的开关决定存不存；都不上传。
+      </p>
+
+      {/* 这句话原来是首页扩展面板下方那行注脚，进课程视图改成点书之后挪进书架底部，一个字没改。 */}
+      <p className="shelf-promise">
+        只读你的目录，不读正文；PDF 不上传，原文件只存在这台机器的浏览器里。
       </p>
     </section>
   )

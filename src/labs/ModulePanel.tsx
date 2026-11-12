@@ -1,20 +1,23 @@
 /**
- * 扩展模式的功能模块：当前这本书的章，一行一章，四列对着看。
+ * 扩展模式的功能模块：13 条固定功能，一行一条，对着这本书看覆盖了哪些。
  *
- * 只吃 props（一本书），自己不持状态。第二列故意用 rawTitle——书上怎么写的就怎么显示，
- * 让人一眼看出目录解析对不对，而不是拿我们改过的全称糊过去。
+ * 行轴是功能的，不是章的。理由写在这个文件外面：书可以换，功能清单不换，
+ * 换一本只认得出两章的书，行数还是 13 行，变的是右列——覆盖的少了，一眼看出来。
  *
- * 可玩的章整行链到 #/course?no=N；认不出来的章灰着，明说「暂无仿真」，
- * 不为了好看硬塞一个只能看的假模型。
+ * 只吃 props（一本书），自己不持状态。右列有覆盖时印书里那一章的原字标题，
+ * 没覆盖就写「本书未涉及」，不做「大概是第几章」的猜测：猜错比不认更糟。
+ *
+ * 13 行都能点：接得住功能的那几行跳 `#/course?no=N`，没接住的也跳同一个地址，
+ * 进的是默认示例——但这行灰着、鼠标停上去会说清楚，不假装它是这本书的内容。
  */
-import { billOf, evidenceOf, isPlayable, type ShelfBook } from '../course/shelf.ts'
+import { coverageOf, type ShelfBook } from '../course/shelf.ts'
 
 type ModulePanelProps = {
   book: ShelfBook
 }
 
 export function ModulePanel({ book }: ModulePanelProps) {
-  const bill = billOf(book)
+  const coverage = coverageOf(book)
 
   return (
     <section className="module-panel" aria-label="功能模块">
@@ -26,34 +29,31 @@ export function ModulePanel({ book }: ModulePanelProps) {
       <table className="module-table">
         <thead>
           <tr>
-            <th scope="col">章</th>
-            <th scope="col">书上原字标题</th>
-            <th scope="col">命中词</th>
+            <th scope="col">功能</th>
             <th scope="col">状态</th>
           </tr>
         </thead>
         <tbody>
-          {book.chapters.map((chapter, index) => {
-            const playable = isPlayable(chapter)
-            const no = chapter.no ?? index + 1
-            const href = playable ? `#/course?no=${chapter.topicId}` : undefined
+          {coverage.rows.map((row) => {
+            const href = `#/course?no=${row.no}`
+            const chapter = row.chapter
+            const state =
+              chapter === null
+                ? '本书未涉及'
+                : chapter.no === null
+                  ? `本书「${chapter.rawTitle}」`
+                  : `本书第 ${chapter.no} 章「${chapter.rawTitle}」`
             return (
               <tr
-                key={`${no}-${index}`}
-                className={playable ? 'module-row' : 'module-row off'}
-                onClick={
-                  href
-                    ? () => {
-                        window.location.hash = href
-                      }
-                    : undefined
-                }
+                key={row.no}
+                className={chapter === null ? 'module-row off' : 'module-row'}
+                onClick={() => {
+                  window.location.hash = href
+                }}
               >
-                <td className="module-no">{no}</td>
-                <td className="module-raw">{chapter.rawTitle}</td>
-                <td className="module-evidence">{evidenceOf(chapter)}</td>
-                <td className="module-state">
-                  {href ? <a href={href}>可交互</a> : '暂无仿真'}
+                <td className="module-name">{row.name}</td>
+                <td className="module-state" title={row.title}>
+                  {state}
                 </td>
               </tr>
             )
@@ -61,8 +61,9 @@ export function ModulePanel({ book }: ModulePanelProps) {
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={4} className="module-foot">
-              共 {bill.total} 章：{bill.playable} 章有仿真、{bill.uncovered} 章暂无仿真。
+            <td colSpan={2} className="module-foot">
+              13 个功能：本书覆盖 {coverage.covered} 个、未涉及 {coverage.missing} 个。
+              {coverage.unknown > 0 ? `本书另有 ${coverage.unknown} 章未识别。` : ''}
             </td>
           </tr>
         </tfoot>
@@ -70,4 +71,3 @@ export function ModulePanel({ book }: ModulePanelProps) {
     </section>
   )
 }
-

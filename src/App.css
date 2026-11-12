@@ -2290,7 +2290,7 @@ a.card {
   color: var(--accent);
 }
 
-/* 扩展模式：左栏书架 + 入口卡，右栏功能模块表；窄屏上下堆叠。 */
+/* 扩展模式：左栏书架，右栏功能模块表；窄屏上下堆叠。进课程视图点书架上的书。 */
 .home-extra {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) minmax(0, 1.55fr);
@@ -2398,11 +2398,18 @@ a.card {
   background: rgba(60, 227, 198, 0.08);
 }
 
+/* 整行可点：左列三行信息，右列一枚淡色「进入 →」，垂直居中。 */
 .shelf-pick {
-  display: flex;
+  display: grid;
   flex: 1;
-  flex-direction: column;
-  gap: 3px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'book enter'
+    'counts enter'
+    'status enter';
+  column-gap: 12px;
+  row-gap: 3px;
+  align-items: center;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -2413,6 +2420,7 @@ a.card {
 }
 
 .shelf-book {
+  grid-area: book;
   overflow: hidden;
   font-size: 14px;
   text-overflow: ellipsis;
@@ -2420,13 +2428,35 @@ a.card {
 }
 
 .shelf-counts {
+  grid-area: counts;
   font-size: 12px;
   color: var(--dim);
 }
 
 .shelf-status {
+  grid-area: status;
   font-size: 12px;
   color: var(--dim);
+}
+
+.shelf-enter {
+  grid-area: enter;
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.shelf-pick:hover .shelf-enter,
+.shelf-row.on .shelf-enter {
+  color: var(--accent);
+}
+
+/* 书架的承诺：这句话原来是首页扩展面板下方那行注脚，挪进面板底部，字一个没动。 */
+.shelf-promise {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
 }
 
 .shelf-toggle {
@@ -2545,59 +2575,17 @@ a.card {
   font-size: 12px;
 }
 
-.course-entry {
-  grid-column: 1;
-  grid-row: 2;
-}
-
-.home-extra-note {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: end;
-}
-
+/* 进课程视图改成点书架上的书，原来那张 05 入口卡与面板注脚一并去掉。 */
 @media (max-width: 980px) {
   .home-extra {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .shelf-panel,
-  .module-panel,
-  .course-entry,
-  .home-extra-note {
+  .module-panel {
     grid-column: 1;
     grid-row: auto;
   }
-}
-
-.course-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 640px;
-  padding: 20px 22px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--panel);
-  color: inherit;
-  text-decoration: none;
-}
-
-.course-entry:hover {
-  border-color: var(--accent);
-}
-
-.course-entry h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.home-extra-note {
-  margin: 0;
-  max-width: 46ch;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--muted);
 }
 
 /* 原生控件自带的加载转圈与页面转圈重复，隐藏原生那个，保留 CSS 转圈。 */

@@ -1363,7 +1363,7 @@ test('第 10 章：主图画的是量化误差 e(t)，抽样率与位数都改�
   const errOf = (patch: Record<string, number>) => chapter.compute({ ...chapter.defaults, ...patch }).series[0]
   const peak = (s: { points: Array<[number, number]> }) => Math.max(...s.points.map(([, y]) => Math.abs(y)))
   const base = errOf({})
-  assert.match(base.name, /量化误差 e\(t\)/)
+  assert.match(base.name, /抽样时刻量化误差/)
   assert.match(base.name, /8 bit/, 'series 名要带当前位数')
   // 只在采样时刻取误差：fs=4、4 秒 → 4·fs = 16 个采样点。
   assert.equal(base.points.length, 16, '误差曲线每个采样点一个值')
