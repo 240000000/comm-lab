@@ -1642,7 +1642,9 @@ function computeMseq(params: Record<string, number>): CourseView {
   const failed = period !== full
   // 纵轴留白：正常情况 −1.3/N 就够；非本原抽头的旁瓣会掉到 −0.6，框必须装下它。
   const dataMin = Math.min(...auto)
-  const yLow = dataMin < -1.3 / period ? dataMin - 0.06 : -1.3 / period
+  // 平底线的留白按数据跨度算：N=127 时 −1.3/N 只给 0.8 像素，看着仍贴底。
+  const pad = 0.08 * (1 - dataMin)
+  const yLow = dataMin - pad
 
   // 画两个周期：R(τ) 以 N 为周期，τ=N 那里又是一根顶到 1 的杆，
   // 「周期」是画出来的而不是读出来的——一眼能看见第二根尖峰就在 N 处。
@@ -1714,7 +1716,7 @@ function computeMseq(params: Record<string, number>): CourseView {
     bars: true,
     // x 轴由 N 现算：正好铺满两个周期，换级数时轴跟着变，但「两根尖峰相隔 N」永远看得见。
     xRange: [0, shown - 1],
-    // 纵轴给旁瓣留足余量：正常下界 −1.3/N，非本原抽头按实测最小旁瓣再往下放。
+    // 纵轴下界 = 实测最小旁瓣 − 0.08 × (1 − 最小旁瓣)：留白按数据跨度给，三档都看得见。
     yRange: [yLow, 1.06],
     guides: [{ y: theorySide, label: `−1/N = ${theorySide.toFixed(4)}` }],
     guideLabelAlign: 'right',

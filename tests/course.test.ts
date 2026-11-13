@@ -520,6 +520,71 @@ test('第 12 章：竖参考线只有这一章有，别的章不传就没有', (
   assert.equal(other.compute(other.defaults).markerX, undefined)
 })
 
+test('第 12 章：四个级数乘两个抽头，τ 取上限时不许抛错，R(τ) 是有限数', () => {
+  const chapter = chapterByNo(12)
+  const tau = chapter.params.find((p) => p.key === 'tau')!
+  for (const level of [0, 1, 2, 3]) {
+    for (const taps of [0, 1]) {
+      const base = { ...chapter.defaults, level, taps }
+      const max = tau.maxFor!(base)
+      const view = chapter.compute({ ...base, tau: max })
+      const readout = view.readouts.find((r) => r.label.includes('R(τ)'))!
+      const value = Number(readout.value)
+      assert.ok(Number.isFinite(value), `level=${level} taps=${taps} 的 R(τ) 是 ${readout.value}`)
+    }
+  }
+})
+
+test('13 章：参数取 min/max/默认值，坐标、读数、参考线都不许出现 NaN 或 Infinity', () => {
+  const finite = (value: number, where: string) => {
+    assert.ok(Number.isFinite(value), `${where} 出现 ${value}`)
+  }
+  for (const chapter of COURSE_CHAPTERS) {
+    for (const param of chapter.params) {
+      for (const raw of [param.min, param.max, chapter.defaults[param.key]]) {
+        const params = { ...chapter.defaults, [param.key]: raw }
+        if (chapter.no === 12 && param.key === 'tau') params.tau = param.maxFor!(params)
+        const view = chapter.compute(params)
+        for (const series of view.series) {
+          for (const [x, y] of series.points) {
+            finite(x, `第 ${chapter.no} 章 ${param.key}=${raw} 的 x`)
+            finite(y, `第 ${chapter.no} 章 ${param.key}=${raw} 的 y`)
+          }
+        }
+        for (const readout of view.readouts) {
+          assert.ok(!/NaN|Infinity/.test(readout.value), `第 ${chapter.no} 章 ${param.key}=${raw} 的读数 ${readout.value}`)
+        }
+        for (const guide of view.guides ?? []) finite(guide.y, `第 ${chapter.no} 章 ${param.key}=${raw} 的 guides`)
+      }
+    }
+  }
+})
+
+test('第 12 章：τ 的上限恒等于 2 × 实际周期 − 2', () => {
+  const chapter = chapterByNo(12)
+  const tau = chapter.params.find((p) => p.key === 'tau')!
+  const expected: Record<string, number> = {
+    '0-0': 28,
+    '0-1': 28,
+    '1-0': 60,
+    '1-1': 60,
+    '2-0': 124,
+    '2-1': 124,
+    '3-0': 252,
+    '3-1': 68,
+  }
+  for (const level of [0, 1, 2, 3]) {
+    for (const taps of [0, 1]) {
+      const base = { ...chapter.defaults, level, taps }
+      const max = tau.maxFor!(base)
+      const view = chapter.compute({ ...base, tau: max })
+      const period = (view.xRange![1] + 1) / 2
+      assert.equal(max, 2 * period - 2, `level=${level} taps=${taps} 的周期 ${period}`)
+      assert.equal(max, expected[`${level}-${taps}`], `level=${level} taps=${taps} 的上限`)
+    }
+  }
+})
+
 test('第 8 章：章名与教材目录一致，不许退回简称', () => {
   assert.equal(chapterByNo(8).title, '新型数字带通调制技术')
 })
