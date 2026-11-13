@@ -232,3 +232,71 @@
 .pdf-mismatch .pdf-hint {
   margin: 0;
 }
+
+/* R107：扫描件 OCR 读目录——进度、确认表、手动输入 */
+.course-ocr {
+  margin: 10px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(126, 214, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(12, 22, 32, 0.72);
+  color: #cfe8f5;
+  font-size: 13px;
+}
+
+.course-ocr p {
+  margin: 0 0 8px;
+  line-height: 1.6;
+}
+
+.course-ocr-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.course-ocr-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.course-ocr-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.course-ocr-list input,
+.course-ocr-offset input {
+  width: 84px;
+  padding: 3px 6px;
+  border: 1px solid rgba(126, 214, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(8, 16, 24, 0.9);
+  color: #e8f6ff;
+}
+
+.course-ocr-offset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.course-ocr-manual {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid rgba(126, 214, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(8, 16, 24, 0.9);
+  color: #e8f6ff;
+  font: inherit;
+  resize: vertical;
+}

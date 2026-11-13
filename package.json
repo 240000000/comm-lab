@@ -14,9 +14,11 @@
   "dependencies": {
     "pdfjs-dist": "6.5.438",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
+    "@tesseract.js-data/chi_sim": "^1.0.0",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

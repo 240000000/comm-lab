@@ -83,7 +83,7 @@ async function readRecordFromDb(id: string): Promise<PdfRecord | null> {
   return { bytes: new Uint8Array(await record.blob.arrayBuffer()), meta: record.meta }
 }
 
-async function loadFromPdfjs(bytes: Uint8Array): Promise<PdfDocument> {
+export async function loadFromPdfjs(bytes: Uint8Array): Promise<PdfDocument> {
   const pdfjs = (await import('pdfjs-dist')) as unknown as {
     getDocument: (source: { data: Uint8Array; disableWorker?: boolean }) => {
       promise: Promise<unknown>

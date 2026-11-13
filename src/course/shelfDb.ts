@@ -15,10 +15,12 @@
 import type { ShelfBook, ShelfChapter } from './shelf.ts'
 
 export const SHELF_DB_NAME = 'comm-lab-shelf'
-export const SHELF_DB_VERSION = 1
+export const SHELF_DB_VERSION = 2
 export const STORE_BOOKS = 'books'
 export const STORE_PDFS = 'pdfs'
 export const STORE_META = 'meta'
+/** R107：扫描件 OCR 的逐页文本，key 是 `${bookId}:${page}`。 */
+export const STORE_OCR = 'ocr'
 export const ACTIVE_KEY = 'activeId'
 
 /** `books` 里一条记录的形状，字段名写死，别处不许另起名字。 */
@@ -108,6 +110,7 @@ export function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_BOOKS)) db.createObjectStore(STORE_BOOKS, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(STORE_PDFS)) db.createObjectStore(STORE_PDFS, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath: 'key' })
+      if (!db.objectStoreNames.contains(STORE_OCR)) db.createObjectStore(STORE_OCR)
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error('打开本机书架失败'))
@@ -210,5 +213,21 @@ export async function saveActive(id: string): Promise<void> {
   const db = await openDb()
   const tx = db.transaction(STORE_META, 'readwrite')
   tx.objectStore(STORE_META).put({ key: ACTIVE_KEY, value: id })
+  await done(tx)
+}
+
+/** 某一页的 OCR 文本；没跑过就是 null。 */
+export async function readOcrText(key: string): Promise<string | null> {
+  const db = await openDb()
+  const tx = db.transaction(STORE_OCR, 'readonly')
+  const value = await ask(tx.objectStore(STORE_OCR).get(key) as IDBRequest<string | undefined>)
+  return typeof value === 'string' ? value : null
+}
+
+/** 存一页 OCR 文本；重进时直接命中，不再跑引擎。 */
+export async function saveOcrText(key: string, text: string): Promise<void> {
+  const db = await openDb()
+  const tx = db.transaction(STORE_OCR, 'readwrite')
+  tx.objectStore(STORE_OCR).put(text, key)
   await done(tx)
 }

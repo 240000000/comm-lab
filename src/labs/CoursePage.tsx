@@ -20,6 +20,7 @@ import { CourseChart } from './CourseChart.tsx'
 import { CourseLegend } from './CourseLegend.tsx'
 import { ParamSlider } from './ParamSlider.tsx'
 import { PdfPane, type PdfScale } from './PdfPane.tsx'
+import type { OutlineEntry } from '../course/pdfOutline.ts'
 import {
   DEFAULT_BOOK_ID,
   UNCOVERED_NOTE,
@@ -36,6 +37,12 @@ import { getShelf, importBook, markPdfSaved, noteStorage, removeBookById, setAct
 import { saveOriginalPdf } from './bookStorage.ts'
 
 const START_CHAPTER = 2
+
+/** 扫描件导入的三段状态：识别中、等确认、失败退回手动。 */
+type OcrState =
+  | { phase: 'reading'; page: number; total: number }
+  | { phase: 'confirm'; fileName: string; entries: OutlineEntry[]; offset: number }
+  | { phase: 'failed'; fileName: string; message: string }
 
 /** 地址里带 ?no=5 时直接打开第 5 章，截图与分享都用得上。 */
 function initialChapter(): number {
@@ -280,6 +287,10 @@ export function CoursePage() {
   const [bookScale, setBookScale] = useState<PdfScale>('fit')
   const pageKey = `${book.id}:${no}`
   const [pageChoice, setPageChoice] = useState<{ key: string; page: number } | null>(null)
+  const [ocrState, setOcrState] = useState<OcrState | null>(null)
+  const [ocrDraft, setOcrDraft] = useState('')
+  const ocrAbort = useRef<AbortController | null>(null)
+  const ocrFile = useRef<File | null>(null)
   const bookPage = pageChoice && pageChoice.key === pageKey ? pageChoice.page : chapterPage(book, no)
   const changeBookPage = (next: number) => {
     setPageChoice({ key: `${book.id}:${no}`, page: next })
@@ -336,6 +347,112 @@ export function CoursePage() {
     }
   }, [])
 
+  /** 有原文件就按开关存；OCRed 的书也能存原件。 */
+  const saveIfWanted = useCallback(async (file: File, bookId: string) => {
+    if (!getShelf().keepPdf) {
+      noteStorage('这次只存了目录（「导入时同时保存原文件」关着）')
+      return
+    }
+    const saved = await saveOriginalPdf(file, bookId)
+    if (saved.status === 'saved') markPdfSaved(bookId, saved.bytes)
+    else noteStorage(saved.message)
+  }, [])
+
+  /** 扫描件：读前 12 页找目录页，OCR 一页，抠出章名后等用户确认。 */
+  const tryOcrOutline = useCallback(async (file: File, fileName: string) => {
+    ocrFile.current = file
+    setOcrState({ phase: 'reading', page: 0, total: 1 })
+    try {
+      const ocr = await import('../course/ocr.ts')
+      const outlineOcr = await import('../course/outlineOcr.ts')
+      const { loadFromPdfjs } = await import('../course/pdfSource.ts')
+      const { extractDocText } = await import('../course/pdfText.ts')
+      const doc = await loadFromPdfjs(new Uint8Array(await file.arrayBuffer()))
+      let pages: string[] = []
+      let pageCount = 0
+      try {
+        pageCount = doc.numPages
+        pages = (await extractDocText(doc)).pages
+      } finally {
+        await doc.destroy()
+      }
+      // 有文字层就直接挑目录页；扫描件没有文字，只能把前 12 页逐页 OCR 再挑。
+      let tocText = ''
+      const textToc = outlineOcr.findTocPage(pages)
+      if (textToc > 0) {
+        tocText = pages[textToc - 1] ?? ''
+      } else {
+        const controller = new AbortController()
+        ocrAbort.current = controller
+        const pageNumbers = Array.from(
+          { length: Math.min(12, pageCount) },
+          (_, index) => index + 1,
+        )
+        const outcome = await ocr.recognizePages(
+          file,
+          pageNumbers,
+          (progress) =>
+            setOcrState({ phase: 'reading', page: progress.page, total: progress.total }),
+          { bookId: `imported-${Date.now()}`, signal: controller.signal },
+        )
+        ocrAbort.current = null
+        if (!outcome.ok) throw new Error(outcome.message)
+        const scanned = outcome.pages.map((item) => item.text)
+        const tocIndex = outlineOcr.findTocPage(scanned)
+        if (tocIndex < 0) throw new Error('前 12 页里没找到目录页')
+        tocText = scanned[tocIndex - 1] ?? ''
+      }
+      const entries = outlineOcr.parseTocEntries(tocText).filter((entry) => entry.depth === 0)
+      if (entries.length === 0) throw new Error('目录页的文字认出来了，但没抠出章名')
+      setOcrState({ phase: 'confirm', fileName, entries, offset: 0 })
+    } catch (error) {
+      setOcrState({
+        phase: 'failed',
+        fileName,
+        message: error instanceof Error ? error.message : '识别失败，可以手动输目录',
+      })
+    } finally {
+      ocrAbort.current = null
+    }
+  }, [setOcrState])
+
+  /** 确认表 → 建书；页码按偏移换算成 PDF 页号。 */
+  const confirmOcrBook = useCallback(async () => {
+    if (!ocrState || ocrState.phase !== 'confirm') return
+    const { mapPrintedPages } = await import('../course/outlineOcr.ts')
+    const title = ocrState.fileName.replace(/\.pdf$/i, '')
+    const mapped = mapPrintedPages(ocrState.entries, ocrState.offset)
+    const added = bookFromSections(title, mapped, `imported-${Date.now()}`)
+    importBook(added)
+    setBill({ fileName: ocrState.fileName, book: added })
+    setOcrState(null)
+    setImportState({ status: 'idle' })
+    noteStorage('目录来自扫描件 OCR，页码按确认的偏移换算')
+    const file = ocrFile.current
+    if (file) await saveIfWanted(file, added.id)
+  }, [ocrState, saveIfWanted, setOcrState])
+
+  /** 手动粘目录 → 建书；一行一章，格式同书签。 */
+  const confirmManualOcr = useCallback(async () => {
+    if (!ocrState || ocrState.phase !== 'failed') return
+    const outline = await import('../course/pdfOutline.ts')
+    const lines = ocrDraft.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    const entries = outline.chaptersFromTextLines(lines).filter((entry) => entry.depth === 0)
+    if (entries.length === 0) {
+      setOcrState({ ...ocrState, message: '这段文字里没认出「第N章」，一行写一章试试' })
+      return
+    }
+    const title = ocrState.fileName.replace(/\.pdf$/i, '')
+    const added = bookFromSections(title, entries, `imported-${Date.now()}`)
+    importBook(added)
+    setBill({ fileName: ocrState.fileName, book: added })
+    setOcrState(null)
+    setImportState({ status: 'idle' })
+    noteStorage('目录是手动粘进来的')
+    const file = ocrFile.current
+    if (file) await saveIfWanted(file, added.id)
+  }, [ocrDraft, ocrState, saveIfWanted, setOcrState])
+
   const handleFile = useCallback(
     async (file: File | undefined) => {
       if (!file) return
@@ -358,11 +475,9 @@ export function CoursePage() {
       try {
         const entries = await outline.parsePdfOutline(await file.arrayBuffer())
         if (entries.length === 0) {
-          setImportState({
-            status: 'failed',
-            fileName,
-            message: '这本书没有书签，文字层也抠不出章名（大概是扫描件）。这种书请手动输章名。',
-          })
+          // 扫描件没有书签、文字层也抠不出章名：先试 OCR 读目录页，失败再退回手动输入。
+          setImportState({ status: 'idle' })
+          await tryOcrOutline(file, fileName)
           return
         }
         const title = fileName.replace(/\.pdf$/i, '')
@@ -389,7 +504,7 @@ export function CoursePage() {
         stopSlowTimer()
       }
     },
-    [stopSlowTimer],
+    [stopSlowTimer, tryOcrOutline],
   )
 
   /** 一章里挑第一个真能玩的，挑不到就回默认起始章。 */
@@ -560,6 +675,101 @@ export function CoursePage() {
 
           {importState.status === 'failed' ? (
             <p className="course-import-status failed">{importState.message}</p>
+          ) : null}
+
+          {ocrState && ocrState.phase === 'reading' ? (
+            <div className="course-ocr" role="status">
+              <p>
+                正在识别目录页 {ocrState.page}/{ocrState.total}…
+              </p>
+              <button
+                type="button"
+                className="course-btn ghost"
+                onClick={() => ocrAbort.current?.abort()}
+              >
+                取消
+              </button>
+            </div>
+          ) : null}
+
+          {ocrState && ocrState.phase === 'confirm' ? (
+            <div className="course-ocr" role="dialog" aria-label="确认目录">
+              <p className="course-preview-title">{ocrState.fileName}</p>
+              <p className="course-preview-meta">
+                从目录页认出 {ocrState.entries.length} 章。页码是书上印的；PDF 页 = 书内页 + 偏移。
+              </p>
+              <ul className="course-ocr-list">
+                {ocrState.entries.map((entry, index) => (
+                  <li key={`ocr-${index}`}>
+                    <span className="course-ocr-title">{entry.rawTitle}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      aria-label={`${entry.rawTitle} 的书内页码`}
+                      value={entry.page ?? 1}
+                      onChange={(event) => {
+                        const page = Number(event.target.value)
+                        setOcrState((prev) =>
+                          prev && prev.phase === 'confirm'
+                            ? {
+                                ...prev,
+                                entries: prev.entries.map((item, i) =>
+                                  i === index ? { ...item, page } : item,
+                                ),
+                              }
+                            : prev,
+                        )
+                      }}
+                    />
+                  </li>
+                ))}
+              </ul>
+              <label className="course-ocr-offset">
+                偏移
+                <input
+                  type="number"
+                  aria-label="PDF 页与书内页的偏移"
+                  value={ocrState.offset}
+                  onChange={(event) => {
+                    const offset = Number(event.target.value)
+                    setOcrState((prev) =>
+                      prev && prev.phase === 'confirm' ? { ...prev, offset } : prev,
+                    )
+                  }}
+                />
+              </label>
+              <div className="course-actions">
+                <button type="button" className="course-btn" onClick={() => void confirmOcrBook()}>
+                  按这张表建书
+                </button>
+                <button type="button" className="course-btn ghost" onClick={() => setOcrState(null)}>
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {ocrState && ocrState.phase === 'failed' ? (
+            <div className="course-ocr" role="dialog" aria-label="手动输目录">
+              <p className="course-preview-title">自动识别没成</p>
+              <p className="course-preview-meta">{ocrState.message}。把目录粘在下面，一行一章。</p>
+              <textarea
+                className="course-ocr-manual"
+                rows={6}
+                aria-label="手动输入章名"
+                value={ocrDraft}
+                onChange={(event) => setOcrDraft(event.target.value)}
+                placeholder={'第1章 绪论\n第2章 确知信号'}
+              />
+              <div className="course-actions">
+                <button type="button" className="course-btn" onClick={() => void confirmManualOcr()}>
+                  用这段文字建书
+                </button>
+                <button type="button" className="course-btn ghost" onClick={() => setOcrState(null)}>
+                  取消
+                </button>
+              </div>
+            </div>
           ) : null}
 
           {bill && billStat ? (
