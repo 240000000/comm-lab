@@ -253,7 +253,7 @@ core 分成 11 个文件而不是一个大文件，理由同样是可核对：�
 
 ### 2.3 测试用 node 自带的 runner
 
-这台机器装依赖出过问题，vitest 一次要拉一百多个包；项目本身又是零测试依赖的。Node 24 默认开启类型擦除，`node --test` 能直接跑 `.ts`，所以 `package.json` 里只有一行 `"test": "node --test"`，测试放 `tests/*.test.ts`，33 个文件、`npm test` 报 367 条，本机热跑 `duration_ms` 1629.9，干净克隆里墙钟 2.5 s。
+这台机器装依赖出过问题，vitest 一次要拉一百多个包；项目本身又是零测试依赖的。Node 24 默认开启类型擦除，`node --test` 能直接跑 `.ts`，所以 `package.json` 里只有一行 `"test": "node --test"`，测试放 `tests/*.test.ts`，34 个文件、`npm test` 报 374 条，本机热跑 `duration_ms` 1629.9，干净克隆里墙钟 2.5 s。
 
 代价说清楚：没有快照测试、没有覆盖率报告、没有并发隔离，断言只有 `node:assert`；测试文件里的 import 也必须带 `.ts` 扩展名；`grep -c "^test("` 数出来的行数会比实际用例少，因为子测试与循环生成的用例不在顶层。换来的是 `npm ci` 只装 28 个包（`package-lock.json` 里 90 条 `node_modules/` 记录，其余 62 条是 oxlint、rollup、esbuild 各平台的二进制，npm 只取当前平台那一个），整条依赖树小到可以一眼看完。
 
@@ -331,7 +331,7 @@ npm run dev
 | `git clone --depth 1` | 6.42 s | 只取最新一次提交 |
 | `npm ci` | 1.95 s | 装 28 个包（lockfile 里另有 62 条平台二进制记录） |
 | `npm run build` | 1.22 s | 46 个模块，`tsc -b` 加 vite |
-| `npm test` | 2.5 s | 367 条用例 |
+| `npm test` | 2.5 s | 374 条用例 |
 
 `npm run dev` 起在终端打印的地址（本机是 `http://localhost:5183/`），打开后进 `#/qam`，看到的就是第一张图：16QAM 的 16 个点、旁边的 4 位格雷码标签、默认 12 dB 的琥珀色点云，下面三个读数和一条 0–20 dB 的误码率曲线。
 
@@ -351,7 +351,7 @@ npm run dev
 
 如果四步里任何一步失败，README 的常见问题表列了三种：`npm ci` 失败先删 `node_modules` 改用 `npm install`；页面空白先看控制台，通常是 Node 低于 24；只有线上 404 是 `base` 路径问题，本地不会复现。
 
-不开浏览器也能验一半：`npm test` 会告诉你 367 条过没过；`npm run build` 会告诉你产物有多大（本轮 `dist/assets/index-*.js` 约 314 kB、`index-*.css` 约 27 kB，哈希随内容变）。剩下的一半只能打开看——点云、曲线、标签位置这些没有断言。
+不开浏览器也能验一半：`npm test` 会告诉你 374 条过没过；`npm run build` 会告诉你产物有多大（本轮 `dist/assets/index-*.js` 约 314 kB、`index-*.css` 约 27 kB，哈希随内容变）。剩下的一半只能打开看——点云、曲线、标签位置这些没有断言。
 
 ### 3.2 Node 版本与零新增依赖
 
@@ -365,7 +365,7 @@ npm run dev
 
 没有通信库、没有数值库、没有绘图库——星座图、曲线、时域波形都是 canvas 手画，FFT、Viterbi、QAM 映射都在 `src/core/` 里手写。这一条不是自证，上面三条命令就是证据。
 
-代码检查用的是 oxlint，一个 Rust 写的 linter，体积小、不需要再装一堆 ESLint 插件，`npm run lint` 报的是"0 warnings and 0 errors"（扫描文件数随源码增删变，不写死）。它不是测试的替代品，只保证没有未使用变量、没有明显写错的地方；真正的逻辑靠 367 条测试。
+代码检查用的是 oxlint，一个 Rust 写的 linter，体积小、不需要再装一堆 ESLint 插件，`npm run lint` 报的是"0 warnings and 0 errors"（扫描文件数随源码增删变，不写死）。它不是测试的替代品，只保证没有未使用变量、没有明显写错的地方；真正的逻辑靠 374 条测试。
 
 "运行时不调模型、不联网"也能当场验：打开开发者工具的 Network 面板，四页各点一遍，除了本地静态文件没有任何请求；`src/` 里搜不到 `fetch`、`XMLHttpRequest`、`WebSocket`，也没有任何 base URL 常量。这一条比说"纯前端"有用，因为它是可观察的行为，不是架构描述。
 
@@ -449,6 +449,7 @@ npm run dev
 | R31 | R31 | 本条提交 | 第 6 章失败判据三分支，4 dB 才闭眼 |
 | R32 | R32 | 本条提交 | 第 7 章四档对数轴、20000 次蒙特卡洛 |
 | R33 | R33 | 本条提交 | 2ASK 改单极性 OOK，8 dB 6.00e-3 |
+| R105 | R105 | 本条提交 | 同屏看书：PDF 侧栏、章到页、单次解析 |
 | R104 | R104 | 本条提交 | L1 全文抽取与切节，13 个实验概念词打分，夹具缺失时跳过 |
 | R103 | R103 | 本条提交 | 两份 PDF 重导：报告与介绍数字跟到 365 条测试 |
 | R102 | R102 | 本条提交 | 第 12 章平底线留白按数据跨度算，补三条黑屏与 NaN 守卫 |

@@ -153,7 +153,7 @@ test('切换找得到书；找不到就退回第一本，编号不撞车', () =>
   assert.ok(!grown.some((book) => book.id === id2), `新编号 ${id2} 与已有书撞了`)
 })
 
-test('从目录转成书架条目：保留 topicId 与 hits，不把页码带进内存书架', () => {
+test('从目录转成书架条目：保留 topicId、hits 与页码（R105 同屏看书要用）', () => {
   const book = bookFromOutline('靶子书', outlineOf(['抽样定理', '傅里叶变换']), 'chal')
   const [first, second] = book.chapters
 
@@ -161,7 +161,7 @@ test('从目录转成书架条目：保留 topicId 与 hits，不把页码带进
   assert.equal(first.rawTitle, '抽样定理')
   assert.equal(first.topicId, '10')
   assert.deepEqual(first.hits, ['抽样定理'])
-  assert.ok(!('page' in first), '页码只用于预览，不该留在书架里')
+  assert.equal(first.page, 1, '页码进书架，切章才能自动翻到这一章')
 
   assert.equal(second.topicId, null)
   assert.deepEqual(second.hits, [])

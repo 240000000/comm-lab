@@ -52,6 +52,10 @@ export function plainChapter(chapter: ShelfChapter): ShelfChapter {
     }
   }
   const plain: ShelfChapter = { no, rawTitle, topicId, hits }
+  // R105 起页码要跟着目录一起存：同屏看书靠它把章翻到起始页。
+  if (typeof chapter.page === 'number' && Number.isFinite(chapter.page) && chapter.page >= 1) {
+    plain.page = Math.round(chapter.page)
+  }
   if (Array.isArray(chapter.sectionHits)) {
     const sectionHits: string[] = []
     for (const hit of chapter.sectionHits) {

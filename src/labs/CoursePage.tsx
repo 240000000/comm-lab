@@ -19,12 +19,14 @@ import { chartLabel } from './chartLabel.ts'
 import { CourseChart } from './CourseChart.tsx'
 import { CourseLegend } from './CourseLegend.tsx'
 import { ParamSlider } from './ParamSlider.tsx'
+import { PdfPane, type PdfScale } from './PdfPane.tsx'
 import {
   DEFAULT_BOOK_ID,
   UNCOVERED_NOTE,
   billOf,
   bookById,
   bookFromSections,
+  chapterPage,
   defaultShelfBook,
   evidenceOf,
   isPlayable,
@@ -265,7 +267,7 @@ export function CoursePage() {
   const paramsRef = useRef(params)
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
   // 书架提到模块级（shelfStore）：首页和这里读同一份，落盘在本机 IndexedDB（刷新后还在）。
-  const { books, activeId } = useShelf()
+  const { books, activeId, pdfBytes } = useShelf()
   const [bill, setBill] = useState<BillState | null>(null)
   const [switching, setSwitching] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -273,6 +275,15 @@ export function CoursePage() {
 
   const book = bookById(books, activeId)
   const usingDefault = book.id === DEFAULT_BOOK_ID
+  const hasPdf = !usingDefault && Boolean(pdfBytes[book.id])
+  const [showBook, setShowBook] = useState(true)
+  const [bookScale, setBookScale] = useState<PdfScale>('fit')
+  const pageKey = `${book.id}:${no}`
+  const [pageChoice, setPageChoice] = useState<{ key: string; page: number } | null>(null)
+  const bookPage = pageChoice && pageChoice.key === pageKey ? pageChoice.page : chapterPage(book, no)
+  const changeBookPage = (next: number) => {
+    setPageChoice({ key: `${book.id}:${no}`, page: next })
+  }
   const billStat = bill ? billOf(bill.book) : null
 
   const view = useMemo(
@@ -532,7 +543,13 @@ export function CoursePage() {
         ) : null}
       </section>
 
-      <div className="course-layout">
+      <div className="course-book-toggle">
+        <button type="button" className="course-book-toggle-btn" onClick={() => setShowBook((open) => !open)}>
+          {showBook ? '收起书栏' : '同屏看书'}
+        </button>
+      </div>
+
+      <div className={`course-layout${showBook ? ' with-book' : ''}`}>
         <div className="course-side">
           {importState.status === 'parsing' ? (
             <p className="course-import-status">
@@ -596,6 +613,27 @@ export function CoursePage() {
             <TodoScreen chapter={chapter} />
           )}
         </section>
+
+        {showBook ? (
+          <aside className="course-book-pane" aria-label="教材原文">
+            <button type="button" className="course-book-close" onClick={() => setShowBook(false)} aria-label="收起书栏">
+              收起
+            </button>
+            {hasPdf ? (
+              <PdfPane
+                bookId={book.id}
+                page={bookPage}
+                onPageChange={changeBookPage}
+                scale={bookScale}
+                onScaleChange={setBookScale}
+              />
+            ) : (
+              <p className="course-book-missing">
+                本书只保存了目录，要看正文请重新导入并勾选保存原文件
+              </p>
+            )}
+          </aside>
+        ) : null}
       </div>
     </main>
   )

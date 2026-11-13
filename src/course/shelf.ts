@@ -24,6 +24,8 @@ export type ShelfChapter = {
   hits: string[]
   /** 这一章是靠哪几条节名认出来的（R90）；章名认的章没有这个字段。 */
   sectionHits?: string[]
+  /** 这一章在 PDF 里的起始页；导入时从书签读，读不出来是 null。 */
+  page?: number | null
 }
 
 /** 书架上的一本书。 */
@@ -77,6 +79,7 @@ export function bookFromOutline(title: string, outline: OutlinedBook, id: string
       rawTitle: chapter.rawTitle,
       topicId: chapter.topicId,
       hits: chapter.hits,
+      page: chapter.page,
     })),
   }
 }
@@ -88,6 +91,7 @@ export function bookFromOutline(title: string, outline: OutlinedBook, id: string
  * 所以「凭什么认这一章」和「怎么裁决抢主题」两件事在测试里能分开钉。
  */
 export function bookFromSections(title: string, entries: OutlineEntry[], id: string): ShelfBook {
+  const pages = chapterPages(entries)
   return {
     id,
     title,
@@ -97,8 +101,25 @@ export function bookFromSections(title: string, entries: OutlineEntry[], id: str
       topicId: chapter.topicId,
       hits: chapter.hits,
       sectionHits: chapter.sectionHits,
+      page:
+        pages.get(chapter.no === null ? `title:${chapter.rawTitle}` : `no:${chapter.no}`) ?? null,
     })),
   }
+}
+
+/** 章级条目的页码表：有章号按章号，没章号按原字标题。 */
+function chapterPages(entries: OutlineEntry[]): Map<string, number> {
+  const pages = new Map<string, number>()
+  for (const entry of entries) {
+    if ((entry.depth ?? 0) !== 0) continue
+    if (typeof entry.page !== 'number' || entry.page < 1) continue
+    const key =
+      entry.chapterNo === null || entry.chapterNo === undefined
+        ? `title:${entry.rawTitle}`
+        : `no:${entry.chapterNo}`
+    if (!pages.has(key)) pages.set(key, entry.page)
+  }
+  return pages
 }
 
 /** 这一章对应的是不是真有一屏能玩（主题存在且 course.ts 里确实有那一章）。 */
@@ -150,6 +171,21 @@ export function removeBook(shelf: ShelfBook[], id: string): ShelfBook[] {
 export function bookById(shelf: ShelfBook[], id: string | null): ShelfBook {
   const found = id ? shelf.find((item) => item.id === id) : undefined
   return found ?? shelf[0]
+}
+
+/** 页码夹紧：任何来源的页码都落到 1..pageCount。 */
+export function clampPage(page: number, pageCount: number): number {
+  const total = Math.max(1, Math.floor(Number.isFinite(pageCount) ? pageCount : 1))
+  if (!Number.isFinite(page)) return 1
+  return Math.min(total, Math.max(1, Math.round(page)))
+}
+
+/** 章到页：这一章在 PDF 里的起始页；没有记录就给 1（真正的夹紧在 PdfPane 里按 numPages 做）。 */
+export function chapterPage(book: ShelfBook, no: number | null): number {
+  if (no === null) return 1
+  const chapter = book.chapters.find((item) => item.topicId === String(no) || item.no === no)
+  const page = chapter?.page
+  return typeof page === 'number' && page >= 1 ? Math.round(page) : 1
 }
 
 /** 给新导入的书一个不撞车的 id。 */

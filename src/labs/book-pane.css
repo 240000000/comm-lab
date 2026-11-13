@@ -1,0 +1,202 @@
+/* 课程视图同屏看书：宽屏 6:4 两栏，窄屏折成右侧抽屉。 */
+
+.course-book-toggle {
+  display: flex;
+  justify-content: flex-end;
+  max-width: min(1360px, 100% - 48px);
+  margin: 0 auto 10px;
+}
+
+.course-book-toggle-btn {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(16, 24, 34, 0.72);
+  color: var(--ink);
+  padding: 7px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.course-book-toggle-btn:hover {
+  border-color: var(--accent);
+}
+
+.course-layout.with-book {
+  grid-template-columns: 264px minmax(0, 6fr) minmax(0, 4fr);
+}
+
+.course-book-pane {
+  min-width: 0;
+  position: sticky;
+  top: 18px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(16, 24, 34, 0.6);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+}
+
+.course-book-missing {
+  margin: 0;
+  padding: 18px 14px;
+  color: var(--dim);
+  line-height: 1.9;
+}
+
+.course-book-close {
+  display: none;
+  margin-left: auto;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(9, 15, 22, 0.72);
+  color: var(--ink);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.course-book-close:hover {
+  border-color: var(--accent);
+}
+
+.pdf-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pdf-btn {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(9, 15, 22, 0.72);
+  color: var(--ink);
+  padding: 4px 9px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pdf-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.pdf-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pdf-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pdf-page-input {
+  width: 64px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(9, 15, 22, 0.72);
+  color: var(--ink);
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+}
+
+.pdf-page-total {
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.pdf-zoom {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.pdf-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  min-height: 240px;
+}
+
+.pdf-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.pdf-canvas.is-rendering {
+  visibility: hidden;
+}
+
+.pdf-skeleton {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  background-size: 200% 100%;
+  animation: pdf-skeleton-sweep 1.2s linear infinite;
+}
+
+.pdf-skeleton.tall {
+  position: static;
+  height: 420px;
+}
+
+.pdf-hint {
+  margin: 0;
+  color: var(--dim);
+  line-height: 1.8;
+}
+
+@keyframes pdf-skeleton-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (max-width: 1080px) {
+  .course-layout.with-book {
+    grid-template-columns: 264px minmax(0, 1fr);
+  }
+
+  .course-book-pane {
+    position: fixed;
+    z-index: 60;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(520px, 92vw);
+    max-height: none;
+    border-radius: 0;
+    background: #0b1219;
+    box-shadow: -18px 0 44px rgba(0, 0, 0, 0.45);
+  }
+
+  .course-book-close {
+    display: block;
+  }
+}
+
+@media (max-width: 860px) {
+  .course-layout.with-book {
+    grid-template-columns: 1fr;
+  }
+}
