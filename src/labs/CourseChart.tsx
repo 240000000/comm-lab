@@ -203,6 +203,12 @@ export function CourseChart({
     } else {
       xTickList.push(...niceTicks(xMin, xMax))
     }
+    // 刻度不许越过数据边界（第 12 章非本原抽头数据到 69，右端别多出一档）。
+    if (xRange) {
+      for (let i = xTickList.length - 1; i >= 0; i -= 1) {
+        if (xTickList[i] < xMin - 1e-9 || xTickList[i] > xMax + 1e-9) xTickList.splice(i, 1)
+      }
+    }
     // 纵向刻度值：同上；没传时线性轴按「好看步长」定网格，对数轴每十倍一档、太密时隔档画。
     const yTickList: number[] = []
     if (yTicks) {
@@ -352,6 +358,21 @@ export function CourseChart({
           // 旁瓣只有 1/N 那么矮，按真实高度画会看不见；至少留 2 像素，让它「确实存在」。
           const top = py(y)
           const tip = Math.abs(top - base) < 2 ? base - Math.sign(top - base || 1) * 2 : top
+          if (markerX !== undefined && Math.abs(x - markerX) < 1e-9) {
+            // 当前延迟那根柱改成实心圆点 + 一圈高亮；竖向虚线由 markerX 单独画。
+            const cx = px(x)
+            ctx.setLineDash([])
+            ctx.beginPath()
+            ctx.arc(cx, tip, 4.2, 0, Math.PI * 2)
+            ctx.fillStyle = '#e0a45c'
+            ctx.fill()
+            ctx.beginPath()
+            ctx.arc(cx, tip, 7.4, 0, Math.PI * 2)
+            ctx.strokeStyle = '#e0a45c'
+            ctx.lineWidth = 1.4
+            ctx.stroke()
+            continue
+          }
           ctx.beginPath()
           ctx.moveTo(px(x), base)
           ctx.lineTo(px(x), tip)

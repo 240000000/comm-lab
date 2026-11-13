@@ -25,6 +25,8 @@ export type CourseParam = {
   unit: string
   /** 离散档位的文字；有它时滑块按整数档走，读数里显示文字而不是数字。 */
   options?: string[]
+  /** 上限随别的参数走时用它算（第 12 章的 τ 跟着级数、抽头变）；不写就用 max。 */
+  maxFor?: (params: Record<string, number>) => number
 }
 
 export type CourseSeries = {
@@ -1545,13 +1547,24 @@ const mseqLevelParam: CourseParam = {
   unit: '',
   options: MSEO_LEVELS.map((n) => `n=${n}（N=${2 ** n - 1}）`),
 }
+/** 当前参数下序列的实际周期；本原抽头等于 2^n−1，非本原会掉下来。 */
+function mseqPeriodFor(params: Record<string, number>): number {
+  const levelIdx = Math.min(MSEO_LEVELS.length - 1, Math.max(0, Math.round(params.level ?? 3)))
+  const level = MSEO_LEVELS[levelIdx]
+  const bad = Math.round(params.taps ?? 0) === 1
+  const taps = (bad ? MSEO_BAD_TAPS : MSEO_TAPS)[level]
+  const full = 2 ** level - 1
+  return mseqPeriod(mseqBits(level, taps, MSEO_INITS[0].slice(0, level), 4 * full), full)
+}
+
 const mseqTauParam: CourseParam = {
   key: 'tau',
   label: '延迟 τ',
   min: 0,
-  max: 126,
+  max: 252,
   step: 1,
   unit: '',
+  maxFor: (params) => 2 * mseqPeriodFor(params) - 2,
 }
 const mseqTapsParam: CourseParam = {
   key: 'taps',
@@ -1610,12 +1623,15 @@ function computeMseq(params: Record<string, number>): CourseView {
   const bad = tapsIdx === 1
   const taps = (bad ? MSEO_BAD_TAPS : MSEO_TAPS)[level]
   const full = 2 ** level - 1
-  const tau = Math.min(full - 1, Math.max(0, Math.round(params.tau ?? 0)))
+  const tauRaw = Math.max(0, Math.round(params.tau ?? 0))
 
   const raw = mseqBits(level, taps, init, 4 * full)
   const period = mseqPeriod(raw, full)
   const bits = raw.slice(0, period)
   const auto = mseqAuto(bits)
+  // τ 跟着周期走：滑块画到 2N−2，取样时折回一个周期（R 本身以 N 为周期）。
+  const tau = Math.min(2 * period - 2, tauRaw)
+  const tauPhase = tau % period
   const peak = auto[0]
   let sidelobe = -Infinity
   for (let i = 1; i < auto.length; i += 1) sidelobe = Math.max(sidelobe, auto[i])
@@ -1624,6 +1640,9 @@ function computeMseq(params: Record<string, number>): CourseView {
   const theorySide = -1 / period
   const distinct = [...new Set(auto.map((v) => v.toFixed(9)))].length
   const failed = period !== full
+  // 纵轴留白：正常情况 −1.3/N 就够；非本原抽头的旁瓣会掉到 −0.6，框必须装下它。
+  const dataMin = Math.min(...auto)
+  const yLow = dataMin < -1.3 / period ? dataMin - 0.06 : -1.3 / period
 
   // 画两个周期：R(τ) 以 N 为周期，τ=N 那里又是一根顶到 1 的杆，
   // 「周期」是画出来的而不是读出来的——一眼能看见第二根尖峰就在 N 处。
@@ -1640,13 +1659,13 @@ function computeMseq(params: Record<string, number>): CourseView {
     {
       label: `周期 N（${tapsText}抽头）`,
       value: `${period}`,
-      hint: `2^${level} − 1 = ${full}；整条序列一个周期正好 ${period} 个码元。`,
+      hint: `本原抽头时周期是 ${full}；当前这条是 ${period}。`,
       warn: failed,
     },
     {
       label: '峰值自相关',
       value: peak.toFixed(4),
-      hint: `R(0) = 1：能量归一化之后，自己和自己对齐必然是满值；当前延迟 τ = ${tau}，R(τ) = ${auto[tau].toFixed(4)}。`,
+      hint: `R(0) = 1：能量归一化之后，自己和自己对齐必然是满值；当前延迟 τ = ${tau}，折回一个周期是第 ${tauPhase} 根，R = ${auto[tauPhase].toFixed(4)}。`,
       warn: Math.abs(peak - 1) > 1e-9,
     },
     {
@@ -1663,11 +1682,11 @@ function computeMseq(params: Record<string, number>): CourseView {
     },
     {
       label: '当前延迟 τ 的 R(τ)',
-      value: tau === 0 ? peak.toFixed(4) : auto[tau].toFixed(5),
+      value: tauPhase === 0 ? peak.toFixed(4) : auto[tauPhase].toFixed(5),
       hint:
-        tau === 0
-          ? `图上那条竖线标在第 ${tau} 根柱上；τ=0 是峰值 R(0) = ${peak.toFixed(4)}。`
-          : `图上那条竖线标在第 ${tau} 根柱上；τ≠0 时落进旁瓣，R(τ) = ${auto[tau].toFixed(5)}（= −1/${period} = ${theorySide.toFixed(5)}）。`,
+        tauPhase === 0
+          ? `图上那条竖线标在第 ${tau} 根柱上；折回一个周期正好是峰值 R(0) = ${peak.toFixed(4)}。`
+          : `图上那条竖线标在第 ${tau} 根柱上；折回一个周期是第 ${tauPhase} 根，R = ${auto[tauPhase].toFixed(5)}${Math.abs(auto[tauPhase] - theorySide) < 1e-12 ? `（= −1/${period} = ${theorySide.toFixed(5)}）。` : '。'}`,
       warn: false,
     },
     {
@@ -1695,10 +1714,9 @@ function computeMseq(params: Record<string, number>): CourseView {
     bars: true,
     // x 轴由 N 现算：正好铺满两个周期，换级数时轴跟着变，但「两根尖峰相隔 N」永远看得见。
     xRange: [0, shown - 1],
-    // 纵轴固定，只给旁瓣与峰值留一点余量：换档时柱高不重新标定，比较才成立。
-    yRange: [-1.5 / period, 1.05],
-    yTicks: [0, theorySide, 1],
-    guides: [{ y: theorySide, label: `−1/N = ${theorySide.toFixed(5)}：其余 ${period - 1} 根柱都在这条线上` }],
+    // 纵轴给旁瓣留足余量：正常下界 −1.3/N，非本原抽头按实测最小旁瓣再往下放。
+    yRange: [yLow, 1.06],
+    guides: [{ y: theorySide, label: `−1/N = ${theorySide.toFixed(4)}` }],
     guideLabelAlign: 'right',
     markerX: tau,
     markerLabel: `τ = ${tau}`,

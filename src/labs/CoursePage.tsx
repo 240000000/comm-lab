@@ -83,6 +83,7 @@ const Control = memo(function Control({
   paramKey,
   param,
   value,
+  params,
   onChange,
   onDragStart,
   onDragEnd,
@@ -90,11 +91,14 @@ const Control = memo(function Control({
   paramKey: string
   param: CourseParam
   value: number
+  params: Record<string, number>
   onChange: (key: string, value: number) => void
   onDragStart: () => void
   onDragEnd: () => void
 }) {
   const handleChange = useCallback((next: number) => onChange(paramKey, next), [onChange, paramKey])
+  // 上限可以跟着别的参数走（第 12 章的 τ 跟着 N）；不写 maxFor 的章还是用 param.max。
+  const max = param.maxFor ? param.maxFor(params) : param.max
 
   if (param.options) {
     return (
@@ -119,7 +123,7 @@ const Control = memo(function Control({
       label={param.label}
       value={value}
       min={param.min}
-      max={param.max}
+      max={max}
       step={param.step}
       unit={param.unit}
       onChange={handleChange}
@@ -178,6 +182,7 @@ const ChapterScreen = memo(function ChapterScreen({
             paramKey={param.key}
             param={param}
             value={params[param.key]}
+            params={params}
             onChange={onChange}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
@@ -286,10 +291,16 @@ export function CoursePage() {
 
   const setParam = useCallback((key: string, value: number) => {
     const next = { ...paramsRef.current, [key]: value }
+    // 上限跟着别的参数走时（第 12 章的 τ 跟着 N），把越界的值收回来：拖完 τ 再降级数，不留框外的值。
+    for (const item of chapter.params) {
+      const max = item.maxFor ? item.maxFor(next) : item.max
+      if (next[item.key] > max) next[item.key] = max
+      if (next[item.key] < item.min) next[item.key] = item.min
+    }
     paramsRef.current = next
     setParams(next)
     dragRef.current.push(next, setCommitted)
-  }, [])
+  }, [chapter])
 
   const onDragStart = useCallback(() => dragRef.current.begin(), [])
   const onDragEnd = useCallback(() => dragRef.current.end(setCommitted), [])
