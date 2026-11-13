@@ -12,7 +12,8 @@
 import { useSyncExternalStore } from 'react'
 
 import { DEFAULT_BOOK_ID, addBook, defaultShelfBook, removeBook, type ShelfBook } from './shelf.ts'
-import { deleteBook, formatBytes, loadAll, saveActive, saveBook, savePdf } from './shelfDb.ts'
+import { deleteBook, deletePdf, formatBytes, loadAll, saveActive, saveBook, savePdf, type PdfMeta } from './shelfDb.ts'
+import { closeBook } from './pdfSource.ts'
 
 export type ShelfSnapshot = {
   books: ShelfBook[]
@@ -192,13 +193,33 @@ export function setKeepPdf(keepPdf: boolean): void {
  * 存原文件（体积大、可能失败），失败一律降级成「只存目录」并把原话交回去。
  * 空文件、默认那本（没有原件）由调用方先拦掉。
  */
-export async function storePdf(id: string, blob: Blob): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function storePdf(
+  id: string,
+  blob: Blob,
+  meta: PdfMeta | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (id === DEFAULT_BOOK_ID) return { ok: false, message: '内置书没有原件' }
   try {
-    await savePdf(id, blob)
+    await savePdf(id, blob, meta)
     return { ok: true }
   } catch (error) {
     return { ok: false, message: describeError(error) }
   }
+}
+
+/** 只删原件：目录、章节、当前书都不动。 */
+export async function clearPdf(id: string): Promise<void> {
+  await closeBook(id)
+  if (canPersist()) {
+    try {
+      await deletePdf(id)
+    } catch {
+      // 盘上删不掉也不拦界面：下次水合会带回来，但至少这次会话是干净的。
+    }
+  }
+  const pdfBytes = { ...snapshot.pdfBytes }
+  delete pdfBytes[id]
+  commit({ ...snapshot, pdfBytes })
 }
 
 /** 给 React 用；测试直接调 getShelf/subscribe，不必进渲染。 */

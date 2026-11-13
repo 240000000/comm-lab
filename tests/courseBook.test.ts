@@ -79,7 +79,7 @@ test('同一本书只解析一次；closeBook 销毁并清缓存，再打开才�
       destroyed += 1
     },
   }
-  const read = async () => new Uint8Array([37, 80, 68, 70])
+  const read = async () => ({ bytes: new Uint8Array([37, 80, 68, 70]), meta: null })
   const load = async () => {
     loads += 1
     return fakeDoc

@@ -11,6 +11,7 @@
 import { DEFAULT_BOOK_ID } from '../course/shelf.ts'
 import { formatBytes } from '../course/shelfDb.ts'
 import { storePdf } from '../course/shelfStore.ts'
+import { readPdfMeta } from '../course/pdfSource.ts'
 
 /** 可用空间不足文件的这个倍数，就只存目录。降级路径做实验时临时改成 0.0001。 */
 export const SPACE_MARGIN = 1.2
@@ -52,7 +53,14 @@ export async function saveOriginalPdf(file: File, id: string): Promise<SaveResul
     // 申请不上持久化也照存：最坏情况是浏览器在空间紧张时清掉它。
   }
 
-  const stored = await storePdf(id, file)
+  let meta = null
+  try {
+    meta = await readPdfMeta(file)
+  } catch {
+    // 解析不出首页就存 null：打开时跳过身份比对，但文件本身还能读。
+  }
+
+  const stored = await storePdf(id, file, meta)
   if (stored.ok) return { status: 'saved', bytes: size }
   return { status: 'skipped', message: `原文件没存下来（${stored.message}），只存了目录` }
 }

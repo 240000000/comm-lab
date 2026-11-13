@@ -10,8 +10,9 @@
 import { useEffect, useRef, useState } from 'react'
 import './book-pane.css'
 import { syncCanvasSize } from './canvasSize.ts'
-import { MISSING_PDF_MESSAGE, loadDoc, parseCount, type PdfDocument, type PdfPage } from '../course/pdfSource.ts'
+import { MISSING_PDF_MESSAGE, loadDoc, parseCount, type LoadResult, type PdfPage } from '../course/pdfSource.ts'
 import { clampPage } from '../course/shelf.ts'
+import { clearPdf } from '../course/shelfStore.ts'
 
 /** 三档缩放：适宽按容器宽度算，其余是绝对倍率。 */
 export type PdfScale = 'fit' | number
@@ -30,14 +31,17 @@ type Props = {
   onPageChange: (page: number) => void
   scale: PdfScale
   onScaleChange?: (scale: PdfScale) => void
+  /** 目录里的章数，mismatch 时用来说明「这本书记的是另一份原件」。 */
+  chapterCount: number
 }
 
-export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange }: Props) {
-  const [loaded, setLoaded] = useState<{ bookId: string; doc: PdfDocument } | null>(null)
+export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange, chapterCount }: Props) {
+  const [loaded, setLoaded] = useState<{ bookId: string; result: LoadResult } | null>(null)
   const [failure, setFailure] = useState<{ bookId: string; message: string } | null>(null)
   const [rendering, setRendering] = useState(false)
   const [renderError, setRenderError] = useState<string | null>(null)
   const [widthTick, setWidthTick] = useState(0)
+  const [reloadTick, setReloadTick] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const renderRef = useRef<RenderTask | null>(null)
@@ -48,7 +52,7 @@ export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange }: Pr
     let alive = true
     loadDoc(bookId)
       .then((next) => {
-        if (alive) setLoaded({ bookId, doc: next })
+        if (alive) setLoaded({ bookId, result: next })
       })
       .catch((error: unknown) => {
         if (!alive) return
@@ -58,19 +62,23 @@ export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange }: Pr
     return () => {
       alive = false
     }
-  }, [bookId])
+  }, [bookId, reloadTick])
 
   // 状态都从 bookId 派生：换书就自动回到 loading，不必在 effect 里同步清状态。
-  const doc = loaded !== null && loaded.bookId === bookId ? loaded.doc : null
+  const result = loaded !== null && loaded.bookId === bookId ? loaded.result : null
+  const doc = result?.status === 'ok' ? result.doc : null
+  const mismatch = result?.status === 'mismatch' ? result : null
   const failureMessage = failure !== null && failure.bookId === bookId ? failure.message : ''
-  const status: 'loading' | 'ready' | 'missing' | 'error' =
+  const status: 'loading' | 'ready' | 'missing' | 'error' | 'mismatch' =
     doc !== null
       ? 'ready'
-      : failureMessage === ''
-        ? 'loading'
-        : failureMessage === MISSING_PDF_MESSAGE
-          ? 'missing'
-          : 'error'
+      : mismatch !== null
+        ? 'mismatch'
+        : failureMessage === ''
+          ? 'loading'
+          : failureMessage === MISSING_PDF_MESSAGE
+            ? 'missing'
+            : 'error'
   const numPages = doc?.numPages ?? 0
   const message = failureMessage
 
@@ -151,6 +159,10 @@ export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange }: Pr
   const total = numPages || 1
   const go = (next: number) => onPageChange(clampPage(next, total))
   const zoom = (value: PdfScale) => onScaleChange?.(value)
+  const clearOriginal = async () => {
+    await clearPdf(bookId)
+    setReloadTick((tick) => tick + 1)
+  }
 
   return (
     <div className="pdf-pane" ref={containerRef} data-parse-count={parseCount(bookId)}>
@@ -190,6 +202,16 @@ export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange }: Pr
       </div>
 
       {status === 'missing' ? <p className="pdf-hint">{MISSING_PDF_MESSAGE}</p> : null}
+      {status === 'mismatch' && mismatch ? (
+        <div className="pdf-mismatch">
+          <p className="pdf-hint">
+            本机存的原文件与这本书对不上（目录 {chapterCount} 章，原件 {mismatch.actual} 页），请重新导入。
+          </p>
+          <button type="button" className="pdf-btn" onClick={() => void clearOriginal()}>
+            清除原件
+          </button>
+        </div>
+      ) : null}
       {status === 'error' ? <p className="pdf-hint">这本 PDF 打不开：{message}</p> : null}
       {status === 'loading' ? <div className="pdf-skeleton tall" aria-label="正在打开教材" /> : null}
 

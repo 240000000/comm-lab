@@ -200,3 +200,35 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* R106：书架行的「清除原件」与 PDF 身份不符提示 */
+.shelf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.shelf-clear {
+  border: 1px solid rgba(240, 180, 90, 0.35);
+  background: transparent;
+  color: #e8c58c;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.shelf-clear:hover {
+  border-color: rgba(240, 180, 90, 0.7);
+}
+
+.pdf-mismatch {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.pdf-mismatch .pdf-hint {
+  margin: 0;
+}

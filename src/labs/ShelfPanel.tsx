@@ -22,6 +22,7 @@ type ShelfPanelProps = {
   persistNote: string | null
   onPick: (id: string) => void
   onRemove: (id: string) => void
+  onClearPdf: (id: string) => void
   onImport: (file: File) => void
   onToggleKeepPdf: (next: boolean) => void
 }
@@ -38,6 +39,7 @@ export function ShelfPanel({
   persistNote,
   onPick,
   onRemove,
+  onClearPdf,
   onImport,
   onToggleKeepPdf,
 }: ShelfPanelProps) {
@@ -87,18 +89,30 @@ export function ShelfPanel({
                 <span className="shelf-status">{status}</span>
                 <span className="shelf-enter">进入 →</span>
               </button>
-              {book.id === DEFAULT_BOOK_ID ? (
-                <span className="shelf-default">默认</span>
-              ) : (
-                <button
-                  type="button"
-                  className="shelf-drop"
-                  aria-label={`把《${book.title}》从书架移除，并删掉本机副本`}
-                  onClick={() => onRemove(book.id)}
-                >
-                  删除本机副本
-                </button>
-              )}
+              <span className="shelf-actions">
+                {pdfBytes[book.id] ? (
+                  <button
+                    type="button"
+                    className="shelf-clear"
+                    aria-label={`清除《${book.title}》在本机存的原文件`}
+                    onClick={() => onClearPdf(book.id)}
+                  >
+                    清除原件
+                  </button>
+                ) : null}
+                {book.id === DEFAULT_BOOK_ID ? (
+                  <span className="shelf-default">默认</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="shelf-drop"
+                    aria-label={`把《${book.title}》从书架移除，并删掉本机副本`}
+                    onClick={() => onRemove(book.id)}
+                  >
+                    删除本机副本
+                  </button>
+                )}
+              </span>
             </li>
           )
         })}

@@ -9,7 +9,7 @@
  * - 同一本书在一次会话里只 parse 一次：缓存的是 Promise，并发调用也只解析一次；
  *   closeBook 负责 destroy 并清缓存，调用后下一次 loadDoc 会重新解析。
  */
-import { STORE_PDFS } from './shelfDb.ts'
+import { STORE_PDFS, readPdfRecord } from './shelfDb.ts'
 
 /** 取原文件失败时给界面看的一句话。 */
 export const MISSING_PDF_MESSAGE = '本书只保存了目录，要看正文请重新导入并勾选保存原文件'
@@ -32,7 +32,12 @@ export type PdfPage = {
 }
 
 type Loader = (bytes: Uint8Array) => Promise<PdfDocument>
-type ReadBytes = (id: string) => Promise<Uint8Array | null>
+export type PdfMeta = { numPages: number; head: string }
+export type PdfRecord = { bytes: Uint8Array; meta: PdfMeta | null }
+export type LoadResult =
+  | { status: 'ok'; doc: PdfDocument }
+  | { status: 'mismatch'; expected: number; actual: number }
+type ReadBytes = (id: string) => Promise<PdfRecord | null>
 
 const DB_NAME = 'comm-lab-shelf'
 
@@ -72,15 +77,18 @@ export async function getBookPdf(id: string): Promise<Blob | null> {
   }
 }
 
-async function readBytesFromDb(id: string): Promise<Uint8Array | null> {
-  const blob = await getBookPdf(id)
-  if (!blob) return null
-  return new Uint8Array(await blob.arrayBuffer())
+async function readRecordFromDb(id: string): Promise<PdfRecord | null> {
+  const record = await readPdfRecord(id)
+  if (!record) return null
+  return { bytes: new Uint8Array(await record.blob.arrayBuffer()), meta: record.meta }
 }
 
 async function loadFromPdfjs(bytes: Uint8Array): Promise<PdfDocument> {
   const pdfjs = (await import('pdfjs-dist')) as unknown as {
-    getDocument: (source: { data: Uint8Array; disableWorker?: boolean }) => { promise: Promise<unknown> }
+    getDocument: (source: { data: Uint8Array; disableWorker?: boolean }) => {
+      promise: Promise<unknown>
+      destroy: () => Promise<void>
+    }
     GlobalWorkerOptions?: { workerSrc: string }
   }
   // 浏览器里配 worker；Node（测试）里没有 window，禁用 worker 直接在主线程解析。
@@ -93,10 +101,16 @@ async function loadFromPdfjs(bytes: Uint8Array): Promise<PdfDocument> {
     data: bytes.slice(),
     ...(typeof window === 'undefined' ? { disableWorker: true } : {}),
   })
-  return (await task.promise) as PdfDocument
+  const doc = (await task.promise) as { numPages: number; getPage: (page: number) => Promise<unknown> }
+  // pdfjs 6 的 PDFDocumentProxy 没有 destroy；销毁要落在 loadingTask 上。
+  return {
+    numPages: doc.numPages,
+    getPage: (page: number) => doc.getPage(page) as ReturnType<PdfDocument['getPage']>,
+    destroy: () => task.destroy(),
+  }
 }
 
-const cache = new Map<string, Promise<PdfDocument>>()
+const cache = new Map<string, Promise<LoadResult>>()
 const parseCounts = new Map<string, number>()
 
 /** 这本书解析过几次；跨章节切换应当一直是 1。 */
@@ -118,16 +132,23 @@ export function isBookCached(id: string): boolean {
 export async function loadDoc(
   id: string,
   options: { load?: Loader; read?: ReadBytes } = {},
-): Promise<PdfDocument> {
+): Promise<LoadResult> {
   const hit = cache.get(id)
   if (hit) return hit
-  const read = options.read ?? readBytesFromDb
+  const read = options.read ?? readRecordFromDb
   const load = options.load ?? loadFromPdfjs
-  const task = (async () => {
-    const bytes = await read(id)
-    if (!bytes) throw new Error(MISSING_PDF_MESSAGE)
+  const task = (async (): Promise<LoadResult> => {
+    const record = await read(id)
+    if (!record) throw new Error(MISSING_PDF_MESSAGE)
+    // 空 blob 是没存成，不是「身份不符」：别把 0 字节交给 pdf.js。
+    if (record.bytes.length === 0) throw new Error(MISSING_PDF_MESSAGE)
     parseCounts.set(id, (parseCounts.get(id) ?? 0) + 1)
-    return load(bytes)
+    const doc = await load(record.bytes)
+    if (record.meta && record.meta.numPages > 0 && record.meta.numPages !== doc.numPages) {
+      await doc.destroy()
+      return { status: 'mismatch', expected: record.meta.numPages, actual: doc.numPages }
+    }
+    return { status: 'ok', doc }
   })()
   cache.set(id, task)
   // 失败不要留在缓存里，否则一次读失败会让这本书这一辈子都打不开。
@@ -143,10 +164,33 @@ export async function closeBook(id: string): Promise<void> {
   cache.delete(id)
   if (!task) return
   try {
-    const doc = await task
-    await doc.destroy()
+    const result = await task
+    if (result.status === 'ok') await result.doc.destroy()
   } catch {
     // 本来就没加载成功，没有可销毁的 document。
+  }
+}
+
+/**
+ * 一本书的身份：页数 + 首页开头 80 字。
+ *
+ * 导入时存进 pdfs 记录；打开时比对页数，对不上就是「记录与 blob 不是同一本」。
+ */
+export async function readPdfMeta(source: Blob | Uint8Array): Promise<PdfMeta> {
+  const bytes = source instanceof Uint8Array ? source : new Uint8Array(await source.arrayBuffer())
+  const doc = await loadFromPdfjs(bytes)
+  try {
+    const page = await doc.getPage(1)
+    const content = await page.getTextContent()
+    const head = content.items
+      .map((item) => (typeof item.str === 'string' ? item.str : ''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80)
+    return { numPages: doc.numPages, head }
+  } finally {
+    await doc.destroy()
   }
 }
 

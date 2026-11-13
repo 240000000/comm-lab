@@ -10,6 +10,7 @@ import { HomeBackdrop } from './labs/HomeBackdrop'
 import { HomeParticles } from './labs/HomeParticles'
 import { bookById, nextBookId } from './course/shelf'
 import {
+  clearPdf,
   getShelf,
   hydrate,
   importBook,
@@ -201,6 +202,7 @@ export default function App() {
             persistNote={shelf.persistNote}
             onPick={enterCourse}
             onRemove={removeBookById}
+            onClearPdf={clearPdf}
             onImport={importFile}
             onToggleKeepPdf={setKeepPdf}
           />

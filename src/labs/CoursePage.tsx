@@ -275,7 +275,7 @@ export function CoursePage() {
 
   const book = bookById(books, activeId)
   const usingDefault = book.id === DEFAULT_BOOK_ID
-  const hasPdf = !usingDefault && Boolean(pdfBytes[book.id])
+  const hasPdf = Boolean(pdfBytes[book.id])
   const [showBook, setShowBook] = useState(true)
   const [bookScale, setBookScale] = useState<PdfScale>('fit')
   const pageKey = `${book.id}:${no}`
@@ -626,6 +626,7 @@ export function CoursePage() {
                 onPageChange={changeBookPage}
                 scale={bookScale}
                 onScaleChange={setBookScale}
+                chapterCount={book.chapters.length}
               />
             ) : (
               <p className="course-book-missing">

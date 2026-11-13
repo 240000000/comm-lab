@@ -171,11 +171,37 @@ export async function deleteBook(id: string): Promise<void> {
   await done(tx)
 }
 
-/** 存原文件。慢、可能失败，调用方要接住。 */
-export async function savePdf(id: string, blob: Blob): Promise<void> {
+/** 原文件的身份：页数 + 首页开头，用来发现「记录与 blob 不是同一本」。 */
+export type PdfMeta = { numPages: number; head: string }
+
+/** 一条原件记录：blob 与它的身份。 */
+export type PdfRecord = { blob: Blob; meta: PdfMeta | null }
+
+/** 读一条原件记录（含身份）；没存过原件返回 null。 */
+export async function readPdfRecord(id: string): Promise<PdfRecord | null> {
+  const db = await openDb()
+  const record = await new Promise<{ blob?: Blob; meta?: PdfMeta | null } | undefined>((resolve, reject) => {
+    const request = db.transaction(STORE_PDFS, 'readonly').objectStore(STORE_PDFS).get(id)
+    request.onsuccess = () => resolve(request.result as { blob?: Blob; meta?: PdfMeta | null } | undefined)
+    request.onerror = () => reject(request.error)
+  })
+  if (!record || !record.blob) return null
+  return { blob: record.blob, meta: record.meta ?? null }
+}
+
+/** 删原件，目录一个字段都不动。 */
+export async function deletePdf(id: string): Promise<void> {
   const db = await openDb()
   const tx = db.transaction(STORE_PDFS, 'readwrite')
-  tx.objectStore(STORE_PDFS).put({ id, blob, bytes: blob.size, savedAt: Date.now() })
+  tx.objectStore(STORE_PDFS).delete(id)
+  await done(tx)
+}
+
+/** 存原文件（带身份）。慢、可能失败，调用方要接住。 */
+export async function savePdf(id: string, blob: Blob, meta: PdfMeta | null): Promise<void> {
+  const db = await openDb()
+  const tx = db.transaction(STORE_PDFS, 'readwrite')
+  tx.objectStore(STORE_PDFS).put({ id, blob, bytes: blob.size, meta, savedAt: Date.now() })
   await done(tx)
 }
 
