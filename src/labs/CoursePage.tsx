@@ -129,6 +129,25 @@ const Control = memo(function Control({
   )
 })
 
+/**
+ * 深度实验台入口。数据只有一处——`src/core/course.ts` 每章的 labs，
+ * 这里只负责画：已实现的章（结论卡下面）与未实现的章（TodoScreen）共用，
+ * 免得 labs 只写在一边、另一边成了死代码。没有 labs 的章不占位。
+ */
+function CourseLabs({ labs }: { labs?: { label: string; href: string }[] }) {
+  if (!labs?.length) return null
+  return (
+    <div className="course-labs">
+      {labs.map((lab) => (
+        <a className="course-btn" key={lab.href} href={lab.href}>
+          去{/^[A-Za-z]/.test(lab.label) ? ' ' : ''}
+          {lab.label}
+        </a>
+      ))}
+    </div>
+  )
+}
+
 const ChapterScreen = memo(function ChapterScreen({
   chapter,
   params,
@@ -215,6 +234,7 @@ const ChapterScreen = memo(function ChapterScreen({
             回到默认
           </button>
         </div>
+        <CourseLabs labs={chapter.labs} />
       </section>
     </>
   )
@@ -431,7 +451,7 @@ export function CoursePage() {
           左边是目录，点一章，右边给一屏：一句话问题、两三个滑块、一张图、三个读数、一句话结论。
           {usingDefault
             ? ' 13 章全部能拖，另有实验台可以直接跳到对应的交互页。'
-            : ' 现在用的是你导入的教材，目录只在内存里，刷新就回到默认 13 章。'}
+            : ' 现在用的是你导入的教材，目录存在这台机器的浏览器里，刷新后仍是这一本。'}
         </p>
       </header>
 
@@ -465,7 +485,8 @@ export function CoursePage() {
           </div>
         </div>
         <p className="textbook-note">
-          PDF 不上传、不落盘；书的章名只活在这一次会话里，刷新就回默认 13 章。
+          目录存在这台机器的浏览器里，刷新后还是这一本，要换书点「切换」；原文件按书架面板的
+          「导入时同时保存原文件」开关决定存不存，存不存都不上传。
         </p>
         {switching ? (
           <ul className="textbook-list">
@@ -575,15 +596,7 @@ function TodoScreen({ chapter }: { chapter: CourseChapter }) {
       <p className="eyebrow">第 {chapter.no} 章 · {chapter.title}</p>
       <h2>未实现</h2>
       <p className="course-reason">{chapter.reason}</p>
-      {chapter.labs?.length ? (
-        <div className="course-links">
-          {chapter.labs.map((lab) => (
-            <a className="course-btn" key={lab.href} href={lab.href}>
-              去{lab.label}
-            </a>
-          ))}
-        </div>
-      ) : null}
+      <CourseLabs labs={chapter.labs} />
     </section>
   )
 }

@@ -2888,6 +2888,14 @@ video::-webkit-media-controls-overlay-play-button {
   gap: 10px;
 }
 
+/* 深度实验台入口：接在「让它失效」那一行的下一行，窄屏自动折行。 */
+.course-labs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
 .course-btn {
   display: inline-block;
   padding: 7px 14px;
