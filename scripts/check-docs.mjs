@@ -207,7 +207,12 @@ const ch13 = chapterByNo(13);
 const ch13Fail = ch13.compute({ ...ch13.defaults, ...ch13.failPreset });
 const pllResidual = Number(String(ch13Fail.readouts[0].value).split('/')[0].trim());
 
+const evmMin = Math.min(...QAM_ORDERS.map((order) => p12(order).evmPercent));
+const evmMax = Math.max(...QAM_ORDERS.map((order) => p12(order).evmPercent));
+
 add('docs/works-intro.md', '测试条数', /([\d,]+) 条测试/, [testCount], [EXACT]);
+add('docs/works-intro.md', '测试条数（正文第二处）', /测试 ([\d,]+) 条/, [testCount], [EXACT]);
+add('docs/works-intro.md', '测试文件数', /分布在 ([\d,]+) 个文件里/, [testFileCount], [EXACT]);
 add('docs/works-intro.md', '课程视图章数', /课程视图 (\d+) 章/, [COURSE_CHAPTERS.length], [EXACT]);
 add(
   'docs/works-intro.md',
@@ -217,7 +222,8 @@ add(
   [PRINTED, EXACT, EXACT],
 );
 add('docs/works-intro.md', '64QAM 12 dB 的误码率', /64QAM 是 ([\d.e+-]+)/, [p12(64).ber], [PRINTED]);
-add('docs/works-intro.md', '四档 EVM', /EVM 都是 ([\d.]+)%/, [p12(16).evmPercent], [EVM]);
+add('docs/works-intro.md', '四档 EVM 的实测区间', /四档的 EVM 实测在 ([\d.]+)% 到 ([\d.]+)% 之间/, [evmMin, evmMax], [EVM, EVM]);
+add('docs/works-intro.md', '截图图注的读数分母', /读数条带分母 ([\d,]+) \/ ([\d,]+)/, [p12(16).bitErrors, p12(16).bitCount], [EXACT, EXACT]);
 add('docs/works-intro.md', '自由距离与纠错能力', /自由距离 (\d+)，能纠 (\d+) 位/, [dFree.distance, capability], [EXACT, EXACT]);
 add(
   'docs/works-intro.md',
