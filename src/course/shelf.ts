@@ -281,3 +281,17 @@ export function coverageOf(book: ShelfBook): Coverage {
     rows,
   }
 }
+
+/**
+ * 稳定书号：文件名 + 字节数 + 前 4 KB 的 SHA-256 前 8 字节。
+ * 同一个文件不管导入几次都落到同一个 id，OCR 缓存与正文结果才能命中。
+ */
+export async function stableBookId(fileName: string, bytes: Uint8Array): Promise<string> {
+  const head = bytes.subarray(0, 4096)
+  const prefix = new TextEncoder().encode(`${fileName}\u0000${bytes.byteLength}\u0000`)
+  const merged = new Uint8Array(prefix.length + head.length)
+  merged.set(prefix, 0)
+  merged.set(head, prefix.length)
+  const digest = await crypto.subtle.digest('SHA-256', merged)
+  return Array.from(new Uint8Array(digest).slice(0, 8), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}

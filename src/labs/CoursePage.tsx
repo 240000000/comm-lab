@@ -5,7 +5,7 @@
  * 一句话问题、两三个滑块、一张图、三个读数、一句话结论。
  * 每章的计算都在 src/core/course.ts 里，页面只负责把参数递进去、把结果摆出来。
  */
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createDragCoalescer } from './dragCommit'
 import {
   COURSE_CHAPTERS,
@@ -20,6 +20,8 @@ import { CourseChart } from './CourseChart.tsx'
 import { CourseLegend } from './CourseLegend.tsx'
 import { ParamSlider } from './ParamSlider.tsx'
 import { PdfPane, type PdfScale } from './PdfPane.tsx'
+import { getBookPdf, loadDoc } from '../course/pdfSource.ts'
+import type { ChapterScan } from '../course/chapterOcr.ts'
 import type { OutlineEntry } from '../course/pdfOutline.ts'
 import {
   DEFAULT_BOOK_ID,
@@ -31,6 +33,7 @@ import {
   defaultShelfBook,
   evidenceOf,
   isPlayable,
+  stableBookId,
 } from '../course/shelf.ts'
 import type { ShelfBook } from '../course/shelf.ts'
 import { getShelf, importBook, markPdfSaved, noteStorage, removeBookById, setActive, useShelf } from '../course/shelfStore.ts'
@@ -38,11 +41,31 @@ import { saveOriginalPdf } from './bookStorage.ts'
 
 const START_CHAPTER = 2
 
+/** 打开原件的上限：484 页的扫描书解析要几十秒，但超过三分钟就是卡死了。 */
+const DOC_OPEN_TIMEOUT_MS = 180_000
+
+/** 给任意 promise 套一个上限，超时就抛错——不然界面永远停在「0/13」。 */
+function withTimeout<T>(task: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), ms)
+    task.then(
+      (value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
 /** 扫描件导入的三段状态：识别中、等确认、失败退回手动。 */
 type OcrState =
   | { phase: 'reading'; page: number; total: number }
-  | { phase: 'confirm'; fileName: string; entries: OutlineEntry[]; offset: number }
-  | { phase: 'failed'; fileName: string; message: string }
+  | { phase: 'confirm'; fileName: string; bookId: string; entries: OutlineEntry[]; offset: number }
+  | { phase: 'failed'; fileName: string; bookId: string; message: string }
 
 /** 地址里带 ?no=5 时直接打开第 5 章，截图与分享都用得上。 */
 function initialChapter(): number {
@@ -170,6 +193,9 @@ const ChapterScreen = memo(function ChapterScreen({
   onFail,
   onReset,
   view,
+  evidence,
+  onJump,
+  onJumpPage,
 }: {
   chapter: CourseChapter
   params: Record<string, number>
@@ -179,6 +205,9 @@ const ChapterScreen = memo(function ChapterScreen({
   onFail: () => void
   onReset: () => void
   view: CourseView
+  evidence: ChapterScan | null
+  onJump: (no: number) => void
+  onJumpPage: (page: number) => void
 }) {
   return (
     <>
@@ -240,6 +269,23 @@ const ChapterScreen = memo(function ChapterScreen({
 
       <section className={`course-conclusion${view.failed ? ' failed' : ''}`}>
         <p>{view.conclusion}</p>
+        {evidence ? (
+          <p className="course-evidence">
+            书上这一节：第 {chapter.no} 章 · 第 {evidence.page} 页
+            {evidence.hits.length > 0 ? ` · 命中 ${evidence.hits.join('、')}` : ' · 没抠到概念词'}
+            {evidence.topicNo && evidence.topicNo !== chapter.no
+              ? ` · 最像第 ${evidence.topicNo} 章 ${evidence.name}`
+              : ''}
+            <button type="button" className="course-btn ghost" onClick={() => onJumpPage(evidence.page)}>
+              翻到第 {evidence.page} 页
+            </button>
+            {evidence.topicNo && evidence.topicNo !== chapter.no ? (
+              <button type="button" className="course-btn ghost" onClick={() => onJump(evidence.topicNo as number)}>
+                去看
+              </button>
+            ) : null}
+          </p>
+        ) : null}
         <div className="course-actions">
           <button type="button" className="course-btn" onClick={onFail}>
             让它失效
@@ -285,6 +331,81 @@ export function CoursePage() {
   const hasPdf = Boolean(pdfBytes[book.id])
   const [showBook, setShowBook] = useState(true)
   const [bookScale, setBookScale] = useState<PdfScale>('fit')
+  const [scanState, setScanState] = useState<{
+    key: string
+    scans?: ChapterScan[]
+    progress?: { done: number; total: number }
+    note?: string
+  } | null>(null)
+
+  // 扫描版：有原件的书导入后自动读每章首页，给结论卡补一行「书上这一节」。
+  // 「这本书扫过没有」放在 ref 里：把 scanState 当依赖会让 effect 自己触发自己，
+  // 第一次 setScanState 就把 alive 置 false，后面的识别永远静默不跑（0/13 卡死）。
+  const scanStarted = useRef<string | null>(null)
+  useEffect(() => {
+    if (usingDefault || !hasPdf) return
+    if (scanStarted.current === book.id) return
+    scanStarted.current = book.id
+    let alive = true
+    // 卡在哪一步要看得见：大扫描件慢起来是几分钟，光看 0/13 分不清是在解析
+    // 原文件还是在等识别引擎。阶段写在 <html data-r108stage>，截图与脚本都能读。
+    const stage = (name: string, detail = '') => {
+      document.documentElement.dataset.r108stage = detail ? `${name}:${detail}` : name
+    }
+    void (async () => {
+      const blob = await getBookPdf(book.id)
+      if (!blob || !alive) return
+      stage('blob', String(blob.size))
+      setScanState({ key: book.id, progress: { done: 0, total: book.chapters.length } })
+      // 右侧预览已经把这本书解析开了就借它的 doc：153 MB 的扫描件在同一页
+      // 开两份，解析会卡到进度条永远停在 0/13 且不报错。
+      stage('open')
+      const loaded = await withTimeout(loadDoc(book.id), DOC_OPEN_TIMEOUT_MS, '打开原文件超时').catch(
+        (error: unknown) => {
+          stage('open-failed', error instanceof Error ? error.message : '打开失败')
+          return null
+        },
+      )
+      if (!alive) return
+      if (!loaded || loaded.status !== 'ok') {
+        setScanState({ key: book.id, note: '原件没能打开，正文识别跳过' })
+        return
+      }
+      stage('ocr')
+      const { recognizeChapterHeads } = await import('../course/chapterOcr.ts')
+      const outcome = await recognizeChapterHeads(
+        book.id,
+        blob,
+        book.chapters,
+        (progress) => {
+          if (alive) setScanState({ key: book.id, progress: { done: progress.done, total: progress.total } })
+        },
+        { doc: loaded.doc },
+      )
+      if (!alive) return
+      if (outcome.ok) {
+        console.info('[R108]', JSON.stringify(outcome.scans))
+        document.documentElement.dataset.r108 = JSON.stringify(outcome.scans)
+        setScanState({ key: book.id, scans: outcome.scans })
+      } else {
+        setScanState({ key: book.id, note: outcome.message })
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  // 依赖里不能放 scanState：它一写入就会重跑 effect、把 alive 置 false，
+    // 识别链在第一个 await 之后就静默退出了（曾经卡在 0/13 的原因）。
+  }, [book, hasPdf, usingDefault])
+
+  const chapterScanOf = useCallback(
+    (chapterNo: number): ChapterScan | null => {
+      const bookChapter = book.chapters.find((chapter) => chapter.topicId === String(chapterNo))
+      if (!scanState || scanState.key !== book.id || !scanState.scans) return null
+      return scanState.scans.find((scan) => scan.chapterNo === (bookChapter?.no ?? chapterNo)) ?? null
+    },
+    [book, scanState],
+  )
   const pageKey = `${book.id}:${no}`
   const [pageChoice, setPageChoice] = useState<{ key: string; page: number } | null>(null)
   const [ocrState, setOcrState] = useState<OcrState | null>(null)
@@ -359,7 +480,7 @@ export function CoursePage() {
   }, [])
 
   /** 扫描件：读前 12 页找目录页，OCR 一页，抠出章名后等用户确认。 */
-  const tryOcrOutline = useCallback(async (file: File, fileName: string) => {
+  const tryOcrOutline = useCallback(async (file: File, fileName: string, bookId: string) => {
     ocrFile.current = file
     setOcrState({ phase: 'reading', page: 0, total: 1 })
     try {
@@ -376,39 +497,59 @@ export function CoursePage() {
       } finally {
         await doc.destroy()
       }
-      // 有文字层就直接挑目录页；扫描件没有文字，只能把前 12 页逐页 OCR 再挑。
-      let tocText = ''
+      // 有文字层就直接挑目录页；扫描件没有文字，只能逐页 OCR 再挑。
+      let tocPages: string[] = []
       const textToc = outlineOcr.findTocPage(pages)
       if (textToc > 0) {
-        tocText = pages[textToc - 1] ?? ''
+        tocPages = pages.slice(textToc - 1, textToc + 8)
       } else {
         const controller = new AbortController()
         ocrAbort.current = controller
-        const pageNumbers = Array.from(
-          { length: Math.min(12, pageCount) },
-          (_, index) => index + 1,
-        )
-        const outcome = await ocr.recognizePages(
-          file,
-          pageNumbers,
-          (progress) =>
-            setOcrState({ phase: 'reading', page: progress.page, total: progress.total }),
-          { bookId: `imported-${Date.now()}`, signal: controller.signal },
-        )
+        const limit = Math.min(20, pageCount)
+        const scanned: string[] = []
+        const collect = async (from: number, to: number): Promise<string[]> => {
+          if (to <= from) return []
+          const outcome = await ocr.recognizePages(
+            file,
+            Array.from({ length: to - from }, (_, index) => from + index + 1),
+            (progress) =>
+              setOcrState({ phase: 'reading', page: progress.page, total: progress.total }),
+            { bookId, signal: controller.signal },
+          )
+          if (!outcome.ok) throw new Error(outcome.message)
+          return outcome.pages.map((item) => item.text)
+        }
+        // 真书的目录紧挨着前言，扫前 4 页就能认出来；认不出才往后翻到第 20 页。
+        scanned.push(...(await collect(0, Math.min(4, limit))))
+        let tocIndex = outlineOcr.findTocPage(scanned)
+        if (tocIndex < 0 && limit > 4) {
+          scanned.push(...(await collect(4, limit)))
+          tocIndex = outlineOcr.findTocPage(scanned)
+        }
         ocrAbort.current = null
-        if (!outcome.ok) throw new Error(outcome.message)
-        const scanned = outcome.pages.map((item) => item.text)
-        const tocIndex = outlineOcr.findTocPage(scanned)
-        if (tocIndex < 0) throw new Error('前 12 页里没找到目录页')
-        tocText = scanned[tocIndex - 1] ?? ''
+        if (tocIndex < 0) throw new Error('前 20 页里没找到目录页')
+        // 目录常常跨四五页，只取「目录」那页会漏掉后半本的章；按编号密度把所有目录页捡回来。
+        const dense = outlineOcr.tocDensePages(scanned)
+        tocPages =
+          dense.length > 0
+            ? dense.map((index) => scanned[index])
+            : scanned.slice(tocIndex - 1, tocIndex + 8)
       }
-      const entries = outlineOcr.parseTocEntries(tocText).filter((entry) => entry.depth === 0)
+      // 扫描件的「第 N 章」常被认成「第 针 章」，改按目录里的「N.1」定章；
+      // 有文字层的书照旧走章名那一套。
+      let entries = outlineOcr.parseTocChapters(tocPages)
+      if (entries.length === 0) {
+        entries = outlineOcr
+          .parseTocEntries(tocPages.join('\n'))
+          .filter((entry) => entry.depth === 0)
+      }
       if (entries.length === 0) throw new Error('目录页的文字认出来了，但没抠出章名')
-      setOcrState({ phase: 'confirm', fileName, entries, offset: 0 })
+      setOcrState({ phase: 'confirm', fileName, bookId, entries, offset: 0 })
     } catch (error) {
       setOcrState({
         phase: 'failed',
         fileName,
+        bookId,
         message: error instanceof Error ? error.message : '识别失败，可以手动输目录',
       })
     } finally {
@@ -422,7 +563,7 @@ export function CoursePage() {
     const { mapPrintedPages } = await import('../course/outlineOcr.ts')
     const title = ocrState.fileName.replace(/\.pdf$/i, '')
     const mapped = mapPrintedPages(ocrState.entries, ocrState.offset)
-    const added = bookFromSections(title, mapped, `imported-${Date.now()}`)
+    const added = bookFromSections(title, mapped, ocrState.bookId)
     importBook(added)
     setBill({ fileName: ocrState.fileName, book: added })
     setOcrState(null)
@@ -473,15 +614,23 @@ export function CoursePage() {
       // 只有真的选了文件才把这几个模块拉下来。
       const outline = await import('../course/pdfOutline.ts')
       try {
-        const entries = await outline.parsePdfOutline(await file.arrayBuffer())
+        const bytes = await file.arrayBuffer()
+        const bookId = await stableBookId(fileName, new Uint8Array(bytes))
+        const forceOcr = new URLSearchParams(window.location.search).get('noOutline') === '1'
+        if (forceOcr) {
+          setImportState({ status: 'idle' })
+          await tryOcrOutline(file, fileName, bookId)
+          return
+        }
+        const entries = await outline.parsePdfOutline(bytes)
         if (entries.length === 0) {
           // 扫描件没有书签、文字层也抠不出章名：先试 OCR 读目录页，失败再退回手动输入。
           setImportState({ status: 'idle' })
-          await tryOcrOutline(file, fileName)
+          await tryOcrOutline(file, fileName, bookId)
           return
         }
         const title = fileName.replace(/\.pdf$/i, '')
-        const added = bookFromSections(title, entries, `imported-${Date.now()}`)
+        const added = bookFromSections(title, entries, bookId)
         importBook(added)
         setBill({ fileName, book: added })
         setImportState({ status: 'idle' })
@@ -658,6 +807,17 @@ export function CoursePage() {
         ) : null}
       </section>
 
+      {usingDefault || !hasPdf ? null : (
+        <p className="course-scan-note">
+          {scanState?.key === book.id && scanState.progress
+            ? `扫描版 · 正在识别正文 ${scanState.progress.done}/${scanState.progress.total} 章`
+            : null}
+          {scanState?.key === book.id && scanState.scans
+            ? `扫描版 · 正文已识别 ${scanState.scans.filter((scan) => scan.chars > 80).length}/${book.chapters.length} 章`
+            : null}
+          {scanState?.key === book.id && scanState.note ? `正文识别没成：${scanState.note}` : null}
+        </p>
+      )}
       <div className="course-book-toggle">
         <button type="button" className="course-book-toggle-btn" onClick={() => setShowBook((open) => !open)}>
           {showBook ? '收起书栏' : '同屏看书'}
@@ -818,6 +978,12 @@ export function CoursePage() {
               onFail={onFail}
               onReset={onReset}
               view={view}
+              evidence={chapterScanOf(no)}
+              onJump={(next) => pick(next)}
+              onJumpPage={(next) => {
+                setShowBook(true)
+                changeBookPage(next)
+              }}
             />
           ) : (
             <TodoScreen chapter={chapter} />

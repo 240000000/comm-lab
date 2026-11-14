@@ -94,6 +94,12 @@ export type RecognizeOptions = {
   bookId?: string
   signal?: AbortSignal
   worker?: OcrWorker
+  /**
+   * 已经打开的 PDF。逐章识别时整本书只解析一次：153 MB 的扫描件
+   * 每章重新 arrayBuffer + 解析一遍，进度条会长时间停在 0/13 不动。
+   * 传了它就用它，且这里不负责 destroy。
+   */
+  doc?: PdfDocument
   /** 测试用：替换缓存读写。 */
   cacheRead?: (key: string) => Promise<string | null>
   cacheWrite?: (key: string, text: string) => Promise<void>
@@ -105,7 +111,7 @@ export type RecognizeOptions = {
  * 传入 `worker` 时调用方负责 terminate；不传就自己起自己收。
  */
 export async function recognizePages(
-  blob: Blob,
+  blob: Blob | null,
   pages: number[],
   onProgress?: (progress: OcrProgress) => void,
   options: RecognizeOptions = {},
@@ -116,6 +122,7 @@ export async function recognizePages(
   const bookId = options.bookId ?? 'adhoc'
   let worker: OcrWorker | null = options.worker ?? null
   let doc: PdfDocument | null = null
+  const ownDoc = !options.doc
   try {
     const cachedTexts: Array<string | null> = []
     for (const pageNumber of pages) {
@@ -137,7 +144,7 @@ export async function recognizePages(
     }
     onProgress?.({ stage: 'loading', page: 0, total: pages.length, message: '正在唤醒识别引擎' })
     if (!worker) worker = await createOcrWorker()
-    doc = await loadFromPdfjs(new Uint8Array(await blob.arrayBuffer()))
+    doc = options.doc ?? (await loadFromPdfjs(new Uint8Array(await (blob as Blob).arrayBuffer())))
     const out: OcrPageText[] = []
     let cachedPages = 0
     for (let index = 0; index < pages.length; index += 1) {
@@ -186,13 +193,15 @@ export async function recognizePages(
         message: `正在识别目录页 ${index + 1}/${pages.length}`,
       })
     }
-    await doc.destroy()
-    doc = null
+    if (ownDoc && doc) {
+      await doc.destroy()
+      doc = null
+    }
     return { ok: true, pages: out, elapsedMs: Date.now() - started, cachedPages }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : '识别失败' }
   } finally {
-    if (doc) await doc.destroy().catch(() => {})
+    if (ownDoc && doc) await doc.destroy().catch(() => {})
     if (!options.worker && worker) await worker.terminate().catch(() => {})
   }
 }

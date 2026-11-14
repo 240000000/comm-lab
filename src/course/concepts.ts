@@ -184,3 +184,57 @@ export function scoreSection(text: string): TopicScore[] {
   scored.sort((a, b) => b.score - a.score)
   return scored.slice(0, 3)
 }
+
+/**
+ * 词的稀有度：一个词出现在几章的词表里，权重就取它的倒数。
+ *
+ * 扫描版逐章首页识别时，「信道」「噪声」「调制」这类词每章都有，按次数累加会把
+ * 绪论顶到每一章头上；按稀有度加权后，「正交」「伪随机」「确知信号」这种只在
+ * 某一章出现的词才决定归属。
+ */
+const TERM_WEIGHT: Map<string, number> = (() => {
+  const docFreq = new Map<string, number>()
+  for (const topic of TOPICS) {
+    for (const term of topic.terms) {
+      const key = normalize(term)
+      docFreq.set(key, (docFreq.get(key) ?? 0) + 1)
+    }
+  }
+  const weights = new Map<string, number>()
+  for (const [key, count] of docFreq) weights.set(key, 1 / count)
+  return weights
+})()
+
+/** 与 scoreSection 同样的返回形状，但按词的稀有度加权。 */
+export function scoreSectionRare(text: string): TopicScore[] {
+  const haystack = normalize(text)
+  const scored = TOPICS.map((topic) => {
+    const hits: string[] = []
+    let score = 0
+    for (const term of topic.terms) {
+      const count = countTerm(haystack, term)
+      if (count > 0) {
+        hits.push(term)
+        score += count * (TERM_WEIGHT.get(normalize(term)) ?? 1)
+      }
+    }
+    return { topicId: topic.topicId, score: Math.round(score * 100) / 100, hits }
+  })
+  scored.sort((a, b) => b.score - a.score)
+  return scored.slice(0, 3)
+}
+
+/** 一页正文里各章词表词的命中次数；键与 TERM_WEIGHT 一样是归一化后的词。 */
+export function countTerms(text: string): Map<string, number> {
+  const haystack = normalize(text)
+  const counts = new Map<string, number>()
+  for (const topic of TOPICS) {
+    for (const term of topic.terms) {
+      const key = normalize(term)
+      if (counts.has(key)) continue
+      const count = countTerm(haystack, term)
+      if (count > 0) counts.set(key, count)
+    }
+  }
+  return counts
+}

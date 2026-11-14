@@ -47,7 +47,9 @@ function openShelfDb(): Promise<IDBDatabase> {
       reject(new Error('这个环境没有 IndexedDB'))
       return
     }
-    const request = indexedDB.open(DB_NAME, 1)
+    // 不带版本号：只按现有版本打开。写死 1 会在 R107 把库升到 2 之后抛 VersionError，
+    // 原文件明明在库里却永远读成 null（扫描版识别整条链路因此静默不动）。
+    const request = indexedDB.open(DB_NAME)
     // 库不存在时不要顺手建表：读不到原文件就是 null，建表是 shelfDb 的事。
     request.onupgradeneeded = () => undefined
     request.onsuccess = () => resolve(request.result)
@@ -96,12 +98,26 @@ export async function loadFromPdfjs(bytes: Uint8Array): Promise<PdfDocument> {
     const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')) as { default: string }
     pdfjs.GlobalWorkerOptions.workerSrc = worker.default
   }
+  // 大扫描件在浏览器里解析要几十秒到几分钟，卡在哪一步得留痕：
+  // <html data-r108parse> 记下字节数、解析耗时与页数（截图与脚本都读得到）。
+  const parseStart = Date.now()
+  const mark = (value: string) => {
+    if (typeof document !== 'undefined') document.documentElement.dataset.r108parse = value
+  }
+  mark(`start:${bytes.length}`)
   const task = pdfjs.getDocument({
     // pdf.js 会把这个 buffer 转移走，给一份副本，调用方手里的还在。
     data: bytes.slice(),
     ...(typeof window === 'undefined' ? { disableWorker: true } : {}),
   })
-  const doc = (await task.promise) as { numPages: number; getPage: (page: number) => Promise<unknown> }
+  let doc: { numPages: number; getPage: (page: number) => Promise<unknown> }
+  try {
+    doc = (await task.promise) as typeof doc
+  } catch (error) {
+    mark(`error:${Date.now() - parseStart}:${error instanceof Error ? error.message : '未知错误'}`)
+    throw error
+  }
+  mark(`done:${Date.now() - parseStart}:${doc.numPages}`)
   // pdfjs 6 的 PDFDocumentProxy 没有 destroy；销毁要落在 loadingTask 上。
   return {
     numPages: doc.numPages,
