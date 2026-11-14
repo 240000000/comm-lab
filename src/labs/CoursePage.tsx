@@ -6,6 +6,7 @@
  * 每章的计算都在 src/core/course.ts 里，页面只负责把参数递进去、把结果摆出来。
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { createDragCoalescer } from './dragCommit'
 import {
   COURSE_CHAPTERS,
@@ -361,6 +362,71 @@ export function CoursePage() {
     setShowBook(true)
   }, [hasPdf])
   const [bookScale, setBookScale] = useState<PdfScale>('fit')
+
+  // R114：书栏可拖宽，只解决「一边看课本一边做交互」的视野，不碰识别与渲染。
+  // 宽度只活在组件 state 里：不写 localStorage、不写 IndexedDB，刷新即回默认。
+  const BOOK_MIN = 300
+  const BOOK_MAX_RATIO = 0.6
+  const BOOK_DEFAULT_RATIO = 0.45
+  const BOOK_STEP = 16
+  const layoutRef = useRef<HTMLDivElement>(null)
+  const paneRef = useRef<HTMLElement>(null)
+  const drag = useRef<{ startX: number; startWidth: number; usable: number } | null>(null)
+  const [bookWidth, setBookWidth] = useState<number | null>(null)
+  const [bookUsable, setBookUsable] = useState(0)
+  const clampBookWidth = (px: number, usable: number) =>
+    Math.round(Math.min(Math.max(px, BOOK_MIN), Math.max(BOOK_MIN, usable * BOOK_MAX_RATIO)))
+  // 可用宽度 = 版面宽度去掉左侧章节导航（264px）与分隔条（8px）。
+  const measureBook = () => {
+    const el = layoutRef.current
+    if (!el) return 0
+    return Math.max(0, el.clientWidth - 272)
+  }
+  // 版面一变就重算：没拖过就给 45%，拖过就把旧宽度夹回 [300px, 60%]。
+  useEffect(() => {
+    if (!showBook || !hasPdf) return
+    const apply = () => {
+      const usable = measureBook()
+      setBookUsable(usable)
+      if (usable <= 0) return
+      setBookWidth((current) =>
+        current === null ? Math.round(usable * BOOK_DEFAULT_RATIO) : clampBookWidth(current, usable),
+      )
+    }
+    apply()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(apply)
+    if (layoutRef.current) observer.observe(layoutRef.current)
+    return () => observer.disconnect()
+  }, [showBook, hasPdf])
+  const resetBookWidth = () => {
+    const usable = measureBook()
+    if (usable > 0) setBookWidth(Math.round(usable * BOOK_DEFAULT_RATIO))
+  }
+  const nudgeBookWidth = (delta: number) => {
+    const usable = measureBook()
+    if (usable <= 0) return
+    setBookWidth((current) => clampBookWidth((current ?? Math.round(usable * BOOK_DEFAULT_RATIO)) + delta, usable))
+  }
+  const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const usable = measureBook()
+    const startWidth = paneRef.current?.getBoundingClientRect().width ?? bookWidth ?? Math.round(usable * BOOK_DEFAULT_RATIO)
+    drag.current = { startX: event.clientX, startWidth, usable }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const moveDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const state = drag.current
+    if (!state) return
+    // 分隔条往左拖 = 书栏变宽，所以位移取反。
+    setBookWidth(clampBookWidth(state.startWidth - (event.clientX - state.startX), state.usable))
+  }
+  const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return
+    drag.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
   const [scanState, setScanState] = useState<{
     key: string
     scans?: ChapterScan[]
@@ -875,7 +941,15 @@ export function CoursePage() {
         ) : null}
       </div>
 
-      <div className={`course-layout${showBook && hasPdf ? ' with-book' : ''}`}>
+      <div
+        ref={layoutRef}
+        className={`course-layout${showBook && hasPdf ? ' with-book' : ''}`}
+        style={
+          showBook && hasPdf && bookWidth !== null
+            ? { gridTemplateColumns: `264px minmax(0, 1fr) 8px ${bookWidth}px` }
+            : undefined
+        }
+      >
         <div className="course-side">
           {importState.status === 'parsing' ? (
             <p className="course-import-status">
@@ -1044,7 +1118,40 @@ export function CoursePage() {
         </section>
 
         {showBook && hasPdf ? (
-          <aside className="course-book-pane" aria-label="教材原文">
+          <div
+            className="course-book-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="拖动调整书栏宽度"
+            aria-valuemin={bookUsable > 0 ? Math.max(1, Math.round((BOOK_MIN / bookUsable) * 100)) : 30}
+            aria-valuemax={60}
+            aria-valuenow={
+              bookUsable > 0 && bookWidth !== null ? Math.round((bookWidth / bookUsable) * 100) : 45
+            }
+            tabIndex={0}
+            title="拖动调整书栏宽度；双击复位；左右方向键每次 16 px"
+            onPointerDown={startDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onDoubleClick={resetBookWidth}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowLeft') {
+                event.preventDefault()
+                nudgeBookWidth(BOOK_STEP)
+              } else if (event.key === 'ArrowRight') {
+                event.preventDefault()
+                nudgeBookWidth(-BOOK_STEP)
+              } else if (event.key === 'Home') {
+                event.preventDefault()
+                resetBookWidth()
+              }
+            }}
+          />
+        ) : null}
+
+        {showBook && hasPdf ? (
+          <aside ref={paneRef} className="course-book-pane" aria-label="教材原文">
             <button
               type="button"
               className="course-book-close"

@@ -30,7 +30,28 @@
 }
 
 .course-layout.with-book {
-  grid-template-columns: 264px minmax(0, 6fr) minmax(0, 4fr);
+  /* R114：书栏默认 45%，可拖到 [300px, 60%]；实际宽度由课程页按拖动结果写进行内样式。 */
+  grid-template-columns: 264px minmax(0, 1fr) 8px minmax(300px, 45%);
+}
+
+.course-book-resizer {
+  align-self: stretch;
+  min-height: 120px;
+  border-radius: 4px;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  transition: background 120ms ease;
+}
+
+.course-book-resizer:hover,
+.course-book-resizer:focus-visible {
+  background: rgba(122, 172, 255, 0.3);
+}
+
+.course-book-resizer:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .course-book-pane {
@@ -189,6 +210,11 @@
 @media (max-width: 1080px) {
   .course-layout.with-book {
     grid-template-columns: 264px minmax(0, 1fr);
+  }
+
+  /* 窄屏书栏是整块浮层，没有可拖的落点。 */
+  .course-book-resizer {
+    display: none;
   }
 
   .course-book-pane {
