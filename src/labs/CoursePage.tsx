@@ -21,7 +21,9 @@ import { CourseLegend } from './CourseLegend.tsx'
 import { ParamSlider } from './ParamSlider.tsx'
 import { PdfPane, type PdfScale } from './PdfPane.tsx'
 import { getBookPdf, loadDoc } from '../course/pdfSource.ts'
+import { parseScanCache, scanCacheKey } from '../course/scanCache.ts'
 import type { ChapterScan } from '../course/chapterOcr.ts'
+import { readOcrText, saveOcrText } from '../course/shelfDb.ts'
 import type { OutlineEntry } from '../course/pdfOutline.ts'
 import {
   DEFAULT_BOOK_ID,
@@ -194,6 +196,7 @@ const ChapterScreen = memo(function ChapterScreen({
   onReset,
   view,
   evidence,
+  canJumpPage,
   onJump,
   onJumpPage,
 }: {
@@ -206,6 +209,8 @@ const ChapterScreen = memo(function ChapterScreen({
   onReset: () => void
   view: CourseView
   evidence: ChapterScan | null
+  /** 只有存了原件的书才能翻页：只存目录的书翻过去是空白页，不如把话说清楚。 */
+  canJumpPage: boolean
   onJump: (no: number) => void
   onJumpPage: (page: number) => void
 }) {
@@ -276,9 +281,18 @@ const ChapterScreen = memo(function ChapterScreen({
             {evidence.topicNo && evidence.topicNo !== chapter.no
               ? ` · 最像第 ${evidence.topicNo} 章 ${evidence.name}`
               : ''}
-            <button type="button" className="course-btn ghost" onClick={() => onJumpPage(evidence.page)}>
+            <button
+              type="button"
+              className="course-btn ghost"
+              disabled={!canJumpPage}
+              title={canJumpPage ? undefined : '本书只保存了目录，要看正文请重新导入并勾选保存原文件'}
+              onClick={() => onJumpPage(evidence.page)}
+            >
               翻到第 {evidence.page} 页
             </button>
+            {canJumpPage ? null : (
+              <span className="course-evidence-note">本书只保存了目录，要看正文请重新导入并勾选保存原文件</span>
+            )}
             {evidence.topicNo && evidence.topicNo !== chapter.no ? (
               <button type="button" className="course-btn ghost" onClick={() => onJump(evidence.topicNo as number)}>
                 去看
@@ -343,16 +357,22 @@ export function CoursePage() {
   // 第一次 setScanState 就把 alive 置 false，后面的识别永远静默不跑（0/13 卡死）。
   const scanStarted = useRef<string | null>(null)
   useEffect(() => {
-    if (usingDefault || !hasPdf) return
+    if (usingDefault) return
     if (scanStarted.current === book.id) return
     scanStarted.current = book.id
     let alive = true
+    const cacheKey = scanCacheKey(book.id)
     // 卡在哪一步要看得见：大扫描件慢起来是几分钟，光看 0/13 分不清是在解析
     // 原文件还是在等识别引擎。阶段写在 <html data-r108stage>，截图与脚本都能读。
     const stage = (name: string, detail = '') => {
       document.documentElement.dataset.r108stage = detail ? `${name}:${detail}` : name
     }
     void (async () => {
+      // 先看上次识别的结果：原件被清掉也要让证据行说出页码，只是翻不过去。
+      const cached = parseScanCache(await readOcrText(cacheKey))
+      if (!alive) return
+      if (cached) setScanState({ key: book.id, scans: cached })
+      if (!hasPdf) return
       const blob = await getBookPdf(book.id)
       if (!blob || !alive) return
       stage('blob', String(blob.size))
@@ -387,6 +407,7 @@ export function CoursePage() {
         console.info('[R108]', JSON.stringify(outcome.scans))
         document.documentElement.dataset.r108 = JSON.stringify(outcome.scans)
         setScanState({ key: book.id, scans: outcome.scans })
+        void saveOcrText(cacheKey, JSON.stringify(outcome.scans))
       } else {
         setScanState({ key: book.id, note: outcome.message })
       }
@@ -979,6 +1000,7 @@ export function CoursePage() {
               onReset={onReset}
               view={view}
               evidence={chapterScanOf(no)}
+              canJumpPage={hasPdf && !usingDefault}
               onJump={(next) => pick(next)}
               onJumpPage={(next) => {
                 setShowBook(true)

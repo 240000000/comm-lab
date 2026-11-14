@@ -2918,6 +2918,22 @@ video::-webkit-media-controls-overlay-play-button {
   color: var(--dim);
 }
 
+.course-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.course-btn:disabled:hover {
+  background: transparent;
+}
+
+.course-evidence-note {
+  display: block;
+  margin-top: 6px;
+  color: #f0b464;
+  font-size: 12.5px;
+}
+
 .course-todo {
   padding: 28px;
   border: 1px dashed var(--line);

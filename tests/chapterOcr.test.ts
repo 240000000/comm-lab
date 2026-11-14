@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { TOPICS } from '../src/course/concepts.ts'
 import { scanFromText, scoreChapterTexts } from '../src/course/chapterOcr.ts'
+import { parseScanCache, scanCacheKey } from '../src/course/scanCache.ts'
 import { findTocPage } from '../src/course/outlineOcr.ts'
 import { stableBookId } from '../src/course/shelf.ts'
 
@@ -93,4 +94,15 @@ test('没有节号时退回词频打分，不认「第 N 章」的交叉引用',
     new Map([[9, text]]),
   )
   assert.equal(scans[0].topicNo, Number(topic.topicId.replace(/^ch/i, '')))
+})
+
+test('扫描结果缓存：能原样读回，坏数据当没有', () => {
+  const scans = [scanFromText(4, 78, '4.1 概述 模拟调制 载波 信噪比', 1200)]
+  assert.equal(scanCacheKey('abc123'), 'scan:abc123')
+  assert.deepEqual(parseScanCache(JSON.stringify(scans)), scans)
+  assert.equal(parseScanCache(null), null, '没缓存')
+  assert.equal(parseScanCache(''), null, '空串')
+  assert.equal(parseScanCache('{'), null, '坏 JSON')
+  assert.equal(parseScanCache('[]'), null, '空数组')
+  assert.equal(parseScanCache('[{"chapterNo":4}]'), null, '缺页码与字数')
 })

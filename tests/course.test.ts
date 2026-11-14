@@ -565,11 +565,11 @@ test('第 12 章：τ 的上限恒等于 2 × 实际周期 − 2', () => {
   const tau = chapter.params.find((p) => p.key === 'tau')!
   const expected: Record<string, number> = {
     '0-0': 28,
-    '0-1': 28,
+    '0-1': 8,
     '1-0': 60,
-    '1-1': 60,
+    '1-1': 40,
     '2-0': 124,
-    '2-1': 124,
+    '2-1': 12,
     '3-0': 252,
     '3-1': 68,
   }
@@ -582,6 +582,62 @@ test('第 12 章：τ 的上限恒等于 2 × 实际周期 − 2', () => {
       assert.equal(max, 2 * period - 2, `level=${level} taps=${taps} 的周期 ${period}`)
       assert.equal(max, expected[`${level}-${taps}`], `level=${level} taps=${taps} 的上限`)
     }
+  }
+})
+
+test('第 12 章：本原抽头四档周期 15/31/63/127，非本原 5/21/7/35', () => {
+  const chapter = chapterByNo(12)
+  const periodOf = (level: number, taps: number) => {
+    const view = chapter.compute({ ...chapter.defaults, level, taps, tau: 0 })
+    return Number(view.readouts[0].value)
+  }
+  const good = [15, 31, 63, 127]
+  const bad = [5, 21, 7, 35]
+  for (const level of [0, 1, 2, 3]) {
+    assert.equal(periodOf(level, 0), good[level], `level=${level} 本原抽头`)
+    assert.equal(periodOf(level, 1), bad[level], `level=${level} 非本原抽头`)
+  }
+})
+
+test('第 12 章：非本原档自相关的不同取值个数（n=4/n=6 的短周期只有两个值）', () => {
+  // 用户原本要求「非本原档 y 值个数大于 2」。实测 n=4（周期 5）与 n=6（周期 7）的
+  // 循环自相关只有 1 和 +1/p 两个值——n=4 的全部抽头穷举后也只有 [1,2,3,4] 给出周期 5，
+  // 且循环自相关旋转不变，改初态改不了取值个数。这里按实测钉住 2/4/2/6，
+  // 教学点落在「旁瓣不再等于 −1/p」上，而不是「值变多」。
+  const chapter = chapterByNo(12)
+  const distinctOf = (level: number, taps: number) => {
+    const view = chapter.compute({ ...chapter.defaults, level, taps, tau: 0 })
+    return new Set(view.series[0].points.map(([, y]) => y.toFixed(9))).size
+  }
+  const expected = [2, 4, 2, 6]
+  for (const level of [0, 1, 2, 3]) {
+    const bad = distinctOf(level, 1)
+    assert.equal(bad, expected[level], `level=${level} 非本原抽头`)
+    assert.ok(bad > 0, '自相关至少要有一个取值')
+    assert.ok(distinctOf(level, 0) === 2, `level=${level} 本原抽头应当是双值`)
+  }
+})
+
+test('第 12 章：非本原档的旁瓣对不上 −1/p，参考线标签也换了', () => {
+  const chapter = chapterByNo(12)
+  for (const level of [0, 1, 2, 3]) {
+    const view = chapter.compute({ ...chapter.defaults, level, taps: 1, tau: 0 })
+    const period = Number(view.readouts[0].value)
+    const label = view.guides![0].label
+    assert.ok(label.startsWith('−1/p'), `level=${level} 的参考线标签是 ${label}`)
+    assert.ok(Math.abs(view.guides![0].y + 1 / period) < 1e-12)
+    assert.ok(/不再只有两个值|只剩 1 和/.test(view.conclusion), `level=${level} 的结论句：${view.conclusion}`)
+  }
+})
+
+test('第 12 章：切到非本原后，series 逐点与本原不同', () => {
+  const chapter = chapterByNo(12)
+  for (const level of [0, 1, 2, 3]) {
+    const good = chapter.compute({ ...chapter.defaults, level, taps: 0, tau: 0 }).series[0].points
+    const bad = chapter.compute({ ...chapter.defaults, level, taps: 1, tau: 0 }).series[0].points
+    const n = Math.min(good.length, bad.length)
+    const same = Array.from({ length: n }, (_, i) => good[i][1] === bad[i][1]).filter(Boolean).length
+    assert.ok(same < n, `level=${level} 的本原与非本原序列完全相同`)
   }
 })
 

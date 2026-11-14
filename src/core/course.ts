@@ -1523,11 +1523,17 @@ const MSEO_TAPS: Record<number, number[]> = {
   6: [6, 1],
   7: [7, 3],
 }
-/** 反例抽头：n=7 换成 1 + x + x³ + x⁴ + x⁷，周期从 127 掉到 35。 */
+/**
+ * 反例抽头：四档都换成一个非本原（或退化）多项式，周期分别掉到 5 / 21 / 7 / 35。
+ * n=4 用全 1 多项式 1+x+x²+x³+x⁴，n=6 用 1+x+…+x⁶，都会在短周期上闭合；
+ * n=5 不能取全 1 的 1+x+…+x⁵——奇数级全 1 多项式在全 1 初态下每拍只翻一次符号，
+ * 序列锁死成 1,0,1,0…，周期没有讨论价值，故另选 1+x⁵（周期 21）。
+ * n=7 用 1+x+x³+x⁴+x⁷，周期 35。
+ */
 const MSEO_BAD_TAPS: Record<number, number[]> = {
-  4: [4, 1],
-  5: [5, 2],
-  6: [6, 1],
+  4: [1, 2, 3, 4],
+  5: [1, 5],
+  6: [1, 2, 3, 4, 5, 6],
   7: [1, 3, 4, 7],
 }
 const MSEO_LEVELS = [4, 5, 6, 7]
@@ -1673,7 +1679,9 @@ function computeMseq(params: Record<string, number>): CourseView {
     {
       label: '最大旁瓣',
       value: sidelobe.toFixed(4),
-      hint: `理论 −1/N = ${theorySide.toFixed(5)}；${period - 1} 个非零延迟应当全落在这条线上。`,
+      hint: failed
+        ? `周期掉到 ${period}，参考线改成 −1/p = ${theorySide.toFixed(5)}；可这一档的旁瓣根本没跟着走——非原抽头下「全落在这条线上」不再成立。`
+        : `理论 −1/N = ${theorySide.toFixed(5)}；${period - 1} 个非零延迟应当全落在这条线上。`,
       warn: Math.abs(sidelobe - theorySide) > 1e-6,
     },
     {
@@ -1701,7 +1709,12 @@ function computeMseq(params: Record<string, number>): CourseView {
 
   let conclusion: string
   if (failed) {
-    conclusion = `抽头一换，周期从 ${full} 掉到 ${period}：序列还是 0/1 序列，但自相关不再是双值——屏上一共 ${distinct} 个值，最大旁瓣 ${sidelobe.toFixed(4)} 也离开了 −1/N。拿去做扩频，就分不清「同相」和「错一位」。`
+    // 短周期序列的旁瓣不一定是 −1/p：n=4、n=6 这两档短周期里只剩 1 和 1/p 两个值，
+    // 所以不能笼统说「不再只有两个值」——按实测 distinct 分两种说法，屏上看到什么就说什么。
+    conclusion =
+      distinct > 2
+        ? `抽头一换，周期从 ${full} 掉到 ${period}：序列还是 0/1 序列，但 ${period} 个延迟里的自相关不再只有两个值——屏上一共 ${distinct} 个台阶，最大旁瓣 ${sidelobe.toFixed(4)} 也离开了 −1/p = ${theorySide.toFixed(5)}。拿去做扩频，就分不清「同相」和「错一位」。`
+        : `抽头一换，周期从 ${full} 掉到 ${period}：序列还是 0/1 序列，这一档的短周期里只剩 1 和 ${sidelobe.toFixed(4)} 两个值，但旁瓣对不上 −1/p = ${theorySide.toFixed(5)}；相关峰不再唯一，拿去做扩频，就分不清「同相」和「错一位」。`
   } else {
     conclusion = `${period} 个延迟里，自相关只有两个值：τ=0 处 1，其余 ${period - 1} 个全是 −1/${period} = ${theorySide.toFixed(5)}。这就是扩频能抗多址干扰的底：别人错开一个码元，相关输出就掉到噪声量级。这两个值来自${tapsText}抽头 (${taps.join(', ')}) 定下的反馈多项式，而不是某一段具体码：把抽头切到「非本原」，N 从 ${full} 掉下来，自相关立刻不再只有两个值。`
   }
@@ -1718,7 +1731,7 @@ function computeMseq(params: Record<string, number>): CourseView {
     xRange: [0, shown - 1],
     // 纵轴下界 = 实测最小旁瓣 − 0.08 × (1 − 最小旁瓣)：留白按数据跨度给，三档都看得见。
     yRange: [yLow, 1.06],
-    guides: [{ y: theorySide, label: `−1/N = ${theorySide.toFixed(4)}` }],
+    guides: [{ y: theorySide, label: `${failed ? '−1/p' : '−1/N'} = ${theorySide.toFixed(4)}` }],
     guideLabelAlign: 'right',
     markerX: tau,
     markerLabel: `τ = ${tau}`,
