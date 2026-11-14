@@ -565,11 +565,11 @@ test('第 12 章：τ 的上限恒等于 2 × 实际周期 − 2', () => {
   const tau = chapter.params.find((p) => p.key === 'tau')!
   const expected: Record<string, number> = {
     '0-0': 28,
-    '0-1': 8,
+    '0-1': 10,
     '1-0': 60,
     '1-1': 40,
     '2-0': 124,
-    '2-1': 12,
+    '2-1': 16,
     '3-0': 252,
     '3-1': 68,
   }
@@ -585,35 +585,34 @@ test('第 12 章：τ 的上限恒等于 2 × 实际周期 − 2', () => {
   }
 })
 
-test('第 12 章：本原抽头四档周期 15/31/63/127，非本原 5/21/7/35', () => {
+test('第 12 章：本原抽头四档周期 15/31/63/127，非本原 6/21/9/35', () => {
   const chapter = chapterByNo(12)
   const periodOf = (level: number, taps: number) => {
     const view = chapter.compute({ ...chapter.defaults, level, taps, tau: 0 })
     return Number(view.readouts[0].value)
   }
   const good = [15, 31, 63, 127]
-  const bad = [5, 21, 7, 35]
+  const bad = [6, 21, 9, 35]
   for (const level of [0, 1, 2, 3]) {
     assert.equal(periodOf(level, 0), good[level], `level=${level} 本原抽头`)
     assert.equal(periodOf(level, 1), bad[level], `level=${level} 非本原抽头`)
   }
 })
 
-test('第 12 章：非本原档自相关的不同取值个数（n=4/n=6 的短周期只有两个值）', () => {
-  // 用户原本要求「非本原档 y 值个数大于 2」。实测 n=4（周期 5）与 n=6（周期 7）的
-  // 循环自相关只有 1 和 +1/p 两个值——n=4 的全部抽头穷举后也只有 [1,2,3,4] 给出周期 5，
-  // 且循环自相关旋转不变，改初态改不了取值个数。这里按实测钉住 2/4/2/6，
-  // 教学点落在「旁瓣不再等于 −1/p」上，而不是「值变多」。
+test('第 12 章：非本原档自相关的不同取值个数（四档 3/4/4/6，都多于两个）', () => {
+  // n=4 用 1+x²+x⁴ = (x²+x+1)²（周期 6，自相关 1 / ±1/3），n=6 用 1+x³+x⁶（周期 9，
+  // 自相关 1 / 5/9 / 1/9 / −1/3）——两条都不是生成多项式，周期掉下来之后
+  // 循环自相关的取值也跟着变多，屏上不再只有 1 和 −1/N 两条线。
   const chapter = chapterByNo(12)
   const distinctOf = (level: number, taps: number) => {
     const view = chapter.compute({ ...chapter.defaults, level, taps, tau: 0 })
     return new Set(view.series[0].points.map(([, y]) => y.toFixed(9))).size
   }
-  const expected = [2, 4, 2, 6]
+  const expected = [3, 4, 4, 6]
   for (const level of [0, 1, 2, 3]) {
     const bad = distinctOf(level, 1)
     assert.equal(bad, expected[level], `level=${level} 非本原抽头`)
-    assert.ok(bad > 0, '自相关至少要有一个取值')
+    assert.ok(bad >= 3, `level=${level} 非本原档应多于两个取值`)
     assert.ok(distinctOf(level, 0) === 2, `level=${level} 本原抽头应当是双值`)
   }
 })
