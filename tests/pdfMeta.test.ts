@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { MISSING_PDF_MESSAGE, closeBook, loadDoc } from '../src/course/pdfSource.ts'
+import { closeBook, loadDoc } from '../src/course/pdfSource.ts'
 import { DEFAULT_BOOK_ID } from '../src/course/shelf.ts'
 import { storePdf } from '../src/course/shelfStore.ts'
 
@@ -22,17 +22,40 @@ function fakeDoc(numPages: number) {
 }
 
 test('空 blob 按「没原件」处理，不当成身份不符', async () => {
-  await assert.rejects(
-    () =>
-      loadDoc('空书', {
-        read: async () => ({ bytes: new Uint8Array(0), meta: { numPages: 13, head: '' } }),
-        load: async () => {
-          throw new Error('空 blob 不该交给 pdf.js')
-        },
-      }),
-    (error: Error) => error.message === MISSING_PDF_MESSAGE,
-  )
+  const result = await loadDoc('空书', {
+    read: async () => ({ bytes: new Uint8Array(0), meta: { numPages: 13, head: '' } }),
+    load: async () => {
+      throw new Error('空 blob 不该交给 pdf.js')
+    },
+  })
+  // R112：缺原件是一种正常状态，返回 missing，不抛错——界面据此给
+  // 「重新导入并勾选保存原文件」，而不是「这本 PDF 打不开」。
+  assert.equal(result.status, 'missing')
   await closeBook('空书')
+
+  // 库里根本没有这条记录时同样返回 missing，而不是抛错（R112 一并钉住）。
+  const absent = await loadDoc('没这条', { read: async () => null, load: async () => fakeDoc(1) })
+  assert.equal(absent.status, 'missing')
+  await closeBook('没这条')
+
+  // 解析失败也不留在缓存里：第一次失败，下一次要能重新打开（R112 一并钉住）。
+  let reads = 0
+  const read = async () => {
+    reads += 1
+    return { bytes: new Uint8Array([1, 2]), meta: null }
+  }
+  await assert.rejects(() =>
+    loadDoc('坏文件', {
+      read,
+      load: async () => {
+        throw new Error('InvalidPDFException')
+      },
+    }),
+  )
+  const second = await loadDoc('坏文件', { read, load: async () => fakeDoc(1) })
+  assert.equal(second.status, 'ok', '失败不留在缓存里，下一次要能重新打开')
+  assert.equal(reads, 2, '第一次失败后缓存要清掉，否则一次失败会让这本书永远打不开')
+  await closeBook('坏文件')
 })
 
 test('meta 页数对不上：返回 mismatch，不静默给 document', async () => {

@@ -35,6 +35,18 @@ type Props = {
   chapterCount: number
 }
 
+const paneError = (stage: string, error: unknown) => {
+  const detail =
+    error instanceof Error
+      ? { name: error.name, message: error.message, stack: error.stack }
+      : { name: typeof error, message: String(error), stack: undefined }
+  // R112：书栏里的失败原来被静默吞掉，只留一行挤扁的提示；先把原始错误送到控制台。
+  // 分两行打印：name/message 一行、stack 一行，控制台把对象折叠起来时也能直接读到。
+  console.error(`[pdf-pane] ${stage} ${detail.name}：${detail.message}`)
+  if (detail.stack) console.error(`[pdf-pane] ${stage} stack ${detail.stack}`)
+  return detail
+}
+
 export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange, chapterCount }: Props) {
   const [loaded, setLoaded] = useState<{ bookId: string; result: LoadResult } | null>(null)
   const [failure, setFailure] = useState<{ bookId: string; message: string } | null>(null)
@@ -56,7 +68,8 @@ export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange, chap
       })
       .catch((error: unknown) => {
         if (!alive) return
-        const text = error instanceof Error ? error.message : String(error)
+        const detail = paneError('open', error)
+        const text = detail.name && detail.name !== 'Error' ? `${detail.name}：${detail.message}` : detail.message
         setFailure({ bookId, message: text })
       })
     return () => {
@@ -68,16 +81,20 @@ export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange, chap
   const result = loaded !== null && loaded.bookId === bookId ? loaded.result : null
   const doc = result?.status === 'ok' ? result.doc : null
   const mismatch = result?.status === 'mismatch' ? result : null
+  const missing = result?.status === 'missing'
   const failureMessage = failure !== null && failure.bookId === bookId ? failure.message : ''
+  // 四档各自从 LoadResult 派生，不再靠比对提示文本判断「有没有原件」——
+  // 文本一变（改文案、加前缀）状态就会错，R112 之前就是这里把「缺原件」
+  // 和「文件解不开」混成了一档。
   const status: 'loading' | 'ready' | 'missing' | 'error' | 'mismatch' =
     doc !== null
       ? 'ready'
       : mismatch !== null
         ? 'mismatch'
-        : failureMessage === ''
-          ? 'loading'
-          : failureMessage === MISSING_PDF_MESSAGE
-            ? 'missing'
+        : missing
+          ? 'missing'
+          : failureMessage === ''
+            ? 'loading'
             : 'error'
   const numPages = doc?.numPages ?? 0
   const message = failureMessage
@@ -141,7 +158,8 @@ export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange, chap
         const name = (error as { name?: string } | null)?.name
         if (name === 'RenderingCancelledException') return
         setRendering(false)
-        setRenderError(error instanceof Error ? error.message : String(error))
+        const detail = paneError(`render page ${page}`, error)
+        setRenderError(`${detail.name}：${detail.message}`)
       }
     }
     void run()
@@ -201,24 +219,57 @@ export function PdfPane({ bookId, page, onPageChange, scale, onScaleChange, chap
         </span>
       </div>
 
-      {status === 'missing' ? <p className="pdf-hint">{MISSING_PDF_MESSAGE}</p> : null}
-      {status === 'mismatch' && mismatch ? (
-        <div className="pdf-mismatch">
-          <p className="pdf-hint">
-            本机存的原文件与这本书对不上（目录 {chapterCount} 章，原件 {mismatch.actual} 页），请重新导入。
+      {status === 'missing' ? (
+        <div className="pdf-fallback">
+          <p className="pdf-hint" title={MISSING_PDF_MESSAGE}>
+            {MISSING_PDF_MESSAGE}
           </p>
-          <button type="button" className="pdf-btn" onClick={() => void clearOriginal()}>
-            清除原件
-          </button>
+          <p className="pdf-fallback-note">
+            导入时没勾「同时保存原文件」，书架里这本书就只留了目录。
+          </p>
         </div>
       ) : null}
-      {status === 'error' ? <p className="pdf-hint">这本 PDF 打不开：{message}</p> : null}
+      {status === 'mismatch' && mismatch ? (
+        <div className="pdf-fallback">
+          <p
+            className="pdf-hint"
+            title={`本机存的原文件与这本书对不上（目录 ${chapterCount} 章，原件 ${mismatch.actual} 页），请重新导入。`}
+          >
+            本机存的原文件与这本书对不上（目录 {chapterCount} 章，原件 {mismatch.actual} 页），请重新导入。
+          </p>
+          <span className="pdf-fallback-actions">
+            <button type="button" className="pdf-btn" onClick={() => void clearOriginal()}>
+              清除原件
+            </button>
+          </span>
+        </div>
+      ) : null}
+      {status === 'error' ? (
+        <div className="pdf-fallback">
+          <p className="pdf-hint" title={`这本 PDF 打不开：${message}`}>
+            这本 PDF 打不开：{message}
+          </p>
+          <p className="pdf-fallback-note">原文件可能没存完整，或者不是 PDF。可以重试一次；还不行就清除原件后重新导入。</p>
+          <span className="pdf-fallback-actions">
+            <button type="button" className="pdf-btn" onClick={() => setReloadTick((tick) => tick + 1)}>
+              重试
+            </button>
+            <button type="button" className="pdf-btn" onClick={() => void clearOriginal()}>
+              清除原件
+            </button>
+          </span>
+        </div>
+      ) : null}
       {status === 'loading' ? <div className="pdf-skeleton tall" aria-label="正在打开教材" /> : null}
 
       {status === 'ready' ? (
         <div className="pdf-stage">
           {rendering ? <div className="pdf-skeleton" aria-label="正在渲染这一页" /> : null}
-          {renderError ? <p className="pdf-hint">第 {page} 页渲染失败：{renderError}</p> : null}
+          {renderError ? (
+            <p className="pdf-hint" title={`第 ${page} 页渲染失败：${renderError}`}>
+              第 {page} 页渲染失败：{renderError}
+            </p>
+          ) : null}
           <canvas ref={canvasRef} className={`pdf-canvas${rendering ? ' is-rendering' : ''}`} />
         </div>
       ) : null}

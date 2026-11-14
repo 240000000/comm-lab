@@ -37,6 +37,9 @@ export type PdfRecord = { bytes: Uint8Array; meta: PdfMeta | null }
 export type LoadResult =
   | { status: 'ok'; doc: PdfDocument }
   | { status: 'mismatch'; expected: number; actual: number }
+  // 「本机没存原文件」是一种正常状态，不是异常：单独成一档，界面才能给出
+  // 「重新导入并勾选保存原文件」而不是「这本 PDF 打不开」。
+  | { status: 'missing' }
 type ReadBytes = (id: string) => Promise<PdfRecord | null>
 
 const DB_NAME = 'comm-lab-shelf'
@@ -155,9 +158,9 @@ export async function loadDoc(
   const load = options.load ?? loadFromPdfjs
   const task = (async (): Promise<LoadResult> => {
     const record = await read(id)
-    if (!record) throw new Error(MISSING_PDF_MESSAGE)
+    if (!record) return { status: 'missing' }
     // 空 blob 是没存成，不是「身份不符」：别把 0 字节交给 pdf.js。
-    if (record.bytes.length === 0) throw new Error(MISSING_PDF_MESSAGE)
+    if (record.bytes.length === 0) return { status: 'missing' }
     parseCounts.set(id, (parseCounts.get(id) ?? 0) + 1)
     const doc = await load(record.bytes)
     if (record.meta && record.meta.numPages > 0 && record.meta.numPages !== doc.numPages) {
