@@ -182,4 +182,7 @@ R118：模型改成图片直传，课程视图能嵌进 iframe。`src/answer/pro
 
 R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channelPreset` 不取整、`bandMissNote`、`encodePreset`/`decodePreset`/`applyPreset`），第 4 章 `snr0Db` 上限 30→40（用户裁定唯一例外），`bank.ts` 第 4 章题改 5 kHz / 49.8 并加 3 kHz 对照题；`CoursePage` 读 `preset=` 覆盖默认档，`SolvePage` iframe 带 preset、进度态（发送中 / 等模型 / 解析中 + 已用时）、OCR 原文折叠、模型备注前缀、档位对不上时明说。判据：左 49.8 / 右 49.84（结论行 49.8）、3 kHz 提示「不在本屏档位」、进度态截图、427 条 43 文件、oxlint 118 files、build 457.27 / 154.08、`check:docs` 182 断言 0 不符。
 
+### R120（2026-11-14 · 会话 89）
+只动文档：报告新增 2.8「答题模式：一张截图进，一屏算式出」（241 字，传图 → 模型看图 → 只回一段 JSON → 解析失败不回退 → 定位第 N 章带题设参数 → `snr0Db = 10log10(S/N × B_kHz)` → 档位对不上明说 → key 只在服务端、无端点标「演示模式」），目录补 2.7/2.8，轮次表补 R120、tag 数改 120；作品介绍第五节补 180 字「答题模式：截图进，定位出」、tag 引用改 R120。
+全链重导：报告 30 页 / 1,395,760 B / sha256 前 16 位 `c3543bb6085b83be`，介绍 9 页 / 847,239 B / `45996d8e86090f8b`，`_report` 与 `E:\work\pdf\AI` 逐字节相同；`check:docs` 182 条断言 0 处不符；提交 `d153c99` + tag R120 + CI 43597007794 success。
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。
