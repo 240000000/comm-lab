@@ -1,5 +1,5 @@
 {
-  "endpoint": "",
-  "model": "",
-  "note": "填一个 OpenAI 兼容的 /chat/completions 地址；仓库里不要写 key，key 放在你自己的转发代理里。留空则走离线三题。"
+  "endpoint": "https://comm-lab-answer.netlify.app/.netlify/functions/answer",
+  "model": "deepseek-flash",
+  "note": "端点公开、密钥放在服务端转发层，不在这个文件里。留空则退回内置三题。"
 }
