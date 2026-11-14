@@ -145,15 +145,47 @@ export function problemById(id: string): BankProblem | undefined {
  */
 export function pickProblem(text: string, chapter: number): BankProblem | undefined {
   const candidates = ANSWER_BANK.filter((item) => item.chapter === chapter)
-  if (candidates.length <= 1) return candidates[0]
-  const found = /(\d+(?:\.\d+)?)\s*kHz/i.exec(text)
-  if (!found) return candidates[0]
-  const bandKhz = Number(found[1])
-  return (
-    candidates.find((item) => item.answer.params.some((p) => p.key === 'bandKhz' && p.value === bandKhz)) ??
-    candidates[0]
-  )
+  if (candidates.length === 0) return undefined
+  if (candidates.length === 1) return candidates[0]
+
+  // 同一章放着好几道题时，必须靠题面里的带宽对上号；抓不到就返回 undefined，
+  // 不拿「该章第一道」顶上——那只是猜，算出来的数会悄悄错掉。
+  const bandText = /(\d+(?:\.\d+)?)\s*kHz/i.exec(text)
+  if (!bandText) return undefined
+  const bandKhz = Number(bandText[1])
+  const snrText = /S\s*\/\s*N\D{0,6}(\d+(?:\.\d+)?)\s*dB/i.exec(text)
+  const snDb = snrText ? Number(snrText[1]) : null
+
+  return candidates.find((item) => {
+    const band = item.answer.params.find((param) => param.key === 'bandKhz')
+    if (!band || band.value !== bandKhz) return false
+    const snr = item.answer.params.find((param) => param.key === 'snDb')
+    if (snDb !== null && snr && snr.value !== snDb) return false
+    return true
+  })
 }
+
+/** 卡片 1 顶部的常驻提示：离线时只认内置三题，接上端点后才什么题都能解。 */
+export const OFFLINE_ONLY_HINT =
+  '离线模式只认内置的三道示例题；接上端点后可以解任意题，图直接交给模型看。'
+
+/** A 态：没定位到章节。 */
+export const NO_CHAPTER_HINT =
+  '没认出这是哪一章。可以手动选一章，或换一张更清晰的截图。'
+
+/** B 态：定位到第 N 章，但题库里没有这道题。 */
+export const NO_SAMPLE_HINT_OFFLINE =
+  '这道题不在内置的三道示例里。离线模式只能演示这三道；配置端点后可用模型解任意题。'
+
+export const NO_SAMPLE_HINT_WIRED =
+  '这道题没匹配到内置示例。模型已经接上了，换一张更清楚的截图再让它看一次。'
+
+export function noSampleHint(wired: boolean): string {
+  return wired ? NO_SAMPLE_HINT_WIRED : NO_SAMPLE_HINT_OFFLINE
+}
+
+/** C 态：模型调用失败时的收尾建议。 */
+export const MODEL_ERROR_TAIL = '可以先用内置三道示例题。'
 
 /** 章节标题，给左栏与 iframe 上方的小标题用。 */
 export function chapterTitle(chapter: number): string {

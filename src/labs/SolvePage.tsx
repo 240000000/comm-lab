@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import './solve-page.css'
 import { recognizeImage } from '../course/ocrImage.ts'
-import { ANSWER_BANK, chapterTitle, pickProblem, problemByChapter, type BankProblem } from '../answer/bank.ts'
+import {
+  ANSWER_BANK,
+  MODEL_ERROR_TAIL,
+  NO_CHAPTER_HINT,
+  OFFLINE_ONLY_HINT,
+  chapterTitle,
+  noSampleHint,
+  pickProblem,
+  problemByChapter,
+  type BankProblem,
+} from '../answer/bank.ts'
 import { locateProblem, type LocateOutcome } from '../answer/locate.ts'
 import { bandMissNote, channelPreset, encodePreset, type PresetSpec } from '../answer/presets.ts'
 import {
@@ -63,6 +73,7 @@ export default function SolvePage() {
   const [model, setModel] = useState<ModelState>({ kind: 'idle' })
   const [note, setNote] = useState(IDLE_NOTE)
   const [wired, setWired] = useState<boolean | null>(null)
+  const [showConfig, setShowConfig] = useState(false)
   // 进度态：模型这一趟可以走十几秒，界面得一直说话，不能只转圈
   const [phase, setPhase] = useState('')
   const [waited, setWaited] = useState(0)
@@ -153,10 +164,12 @@ export default function SolvePage() {
   const pickChapter = (chapter: number) => {
     if (!located) return
     setLocated({ ...located, chapter, ambiguous: false })
-    setProblem(pickProblem(text, chapter) ?? problemByChapter(chapter) ?? null)
+    // 只按题面匹配：对不上就是 null，绝不拿同章另一道题顶上。
+    setProblem(pickProblem(text, chapter) ?? null)
   }
 
   const chapter = located?.chapter ?? 0
+  const chapterSample = chapter > 0 ? problemByChapter(chapter) : undefined
   const demoAnswer = model.kind === 'offline' ? (problem?.answer ?? null) : null
   const answer = model.kind === 'ok' ? model.answer : demoAnswer
   const preset = answer?.preset
@@ -188,6 +201,9 @@ export default function SolvePage() {
         <section className="solve-left">
           <article className="solve-card">
             <h2>1 · 上传题目截图</h2>
+            {wired === false ? (
+              <p className="solve-note solve-offline-only">{OFFLINE_ONLY_HINT}</p>
+            ) : null}
             <div className="solve-upload">
               <label className="solve-btn">
                 选择截图
@@ -267,7 +283,7 @@ export default function SolvePage() {
             ) : null}
             {model.kind === 'error' ? (
               <p className="solve-locate solve-error">
-                模型这次没答上来：{model.message}。没有回退成演示答案，可以重传一次或检查端点配置。
+                模型这次没答上来：{model.message}。没有回退成演示答案，可以重传一次或检查端点配置。{MODEL_ERROR_TAIL}
               </p>
             ) : null}
             {demoAnswer ? (
@@ -278,7 +294,38 @@ export default function SolvePage() {
             ) : null}
             {formula ? <p className="solve-formula">{formula}</p> : null}
             {!answer && model.kind !== 'pending' && model.kind !== 'ok' && model.kind !== 'error' ? (
-              <p className="solve-note">还没定位到题目。</p>
+              chapter > 0 ? (
+                <div>
+                  <p className="solve-note">{noSampleHint(wired === true)}</p>
+                  <div>
+                    {chapterSample ? (
+                      <button
+                        type="button"
+                        className="solve-sample"
+                        style={{ marginRight: 8 }}
+                        onClick={() => void loadSample(chapterSample)}
+                      >
+                        用该章示例题试试
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="solve-sample"
+                      onClick={() => setShowConfig((open) => !open)}
+                    >
+                      怎么配置
+                    </button>
+                  </div>
+                  {showConfig ? (
+                    <p className="solve-note">
+                      在仓库里放 public/answer-config.json，把 endpoint 填成你的 OpenAI 兼容地址；key
+                      只放在服务端转发，不写进仓库。没配端点时就是现在这个离线模式。
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="solve-note">{NO_CHAPTER_HINT}</p>
+              )
             ) : null}
             {answer && answer.params.length > 0 ? (
               <ul className="solve-params">
