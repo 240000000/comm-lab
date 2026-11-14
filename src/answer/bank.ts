@@ -16,6 +16,8 @@ export type BankProblem = {
   prompt: string
   /** public/ 下的截图样本，演示时可直接上传 */
   sample: string
+  /** 这题用到的公式，答案卡上原样标一行 */
+  formula: string
   answer: AnswerResult
 }
 
@@ -24,22 +26,23 @@ const capacity: BankProblem = {
   chapter: 4,
   title: '求信道容量',
   prompt:
-    '某恒参信道的带宽为 3 kHz，输出端信噪比 S/N₀ = 30 dB。用香农公式求该信道的容量。',
+    '某恒参信道的带宽为 3 kHz，输出端信噪比 S/N = 30 dB。用香农公式求该信道的容量。',
   sample: 'answer-samples/capacity.png',
+  formula: '按香农公式 C = B log₂(1 + S/N)',
   answer: {
-    headline: '信道容量 C ≈ 25.16 kbit/s',
+    headline: '信道容量 C ≈ 29.9 kbit/s',
     steps: [
-      '香农公式：C = B·log₂(1 + S/N₀)，其中 S/N₀ 已按 1 kHz 参考归一到 1000。',
-      '代入 B = 3 kHz、S/N₀ = 10^(30/10) = 1000：C = 3·log₂(1 + 1000/3)。',
-      '1000/3 ≈ 333.33，1 + 333.33 = 334.33，log₂ 334.33 ≈ 8.385。',
-      'C ≈ 3 × 8.385 ≈ 25.16 kbit/s，这就是该信道无差错传输的上限。',
+      '香农公式：C = B·log₂(1 + S/N)。',
+      '代入 B = 3 kHz、S/N = 10^(30/10) = 1000：C = 3·log₂(1 + 1000)。',
+      '1 + 1000 = 1001，log₂ 1001 ≈ 9.967。',
+      'C ≈ 3 × 9.967 ≈ 29.9 kbit/s，这就是该信道无差错传输的上限。',
     ],
     params: [
       { key: 'bandKhz', label: '带宽 B（kHz）', value: 3 },
-      { key: 'snr0Db', label: '信噪比 S/N₀（dB）', value: 30 },
-      { key: 'capacityKbit', label: '容量 C（kbit/s）', value: 25.16 },
+      { key: 'snDb', label: '信噪比 S/N（dB）', value: 30 },
+      { key: 'capacityKbit', label: '容量 C（kbit/s）', value: 29.9 },
     ],
-    caveat: 'S/N₀ 按 1 kHz 参考带宽定义，换带宽时先换算再代入。',
+    caveat: '这里 30 dB 指信道输出端的功率信噪比 S/N（即 1000 倍）；若题面给的是 N₀ 或每赫兹信噪比，先换算再代入。',
   },
 }
 
@@ -50,6 +53,7 @@ const pskEbn0: BankProblem = {
   prompt:
     '2PSK 相干解调系统要求误码率不超过 10⁻⁵。求带通系统所需的最小 Eb/N₀（用 dB 表示）。',
   sample: 'answer-samples/psk-ebn0.png',
+  formula: '2PSK 相干解调 P_b = Q(√(2·Eb/N₀))',
   answer: {
     headline: '所需 Eb/N₀ ≈ 9.59 dB（约 9.10 倍）',
     steps: [
@@ -74,6 +78,7 @@ const mseqPeriod: BankProblem = {
   prompt:
     '由 4 级移位寄存器产生的 m 序列，反馈抽头取本原多项式对应位置。求一个周期内的码元个数 N。',
   sample: 'answer-samples/mseq-period.png',
+  formula: '本原抽头 m 序列周期 N = 2ⁿ − 1',
   answer: {
     headline: '周期 N = 15',
     steps: [

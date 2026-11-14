@@ -255,3 +255,27 @@
     height: 520px;
   }
 }
+/* 答案卡上的公式出处：R118 起每题带一行 formula，别和步骤混在一起。 */
+.solve-formula {
+  margin: 8px 0 10px;
+  padding: 6px 10px;
+  border-left: 3px solid #e0b46a;
+  border-radius: 0 6px 6px 0;
+  background: rgba(224, 180, 106, 0.09);
+  color: #f0d9b0;
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+/* 模型失败态：红一点，且必须明确写「没有回退成演示答案」。 */
+.solve-error {
+  border-left: 3px solid #e08578;
+  background: rgba(224, 133, 120, 0.1);
+  color: #f4b7ad;
+  padding: 8px 10px;
+}
+
+/* 右栏 iframe 要给足高度：课程视图一屏五段在 560px 以下就开始内滚。 */
+.solve-right {
+  min-height: 560px;
+}

@@ -3151,3 +3151,26 @@ video::-webkit-media-controls-overlay-play-button {
     grid-column: 1;
   }
 }
+
+/* 嵌入形态（#/course?no=N&embed=1）：答题模式右栏 iframe 专用，只留当前章一屏。 */
+.course.is-embed {
+  width: 100%;
+  max-width: none;
+  padding: 10px 12px 16px;
+}
+
+.course.is-embed .course-layout {
+  display: block;
+}
+
+.course.is-embed .course-main {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+.course.is-embed .course-book-resizer,
+.course.is-embed .course-book-pane {
+  display: none;
+}

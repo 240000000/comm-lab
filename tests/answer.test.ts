@@ -21,9 +21,15 @@ function param(id: string, key: string): number {
 
 test('内置题：信道容量与 core 的 channelCapacity 复算一致', () => {
   const band = param('capacity', 'bandKhz')
-  const snr = param('capacity', 'snr0Db')
+  const snr = param('capacity', 'snDb')
   const printed = param('capacity', 'capacityKbit')
-  assert.ok(Math.abs(channelCapacity(band, snr) - printed) < 0.02)
+  // 题面给整段带宽上的总信噪比；channelCapacity 吃 1 kHz 参考带宽下的 S/N₀，
+  // 所以先把 30 dB / 3 kHz 折算成 S/N₀ 再复算，两条口径必须对上。
+  const snr0Db = 10 * Math.log10(10 ** (snr / 10) * band)
+  assert.ok(
+    Math.abs(channelCapacity(band, snr0Db) - printed) < 0.02,
+    `${band} kHz、S/N = ${snr} dB 复算得 ${channelCapacity(band, snr0Db)}，题目写 ${printed}`,
+  )
 })
 
 test('内置题：2PSK 的 Eb/N₀ 代回 Q 函数得到目标误码率', () => {

@@ -77,6 +77,12 @@ function initialChapter(): number {
   return chapterByNo(no) ? no : START_CHAPTER
 }
 
+/** 地址里带 ?embed=1 时是嵌入形态：答题模式右栏的 iframe 用它，只留当前章一屏。 */
+function isEmbed(): boolean {
+  const query = window.location.hash.split('?')[1] ?? ''
+  return new URLSearchParams(query).get('embed') === '1'
+}
+
 /** 目录一行：默认教材与导入教材共用这一种画法。 */
 type TreeRow = {
   key: string
@@ -828,8 +834,12 @@ export function CoursePage() {
     })
   }, [book, no, pick, usingDefault])
 
+  const embed = isEmbed()
+
   return (
-    <main className="lab course">
+    <main className={`lab course${embed ? ' is-embed' : ''}`}>
+      {embed ? null : (
+        <>
       <a className="back" href="#/">
         ← 返回首页
       </a>
@@ -941,6 +951,8 @@ export function CoursePage() {
         ) : null}
       </div>
 
+        </>
+      )}
       <div
         ref={layoutRef}
         className={`course-layout${showBook && hasPdf ? ' with-book' : ''}`}
@@ -950,6 +962,7 @@ export function CoursePage() {
             : undefined
         }
       >
+        {embed ? null : (
         <div className="course-side">
           {importState.status === 'parsing' ? (
             <p className="course-import-status">
@@ -1091,6 +1104,7 @@ export function CoursePage() {
             <CourseTree rows={rows} />
           )}
         </div>
+        )}
 
         <section className="course-main">
           {view ? (

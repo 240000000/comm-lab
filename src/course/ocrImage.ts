@@ -1,4 +1,5 @@
 import type { OcrWorker } from './ocr.ts'
+import { normalizeOcrText } from './normalize.ts'
 
 /** 一张图片的识别结果；失败时给中文原因，不抛给调用方。 */
 export type ImageOcrOutcome =
@@ -30,7 +31,8 @@ export async function recognizeImage(
         setTimeout(() => reject(new Error('识别超时')), timeoutMs)
       }),
     ])
-    const cleaned = text.replace(/\r/g, '').trim()
+    // 逐字识别常把汉字用空格隔开，先按 normalizing 规则收拾再交给定位与展示。
+    const cleaned = normalizeOcrText(text)
     if (cleaned === '') {
       return { ok: false, message: '图里没认出文字，换一张更清楚的截图再试' }
     }
