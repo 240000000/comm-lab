@@ -3094,3 +3094,60 @@ video::-webkit-media-controls-overlay-play-button {
 .course-bill-list li.miss .course-bill-evidence {
   color: #a2703f;
 }
+
+/* R117：扩展模式里的答题模式入口。占满整行，排在书架与功能模块之后。 */
+.home-extra-block {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(16, 24, 34, 0.62);
+  padding: 14px 16px;
+}
+
+.home-extra-title {
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  letter-spacing: 0.02em;
+}
+
+.solve-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "main enter"
+    "desc enter";
+  gap: 4px 16px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(24, 36, 50, 0.72);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.solve-entry:hover {
+  border-color: var(--accent);
+}
+
+.solve-entry-main {
+  grid-area: main;
+  font-size: 15px;
+}
+
+.solve-entry-desc {
+  grid-area: desc;
+  color: var(--ink-dim, #9fb0c3);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.solve-entry .card-enter {
+  grid-area: enter;
+}
+
+@media (max-width: 980px) {
+  .home-extra-block {
+    grid-column: 1;
+  }
+}

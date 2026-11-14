@@ -1,0 +1,257 @@
+/* 答题模式：左栏题面与答案，右栏 iframe 实验台。窄屏折成一栏。 */
+
+.solve-page {
+  max-width: min(1440px, 100% - 32px);
+  margin: 0 auto 48px;
+  padding-top: 18px;
+}
+
+.solve-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.solve-head h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+}
+
+.solve-sub {
+  margin: 0;
+  max-width: 720px;
+  color: var(--ink-dim, #9fb0c3);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.solve-back {
+  flex: none;
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+  padding: 6px 0;
+}
+
+.solve-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.solve-left {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.solve-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(16, 24, 34, 0.62);
+  padding: 14px 16px;
+}
+
+.solve-card h2 {
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  letter-spacing: 0.02em;
+}
+
+.solve-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.solve-file {
+  display: none;
+}
+
+.solve-btn,
+.solve-sample {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(24, 36, 50, 0.9);
+  color: var(--ink);
+  padding: 6px 11px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.solve-btn:hover,
+.solve-sample:hover {
+  border-color: var(--accent);
+}
+
+.solve-hint {
+  color: var(--ink-dim, #9fb0c3);
+  font-size: 12.5px;
+}
+
+.solve-note {
+  margin: 10px 0 0;
+  color: #f0b464;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.solve-preview {
+  display: block;
+  margin-top: 10px;
+  max-width: 100%;
+  max-height: 220px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.solve-text {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(10, 16, 24, 0.72);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.solve-locate {
+  margin: 10px 0 0;
+  color: #7fd6a0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.solve-top3 {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink-dim, #9fb0c3);
+}
+
+.solve-top3-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.solve-badge {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.solve-badge.demo {
+  border: 1px solid #7a5a25;
+  background: rgba(240, 180, 100, 0.12);
+  color: #f0b464;
+}
+
+.solve-badge.ok {
+  border: 1px solid #2f6b4a;
+  background: rgba(127, 214, 160, 0.12);
+  color: #7fd6a0;
+}
+
+.solve-headline {
+  margin: 0 0 10px;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.solve-params {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.solve-params li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px dashed rgba(120, 140, 160, 0.22);
+  padding-bottom: 5px;
+  font-size: 13px;
+}
+
+.solve-params strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.solve-caveat {
+  margin: 10px 0 0;
+  color: var(--ink-dim, #9fb0c3);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.solve-steps {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.solve-right {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  height: calc(100vh - 120px);
+  min-height: 420px;
+}
+
+.solve-frame-head h2 {
+  margin: 0 0 4px;
+  font-size: 14.5px;
+}
+
+.solve-frame-head .solve-hint {
+  margin: 0;
+}
+
+.solve-frame {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0b121a;
+}
+
+.solve-frame-empty {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--ink-dim, #9fb0c3);
+  font-size: 13px;
+}
+
+@media (max-width: 980px) {
+  .solve-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .solve-right {
+    position: static;
+    height: 520px;
+  }
+}

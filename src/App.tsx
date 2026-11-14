@@ -6,6 +6,7 @@ import { ConvPage } from './labs/ConvPage'
 import { OfdmPage } from './labs/OfdmPage'
 import { MissionPage } from './labs/MissionPage'
 import { CoursePage } from './labs/CoursePage'
+import SolvePage from './labs/SolvePage'
 import { HomeBackdrop } from './labs/HomeBackdrop'
 import { HomeParticles } from './labs/HomeParticles'
 import { bookById, nextBookId } from './course/shelf'
@@ -132,6 +133,10 @@ export default function App() {
     return <CoursePage />
   }
 
+  if (route === 'solve') {
+    return <SolvePage />
+  }
+
   return (
     <div className="home">
       <HomeBackdrop />
@@ -208,6 +213,17 @@ export default function App() {
           />
 
           <ModulePanel book={activeBook} />
+
+          <section className="home-extra-block" aria-label="答题模式入口">
+            <h2 className="home-extra-title">答题模式</h2>
+            <a className="solve-entry" href="#/solve">
+              <span className="solve-entry-main">答题模式 · 上传题目截图</span>
+              <span className="solve-entry-desc">
+                上传一张题目截图，本机识别题面、定位到对应章节，并在右侧直接打开实验台。
+              </span>
+              <span className="card-enter">进入 →</span>
+            </a>
+          </section>
         </section>
       )}
 
