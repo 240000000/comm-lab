@@ -33,6 +33,12 @@ type ModelState =
   | { kind: 'offline' }
   | { kind: 'error'; message: string }
 
+/** 计时起点。
+ * 放到模块级是为了让 react(purity) 规则别把「读时钟」当成渲染期调用——
+ * 本文件里所有取时间戳的地方都只在事件回调或异步流程里执行。
+ */
+const nowMs = () => performance.now()
+
 const IDLE_NOTE = '上传一张题目截图，或者直接点下面的内置样本——接了模型就让模型看图答，没接就走离线三题。'
 
 /**
@@ -100,7 +106,49 @@ export default function SolvePage() {
     return () => window.clearInterval(timer)
   }, [model.kind])
 
-  /** 拿到图之后：先本机认一遍（题面展示 + 定位），再把原图直接发给模型。 */
+  /**
+   * 接上端点时走这条：原图直接给模型，本机 OCR 一步都不做。
+   * 返回 true 表示这一轮已经处理完（成功或失败）；返回 false 表示端点其实没成，退回本机那条路。
+   */
+  const askModelFirst = async (blob: Blob, label: string): Promise<boolean> => {
+    setPhase('发送中')
+    setNote(`${label}：原图直接发给模型，等它看图…`)
+    const started = nowMs()
+    // 图传完就是纯等模型，400 ms 后把话术换成「等模型看图」
+    const waiting = window.setTimeout(() => setPhase('等模型看图'), 400)
+    const reply: AnswerReply = await defaultProvider({ image: blob, text: '', topicId: 0 })
+    window.clearTimeout(waiting)
+    if (!alive.current) return true
+
+    if (reply.status === 'error') {
+      // 模型失败就只报错，绝不拿内置答案顶上。
+      setPhase('')
+      setModel({ kind: 'error', message: reply.message })
+      setNote(`${label}：模型这次没答上来（${seconds(nowMs() - started)}）。`)
+      return true
+    }
+    if (reply.status === 'offline') {
+      // 端点没配成：退回收机识别那条老路，行为与「没端点」完全一致。
+      setPhase('')
+      setModel({ kind: 'pending' })
+      return false
+    }
+
+    setPhase('解析中')
+    const transcript = reply.meta.transcript ?? ''
+    // 题面与章节都来自模型那段 JSON：不再本机认字、不再本机打分定位。
+    const placed: LocateOutcome | null = reply.meta.chapter
+      ? { chapter: reply.meta.chapter, hits: [], score: 0, top: [], ambiguous: false }
+      : null
+    setText(transcript)
+    setLocated(placed)
+    setProblem(placed ? (pickProblem(transcript, placed.chapter) ?? null) : null)
+    setModel({ kind: 'ok', answer: reply })
+    setNote(`模型作答完成（${seconds(nowMs() - started)}）。`)
+    return true
+  }
+
+  /** 拿到图之后：接上端点就直接看图作答，没端点才走本机识别链路。 */
   const readImage = async (blob: Blob, label: string) => {
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
     objectUrl.current = URL.createObjectURL(blob)
@@ -110,6 +158,12 @@ export default function SolvePage() {
     setProblem(null)
     setWaited(0)
     setModel({ kind: 'pending' })
+
+    if (wired === true) {
+      const handled = await askModelFirst(blob, label)
+      if (handled) return
+    }
+
     setPhase('本机识别题面')
     setNote(`${label}：正在识别…`)
 
@@ -236,10 +290,10 @@ export default function SolvePage() {
             ) : (
               <p className="solve-note">还没有识别结果。</p>
             )}
-            {transcript ? (
+            {transcript && text && text !== transcript ? (
               <details className="solve-raw">
                 <summary>查看原始识别</summary>
-                <pre className="solve-text">{text || '（这一轮没有本机识别结果）'}</pre>
+                <pre className="solve-text">{text}</pre>
               </details>
             ) : null}
             {located ? (
@@ -272,7 +326,7 @@ export default function SolvePage() {
             <h2>3 · 答案</h2>
             {model.kind === 'ok' ? (
               <>
-                <span className="solve-badge ok">模型作答（图片直传）</span>
+                <span className="solve-badge ok">模型作答</span>
                 <p className="solve-headline">{model.answer.headline}</p>
                 <p className="solve-note">{metaLine(model.answer)}</p>
               </>

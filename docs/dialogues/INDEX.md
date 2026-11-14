@@ -198,4 +198,11 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 数字一次改齐：432 条、118 files、122 tag、构建 458.90 kB / gzip 154.67；`check:docs` 182 断言 0 不符。
 - 技术报告 2.8 末句按实现改写（只认内置三题、对不上就直说、右栏没题设另标「默认档示例」）；两份 PDF 重导：报告 30 页 / 1,398,072 B / `d5af35e3c5265ec1`，介绍 9 页 / 847,238 B / `afb3b3bdb27f8d7a`。
 
+### R123 · 模型模式直接看图，不再等本机 OCR
+
+- `src/labs/SolvePage.tsx` 新增 `askModelFirst(blob,label)`：`wired === true` 时 blob 直发 `defaultProvider`，`ok` 用 `meta.transcript` 填卡 2、`meta.chapter` 定位、徽标「模型作答」；`error` 只报错不回退；`offline` 才退回原 OCR 链路。读时钟提到模块级 `nowMs`，绕开 `react(purity)`。
+- 真端点（`deepseek-flash`）实测：题库里没有的 2 kHz/20 dB 一题，点上传到卡 3 出答案 **6.1 秒**，token 513 → 764、置信度 99%；离线样本 49.8 kbit/s 带 `preset=4:bandIndex=5,snr0Db=36.9897`；端点挂掉时卡 3 一个数字都没有。截图 `D:/harness/tmp/r123shots/{a-model-answer,b-offline-sample,c-endpoint-error}.png`。
+- 门禁：`npm test` 432 pass / 43 文件、oxlint 0/0（118 files）、build `index-BLHuz06P.js` 459.58 kB / gzip 154.88 kB、`check:docs` 182 断言 0 不符、123 tag = 轮次表 123 行。
+- 2.8 改写为「默认离线；接端点后模型直接看图，不再等本机 OCR」，技术报告重导后仍 30 页。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。
