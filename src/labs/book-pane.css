@@ -2,9 +2,17 @@
 
 .course-book-toggle {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
   max-width: min(1360px, 100% - 48px);
   margin: 0 auto 10px;
+}
+
+.course-book-toggle-note {
+  color: #f0b464;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
 .course-book-toggle-btn {
@@ -39,20 +47,6 @@
 
 /* R112：没有原文件时这一栏只剩一句话，旧样式是灰字小段、整栏看着就是空白。
    现在让它撑满整栏、字号与 .pdf-fallback 对齐，并把「怎么办」说清楚。 */
-.course-book-missing {
-  box-sizing: border-box;
-  min-height: 100%;
-  margin: 0;
-  padding: 24px 18px;
-  border: 1px dashed var(--line);
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(32, 45, 60, 0.5), rgba(16, 24, 34, 0.2));
-  color: #e8eef5;
-  font-size: 14px;
-  line-height: 1.85;
-  user-select: text;
-}
-
 .course-book-close {
   display: none;
   margin-left: auto;

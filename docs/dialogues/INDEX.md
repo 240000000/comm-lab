@@ -166,4 +166,8 @@ R110：轮次表 110 行 = 110 个 tag，`check:docs` 182 条断言 0 处不符�
 
 R111：只动文档与 PDF。第二章末尾加 `### 2.7 教材原件：同屏、识别、降级`（去空白 504 字，四段：6:4 同屏与 pdf.js viewport、原件身份 numPages + 首页 80 字、数字版聚行切节与概念词打分、扫描版书签即目录 + 逐章首页 OCR 与「十二中一填」）；轮次表加 R111 行、八行超 26 字的描述列压到 ≤26；删 1.6 两段重复来历、压 3.6 四处句子；报告 30 页 / 19303 词，介绍 9 页 / 4449 词；两份 PDF 同落 `_report` 与 `E:\work\pdf\AI` 且字节相同。轮次表 111 行 = 111 个 tag，测试 401 条、37 个测试文件，构建 428.99 kB / gzip 142.81 kB，`check:docs` 182 条断言 0 处不符。
 
-下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。
+R112：书栏失败提示可读可选。真因两条——`keepPdf` 默认 false 时导入只存目录，`hasPdf` 为假，`.pdf-pane` 根本不渲染，右栏只剩一行灰字；真报错时 `.pdf-stage` 是横向 flex，提示与 canvas 并排被挤成竖排单行，再被 `nowrap` + `overflow: hidden` 裁掉。`LoadResult` 加 `status: 'missing'` 一档，`loadDoc` 不再为「没原件」抛异常；三态统一成自撑满的 `.pdf-fallback`（可换行、可选中、带完整 title 与「重试 / 清除原件」）；`.pdf-hint` 去 nowrap、加 `user-select: text`，`.pdf-stage` 改纵向；`paneError` 统一打 `[pdf-pane] <stage>` 与 name/message/stack。同脚本同坏 blob 对照：改前 7,483 B（无 title、不可选、提示 376×29、无按钮、无控制台），改后 15,025 B（title 全文、可选、提示 344×50、按钮「重试 / 清除原件」、控制台带错误名）。测试保持 401 条（两条新断言并进空 blob 原用例，docs 冻结），构建 430.21 kB / gzip 143.15 kB；提交 `48140d6` + tag R112，轮次表补行 `ac223a9`，CI 43562656514 success。
+
+R113：没有原件时书栏一开始就收起。`showBook` 初值改 `Boolean(pdfBytes[book.id])`，加 `userToggled` ref，原件异步到位且用户没手动开合过时自动展开一次；没原件时开关文案改「导入后可同屏看书」，点击直接打开导入入口，旁边一行黄字；`aside` 改成 `showBook && hasPdf`，`.course-book-missing` 分支整段删。三张真截图（1440×1500）：内置书刚进收起 + 新文案，导入真书后自动展开并翻到第 130 页（canvas 372×531、darkPct 3.1），清原件后再进回到收起态。补 `docs/archive/2026-11-14-session-83.md`（含 R112）、轮次表 R113 行；测试 401 条、构建 430.47 kB / gzip 143.25 kB。
+
+下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。

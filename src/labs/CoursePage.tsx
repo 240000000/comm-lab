@@ -343,7 +343,23 @@ export function CoursePage() {
   const book = bookById(books, activeId)
   const usingDefault = book.id === DEFAULT_BOOK_ID
   const hasPdf = Boolean(pdfBytes[book.id])
-  const [showBook, setShowBook] = useState(true)
+  // 书栏只在「这本书真有原件」时默认展开：只有目录的书展开也翻不了页。
+  const [showBook, setShowBook] = useState(Boolean(pdfBytes[book.id]))
+  // 用户手动开合过以后就不再自动展开，免得跟人抢。
+  const userToggled = useRef(false)
+  // 「导入后可同屏看书」直接借用导入入口：课程页自己的文件输入优先，
+  // 没有就退回书架面板里的那个（首页扩展模式下才渲染）。
+  const openBookImport = () => {
+    const shelfInput = document.querySelector<HTMLInputElement>('input.shelf-file')
+    const target = shelfInput ?? fileRef.current
+    target?.focus()
+    target?.click()
+  }
+  // 原件是异步到位的（读 IndexedDB）：到了就把书栏自动展开一次。
+  useEffect(() => {
+    if (!hasPdf || userToggled.current) return
+    setShowBook(true)
+  }, [hasPdf])
   const [bookScale, setBookScale] = useState<PdfScale>('fit')
   const [scanState, setScanState] = useState<{
     key: string
@@ -840,12 +856,26 @@ export function CoursePage() {
         </p>
       )}
       <div className="course-book-toggle">
-        <button type="button" className="course-book-toggle-btn" onClick={() => setShowBook((open) => !open)}>
-          {showBook ? '收起书栏' : '同屏看书'}
+        <button
+          type="button"
+          className="course-book-toggle-btn"
+          onClick={() => {
+            userToggled.current = true
+            if (!hasPdf) {
+              openBookImport()
+              return
+            }
+            setShowBook((open) => !open)
+          }}
+        >
+          {!hasPdf ? '导入后可同屏看书' : showBook ? '收起书栏' : '同屏看书'}
         </button>
+        {!hasPdf ? (
+          <span className="course-book-toggle-note">本书只有目录，导入原文件后这里能翻书</span>
+        ) : null}
       </div>
 
-      <div className={`course-layout${showBook ? ' with-book' : ''}`}>
+      <div className={`course-layout${showBook && hasPdf ? ' with-book' : ''}`}>
         <div className="course-side">
           {importState.status === 'parsing' ? (
             <p className="course-import-status">
@@ -1003,6 +1033,7 @@ export function CoursePage() {
               canJumpPage={hasPdf && !usingDefault}
               onJump={(next) => pick(next)}
               onJumpPage={(next) => {
+                userToggled.current = true
                 setShowBook(true)
                 changeBookPage(next)
               }}
@@ -1012,25 +1043,27 @@ export function CoursePage() {
           )}
         </section>
 
-        {showBook ? (
+        {showBook && hasPdf ? (
           <aside className="course-book-pane" aria-label="教材原文">
-            <button type="button" className="course-book-close" onClick={() => setShowBook(false)} aria-label="收起书栏">
+            <button
+              type="button"
+              className="course-book-close"
+              onClick={() => {
+                userToggled.current = true
+                setShowBook(false)
+              }}
+              aria-label="收起书栏"
+            >
               收起
             </button>
-            {hasPdf ? (
-              <PdfPane
-                bookId={book.id}
-                page={bookPage}
-                onPageChange={changeBookPage}
-                scale={bookScale}
-                onScaleChange={setBookScale}
-                chapterCount={book.chapters.length}
-              />
-            ) : (
-              <p className="course-book-missing">
-                本书只保存了目录，要看正文请重新导入并勾选保存原文件
-              </p>
-            )}
+            <PdfPane
+              bookId={book.id}
+              page={bookPage}
+              onPageChange={changeBookPage}
+              scale={bookScale}
+              onScaleChange={setBookScale}
+              chapterCount={book.chapters.length}
+            />
           </aside>
         ) : null}
       </div>
