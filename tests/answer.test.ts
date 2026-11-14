@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ANSWER_BANK,
-  problemByChapter,
+  pickProblem,
   problemById,
 } from '../src/answer/bank.ts'
 import { chapterFromTopic, locateProblem } from '../src/answer/locate.ts'
@@ -26,8 +26,10 @@ test('内置题：信道容量与 core 的 channelCapacity 复算一致', () => 
   // 题面给整段带宽上的总信噪比；channelCapacity 吃 1 kHz 参考带宽下的 S/N₀，
   // 所以先把 30 dB / 3 kHz 折算成 S/N₀ 再复算，两条口径必须对上。
   const snr0Db = 10 * Math.log10(10 ** (snr / 10) * band)
-  assert.ok(
-    Math.abs(channelCapacity(band, snr0Db) - printed) < 0.02,
+  // 题面写 49.8 是四舍五入到一位小数，读数那一行也是 toFixed(1)，按同一口径比。
+  assert.equal(
+    channelCapacity(band, snr0Db).toFixed(1),
+    printed.toFixed(1),
     `${band} kHz、S/N = ${snr} dB 复算得 ${channelCapacity(band, snr0Db)}，题目写 ${printed}`,
   )
 })
@@ -60,7 +62,7 @@ test('定位：三题的题面各自落到对应章节', () => {
     assert.ok(located, `${problem.id} 没定位出结果`)
     assert.equal(located.chapter, problem.chapter, `${problem.id} 落到了第 ${located.chapter} 章`)
     assert.ok(located.hits.length > 0, `${problem.id} 一个命中词都没有`)
-    assert.equal(problemByChapter(located.chapter)?.id ?? '', problem.id)
+    assert.equal(pickProblem(problem.prompt, located.chapter)?.id ?? '', problem.id)
   }
 })
 

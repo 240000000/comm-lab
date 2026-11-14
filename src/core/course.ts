@@ -2294,7 +2294,7 @@ const channelSnrParam: CourseParam = {
   key: 'snr0Db',
   label: '参考带宽下的信噪比 SNR₀（1 kHz 下测得）',
   min: 0,
-  max: 30,
+  max: 40,
   step: 1,
   unit: 'dB',
 }
@@ -2320,7 +2320,9 @@ export function channelLimit(snr0Db: number): number {
 }
 
 function computeChannel(params: Record<string, number>): CourseView {
-  const snr0Db = Math.min(30, Math.max(0, Math.round(params.snr0Db ?? 20)))
+  // 滑杆本身是整数步进，但题设带过来的 preset 允许小数（5 kHz＋30 dB 折算是 36.99 dB），
+  // 这里只夹范围、不取整，否则「左栏 49.8 / 右栏 49.9」会被静默改数。
+  const snr0Db = Math.min(40, Math.max(0, params.snr0Db ?? 20))
   const bandIndex = Math.min(CHANNEL_BANDS.length - 1, Math.max(0, Math.round(params.bandIndex ?? 3)))
   const band = CHANNEL_BANDS[bandIndex]
   const limit = channelLimit(snr0Db)

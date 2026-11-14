@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import './solve-page.css'
 import { recognizeImage } from '../course/ocrImage.ts'
-import { ANSWER_BANK, chapterTitle, problemByChapter, type BankProblem } from '../answer/bank.ts'
+import { ANSWER_BANK, chapterTitle, pickProblem, problemByChapter, type BankProblem } from '../answer/bank.ts'
 import { locateProblem, type LocateOutcome } from '../answer/locate.ts'
+import { bandMissNote, channelPreset, encodePreset, type PresetSpec } from '../answer/presets.ts'
 import {
   defaultProvider,
   hasModelEndpoint,
@@ -29,10 +30,11 @@ const IDLE_NOTE = '上传一张题目截图，或者直接点下面的内置样�
  * `?no=` 是 CoursePage 已经支持的章节参数；`embed=1` 是这一轮新加的精简形态，
  * 课程视图会把 hero、教材栏、左侧章列表都收起来，只留当前章一屏五段。
  */
-function courseUrl(chapter: number): string {
+function courseUrl(chapter: number, preset?: PresetSpec): string {
   const { origin, pathname } = window.location
-  const query = chapter > 0 ? `no=${chapter}&embed=1` : 'embed=1'
-  return `${origin}${pathname}#/course?${query}`
+  const parts = [chapter > 0 ? `no=${chapter}` : '', 'embed=1']
+  if (preset) parts.push(`preset=${encodeURIComponent(encodePreset(preset))}`)
+  return `${origin}${pathname}#/course?${parts.filter(Boolean).join('&')}`
 }
 
 function seconds(ms: number): string {
@@ -61,6 +63,9 @@ export default function SolvePage() {
   const [model, setModel] = useState<ModelState>({ kind: 'idle' })
   const [note, setNote] = useState(IDLE_NOTE)
   const [wired, setWired] = useState<boolean | null>(null)
+  // 进度态：模型这一趟可以走十几秒，界面得一直说话，不能只转圈
+  const [phase, setPhase] = useState('')
+  const [waited, setWaited] = useState(0)
   const objectUrl = useRef('')
   const alive = useRef(true)
 
@@ -75,6 +80,14 @@ export default function SolvePage() {
     }
   }, [])
 
+  // 等模型时每 200 ms 记一次用时，界面上的「已用时」才是活的
+  useEffect(() => {
+    if (model.kind !== 'pending') return
+    const started = Date.now()
+    const timer = window.setInterval(() => setWaited(Date.now() - started), 200)
+    return () => window.clearInterval(timer)
+  }, [model.kind])
+
   /** 拿到图之后：先本机认一遍（题面展示 + 定位），再把原图直接发给模型。 */
   const readImage = async (blob: Blob, label: string) => {
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
@@ -83,7 +96,9 @@ export default function SolvePage() {
     setText('')
     setLocated(null)
     setProblem(null)
+    setWaited(0)
     setModel({ kind: 'pending' })
+    setPhase('本机识别题面')
     setNote(`${label}：正在识别…`)
 
     const outcome = await recognizeImage(blob)
@@ -96,19 +111,24 @@ export default function SolvePage() {
 
     const result = locateProblem(outcome.text)
     const found = result && !result.ambiguous
-      ? (problemByChapter(result.chapter) ?? null)
+      ? (pickProblem(outcome.text, result.chapter) ?? null)
       : null
     setText(outcome.text)
     setLocated(result)
     setProblem(found)
     setNote(`识别完成（${seconds(outcome.ms)}）。`)
 
+    setPhase('发送中')
+    // 图传完就是纯等模型，400 ms 后把话术换成「等模型看图」
+    const waiting = window.setTimeout(() => setPhase('等模型看图'), 400)
     const reply: AnswerReply = await defaultProvider({
       image: blob,
       text: outcome.text,
       topicId: result?.chapter ?? 0,
     })
+    window.clearTimeout(waiting)
     if (!alive.current) return
+    setPhase('解析中')
     if (reply.status === 'ok') setModel({ kind: 'ok', answer: reply })
     else if (reply.status === 'offline') setModel({ kind: 'offline' })
     else setModel({ kind: 'error', message: reply.message })
@@ -133,12 +153,22 @@ export default function SolvePage() {
   const pickChapter = (chapter: number) => {
     if (!located) return
     setLocated({ ...located, chapter, ambiguous: false })
-    setProblem(problemByChapter(chapter) ?? null)
+    setProblem(pickProblem(text, chapter) ?? problemByChapter(chapter) ?? null)
   }
 
   const chapter = located?.chapter ?? 0
   const demoAnswer = model.kind === 'offline' ? (problem?.answer ?? null) : null
   const answer = model.kind === 'ok' ? model.answer : demoAnswer
+  const preset = answer?.preset
+  // 第 4 章档位对不上时宁可说清楚，也不用最近档位假对齐。
+  const bandMiss = (() => {
+    if (chapter !== 4 || !problem) return ''
+    const band = problem.answer.params.find((p) => p.key === 'bandKhz')?.value
+    const snrDb = problem.answer.params.find((p) => p.key === 'snDb')?.value
+    if (band === undefined || snrDb === undefined) return ''
+    const match = channelPreset({ bandKhz: band, snrDb })
+    return match.status === 'no-exact-band' ? bandMissNote(match) : ''
+  })()
   const formula = problem?.formula ?? ''
   const transcript = model.kind === 'ok' ? model.answer.meta.transcript : undefined
 
@@ -182,14 +212,26 @@ export default function SolvePage() {
 
           <article className="solve-card">
             <h2>2 · 识别出的题面</h2>
-            {text ? <pre className="solve-text">{text}</pre> : <p className="solve-note">还没有识别结果。</p>}
-            {transcript ? <p className="solve-note">模型读图得到的题面：{transcript}</p> : null}
+            {transcript ? (
+              <p className="solve-text">{transcript}</p>
+            ) : text ? (
+              <pre className="solve-text">{text}</pre>
+            ) : (
+              <p className="solve-note">还没有识别结果。</p>
+            )}
+            {transcript ? (
+              <details className="solve-raw">
+                <summary>查看原始识别</summary>
+                <pre className="solve-text">{text || '（这一轮没有本机识别结果）'}</pre>
+              </details>
+            ) : null}
             {located ? (
               <p className="solve-locate">
                 已定位到第 {located.chapter} 章 · {chapterTitle(located.chapter)}
                 {located.hits.length > 0 ? ` · 命中词：${located.hits.join('、')}` : ''}
               </p>
             ) : null}
+            {bandMiss ? <p className="solve-locate solve-error">{bandMiss}</p> : null}
             {located?.ambiguous ? (
               <div className="solve-top3">
                 <p className="solve-note">命中不明显，自己挑一个：</p>
@@ -218,7 +260,11 @@ export default function SolvePage() {
                 <p className="solve-note">{metaLine(model.answer)}</p>
               </>
             ) : null}
-            {model.kind === 'pending' ? <p className="solve-note">模型正在看图，稍等…</p> : null}
+            {model.kind === 'pending' ? (
+              <p className="solve-progress">
+                {phase || '正在准备'} · 已用时 {seconds(waited)}
+              </p>
+            ) : null}
             {model.kind === 'error' ? (
               <p className="solve-locate solve-error">
                 模型这次没答上来：{model.message}。没有回退成演示答案，可以重传一次或检查端点配置。
@@ -244,7 +290,12 @@ export default function SolvePage() {
                 ))}
               </ul>
             ) : null}
-            {answer?.caveat ? <p className="solve-caveat">{answer.caveat}</p> : null}
+            {answer?.caveat ? (
+              <p className="solve-caveat">
+                {model.kind === 'ok' ? '模型备注：' : ''}
+                {answer.caveat}
+              </p>
+            ) : null}
           </article>
 
           <article className="solve-card">
@@ -273,15 +324,15 @@ export default function SolvePage() {
           </div>
           {chapter > 0 ? (
             <iframe
-              key={chapter}
+              key={`${chapter}:${preset ? encodePreset(preset) : ''}`}
               className="solve-frame"
-              src={courseUrl(chapter)}
+              src={courseUrl(chapter, preset)}
               title={`第 ${chapter} 章课程视图`}
             />
           ) : (
             <div className="solve-frame-empty">
               <p>上传截图后，这里自动打开定位到的章节。</p>
-              <p className="solve-note">参数滑块留给下一轮，这一轮只做「自动打开对应章节」。</p>
+              <p className="solve-note">有题目参数时，这里会按题设把右栏调好，让两边读数对得上。</p>
             </div>
           )}
         </aside>

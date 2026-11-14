@@ -12,8 +12,14 @@
  * 没有配置端点时返回 `{ status: 'offline' }`，界面走离线三题。
  */
 
+/** 等模型的上限：超过这个时间就明说「这次没答上来」，不让人对着转圈猜。 */
+export const MODEL_TIMEOUT_MS = 20_000
+
 /** 答案里可被滑块复用的参数，值一定是数字，单位/含义放在 label 里。 */
 export type AnswerParam = { key: string; label: string; value: number }
+
+/** 右栏该用哪组参数：`no` 是章节号，`values` 直接盖到该章 defaults 上。 */
+export type AnswerPreset = { no: number; values: Record<string, number> }
 
 /** 一次回答的结构：先给结论，再给关键步骤，最后是可选提醒。 */
 export type AnswerResult = {
@@ -21,6 +27,8 @@ export type AnswerResult = {
   steps: string[]
   params: AnswerParam[]
   caveat?: string
+  /** 可选的「本屏参数」：有它就让右栏与左栏用同一组数 */
+  preset?: AnswerPreset
 }
 
 /** 模型作答时附带的元信息，界面上标出来，避免看起来像本地算的。 */
@@ -249,11 +257,14 @@ export const defaultProvider: AnswerProvider = async (request) => {
       .filter(Boolean)
       .join('\n')
 
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS)
     const response = await fetch(resolved.endpoint, {
+      signal: controller.signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: resolved.model ?? 'gpt-4o-mini',
+        model: resolved.model ?? 'deepseek-flash',
         temperature: 0.2,
         response_format: { type: 'json_object' },
         messages: [
@@ -267,7 +278,7 @@ export const defaultProvider: AnswerProvider = async (request) => {
           },
         ],
       }),
-    })
+    }).finally(() => clearTimeout(timer))
 
     if (!response.ok) {
       return { status: 'error', message: `模型端点返回 ${response.status}` }
@@ -286,6 +297,9 @@ export const defaultProvider: AnswerProvider = async (request) => {
       completionTokens: body.usage?.completion_tokens,
     })
   } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { status: 'error', message: `等了 ${MODEL_TIMEOUT_MS / 1000} s 还没有回复，这次没答上来` }
+    }
     return {
       status: 'error',
       message: error instanceof Error ? error.message : '调用模型失败',

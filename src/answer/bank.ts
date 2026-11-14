@@ -26,8 +26,40 @@ const capacity: BankProblem = {
   chapter: 4,
   title: '求信道容量',
   prompt:
-    '某恒参信道的带宽为 3 kHz，输出端信噪比 S/N = 30 dB。用香农公式求该信道的容量。',
+    '某恒参信道的带宽为 5 kHz，输出端信噪比 S/N = 30 dB。用香农公式求该信道的容量。',
   sample: 'answer-samples/capacity.png',
+  formula: '按香农公式 C = B log₂(1 + S/N)',
+  answer: {
+    headline: '信道容量 C ≈ 49.8 kbit/s',
+    steps: [
+      '香农公式：C = B·log₂(1 + S/N)。',
+      '代入 B = 5 kHz、S/N = 10^(30/10) = 1000：C = 5·log₂(1 + 1000)。',
+      '1 + 1000 = 1001，log₂ 1001 ≈ 9.967。',
+      'C ≈ 5 × 9.967 ≈ 49.8 kbit/s，这就是该信道无差错传输的上限。',
+    ],
+    params: [
+      { key: 'bandKhz', label: '带宽 B（kHz）', value: 5 },
+      { key: 'snDb', label: '信噪比 S/N（dB）', value: 30 },
+      { key: 'capacityKbit', label: '容量 C（kbit/s）', value: 49.8 },
+    ],
+    // 右栏第 4 章的默认档是 37 dB / 5 kHz，这里把同一组题设带过去
+    preset: { no: 4, values: { bandIndex: 5, snr0Db: 36.9897 } },
+    caveat: '这里 30 dB 指信道输出端的功率信噪比 S/N（即 1000 倍）；若题面给的是 N₀ 或每赫兹信噪比，先换算再代入。',
+  },
+}
+
+/**
+ * 同一道题的另一张图：带宽 3 kHz、S/N 30 dB。
+ * 3 kHz 不在实验台的带宽档位里（档位是 2 / 5 kHz），所以这题故意不带 preset，
+ * 右栏照常打开默认档，左栏明说「题设 3 kHz 不在本屏档位（最近 2 / 5 kHz）」。
+ */
+const capacity3k: BankProblem = {
+  id: 'capacity-3k',
+  chapter: 4,
+  title: '求信道容量（3 kHz 版）',
+  prompt:
+    '某恒参信道的带宽为 3 kHz，输出端信噪比 S/N = 30 dB。用香农公式求该信道的容量。',
+  sample: 'answer-samples/capacity-3k.png',
   formula: '按香农公式 C = B log₂(1 + S/N)',
   answer: {
     headline: '信道容量 C ≈ 29.9 kbit/s',
@@ -35,14 +67,14 @@ const capacity: BankProblem = {
       '香农公式：C = B·log₂(1 + S/N)。',
       '代入 B = 3 kHz、S/N = 10^(30/10) = 1000：C = 3·log₂(1 + 1000)。',
       '1 + 1000 = 1001，log₂ 1001 ≈ 9.967。',
-      'C ≈ 3 × 9.967 ≈ 29.9 kbit/s，这就是该信道无差错传输的上限。',
+      'C ≈ 3 × 9.967 ≈ 29.9 kbit/s。',
     ],
     params: [
       { key: 'bandKhz', label: '带宽 B（kHz）', value: 3 },
       { key: 'snDb', label: '信噪比 S/N（dB）', value: 30 },
       { key: 'capacityKbit', label: '容量 C（kbit/s）', value: 29.9 },
     ],
-    caveat: '这里 30 dB 指信道输出端的功率信噪比 S/N（即 1000 倍）；若题面给的是 N₀ 或每赫兹信噪比，先换算再代入。',
+    caveat: '3 kHz 不在实验台的带宽档位里（档位是 2 / 5 kHz），所以右栏只能开默认档——读数不会和这题对上，这是对的，不是坏了。',
   },
 }
 
@@ -67,6 +99,7 @@ const pskEbn0: BankProblem = {
       { key: 'ebn0Linear', label: 'Eb/N₀（倍）', value: 9.1 },
       { key: 'ebn0Db', label: 'Eb/N₀（dB）', value: 9.59 },
     ],
+    preset: { no: 7, values: { ebn0Db: 10 } },
     caveat: '这是理想相干解调的理论值，实际系统还要留 1–2 dB 的实现损耗。',
   },
 }
@@ -91,10 +124,11 @@ const mseqPeriod: BankProblem = {
       { key: 'stages', label: '寄存器级数 n', value: 4 },
       { key: 'period', label: '周期 N', value: 15 },
     ],
+    preset: { no: 12, values: { level: 0, taps: 0 } },
   },
 }
 
-export const ANSWER_BANK: BankProblem[] = [capacity, pskEbn0, mseqPeriod]
+export const ANSWER_BANK: BankProblem[] = [capacity, capacity3k, pskEbn0, mseqPeriod]
 
 /** 按章节号找内置题；没有就用 undefined，让 UI 只显示定位结果。 */
 export function problemByChapter(chapter: number): BankProblem | undefined {
@@ -103,6 +137,22 @@ export function problemByChapter(chapter: number): BankProblem | undefined {
 
 export function problemById(id: string): BankProblem | undefined {
   return ANSWER_BANK.find((item) => item.id === id)
+}
+
+/**
+ * 第 4 章有两道题（5 kHz 与 3 kHz），章节号分不开。
+ * 从题面里抓带宽数字再挑——抓不到就退回该章第一道，绝不猜别的章。
+ */
+export function pickProblem(text: string, chapter: number): BankProblem | undefined {
+  const candidates = ANSWER_BANK.filter((item) => item.chapter === chapter)
+  if (candidates.length <= 1) return candidates[0]
+  const found = /(\d+(?:\.\d+)?)\s*kHz/i.exec(text)
+  if (!found) return candidates[0]
+  const bandKhz = Number(found[1])
+  return (
+    candidates.find((item) => item.answer.params.some((p) => p.key === 'bandKhz' && p.value === bandKhz)) ??
+    candidates[0]
+  )
 }
 
 /** 章节标题，给左栏与 iframe 上方的小标题用。 */

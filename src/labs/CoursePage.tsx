@@ -16,6 +16,7 @@ import {
   type CourseParam,
   type CourseView,
 } from '../core/course.ts'
+import { applyPreset, decodePreset, type PresetSpec } from '../answer/presets.ts'
 import { chartLabel } from './chartLabel.ts'
 import { CourseChart } from './CourseChart.tsx'
 import { CourseLegend } from './CourseLegend.tsx'
@@ -78,6 +79,20 @@ function initialChapter(): number {
 }
 
 /** 地址里带 ?embed=1 时是嵌入形态：答题模式右栏的 iframe 用它，只留当前章一屏。 */
+/**
+ * 地址栏里的 `preset=4:bandIndex=5,snr0Db=36.9897`：答题模式把左栏算出的
+ * 那组参数带过来，右栏照同一组数渲染。解不开就当没传，不报错、不清页面。
+ */
+function readPreset(): PresetSpec | null {
+  const query = window.location.hash.split('?')[1] ?? ''
+  return decodePreset(new URLSearchParams(query).get('preset'))
+}
+
+/** 该章参数键表，applyPreset 只认这一章真有的键。 */
+function paramKeys(chapter: CourseChapter): string[] {
+  return chapter.params.map((item) => item.key)
+}
+
 function isEmbed(): boolean {
   const query = window.location.hash.split('?')[1] ?? ''
   return new URLSearchParams(query).get('embed') === '1'
@@ -335,8 +350,12 @@ type ImportState =
 export function CoursePage() {
   const [no, setNo] = useState(initialChapter)
   const chapter = chapterByNo(no) ?? chapterByNo(START_CHAPTER)!
-  const [params, setParams] = useState<Record<string, number>>(chapter.defaults)
-  const [committed, setCommitted] = useState<Record<string, number>>(chapter.defaults)
+  // preset 只读一次：之后用户拖滑杆就是用户自己的事，不再被地址栏覆盖。
+  const [presetSpec] = useState<PresetSpec | null>(readPreset)
+  const initialParams = () =>
+    applyPreset(chapter.defaults, presetSpec, chapter.no, paramKeys(chapter))
+  const [params, setParams] = useState<Record<string, number>>(initialParams)
+  const [committed, setCommitted] = useState<Record<string, number>>(initialParams)
   const dragRef = useRef(createDragCoalescer<Record<string, number>>())
   const paramsRef = useRef(params)
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
@@ -535,11 +554,12 @@ export function CoursePage() {
   const pick = useCallback((next: number) => {
     const target = chapterByNo(next)
     if (!target) return
+    const nextParams = applyPreset(target.defaults, presetSpec, target.no, paramKeys(target))
     setNo(next)
-    setParams(target.defaults)
-    paramsRef.current = target.defaults
-    setCommitted(target.defaults)
-  }, [])
+    setParams(nextParams)
+    paramsRef.current = nextParams
+    setCommitted(nextParams)
+  }, [presetSpec])
 
   const setParam = useCallback((key: string, value: number) => {
     const next = { ...paramsRef.current, [key]: value }
