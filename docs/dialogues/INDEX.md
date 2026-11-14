@@ -170,4 +170,8 @@ R112：书栏失败提示可读可选。真因两条——`keepPdf` 默认 false
 
 R113：没有原件时书栏一开始就收起。`showBook` 初值改 `Boolean(pdfBytes[book.id])`，加 `userToggled` ref，原件异步到位且用户没手动开合过时自动展开一次；没原件时开关文案改「导入后可同屏看书」，点击直接打开导入入口，旁边一行黄字；`aside` 改成 `showBook && hasPdf`，`.course-book-missing` 分支整段删。三张真截图（1440×1500）：内置书刚进收起 + 新文案，导入真书后自动展开并翻到第 130 页（canvas 372×531、darkPct 3.1），清原件后再进回到收起态。补 `docs/archive/2026-11-14-session-83.md`（含 R112）、轮次表 R113 行；测试 401 条、构建 430.47 kB / gzip 143.25 kB。
 
+R114：书栏可拖宽（只动布局）。`.course-layout` 用行内网格 `264px minmax(0, 1fr) 8px Npx`，默认 45%、最小 300 px、最大 60%；8 px 分隔条 `cursor: col-resize`、hover/focus 变蓝、双击或 Home 复位、左右键 ±16 px，`role="separator"` + `aria-valuenow` 实时百分比；宽度只在组件 state（`localStorage` 键列表为空），收起或无原件时不渲染分隔条。实测 1440×1500：默认 490 px / canvas 444×633，最小 300 px / 254×362，最大 653 px / 607×866，150% 缩放时 canvas CSS 631 < 653 不被裁。测试 401 条、构建 432.23 kB / gzip 143.93 kB；提交 `0c7d172` + tag R114，CI 43564549830 success。
+
+R115：补 `Map.prototype.getOrInsert` 与 `getOrInsertComputed`。Chrome 141.0.7390.77 两个方法都是 undefined（Edge 157 都有），pdf.js 6.5.438 每页 render 都调用它们，于是 484 页全白并报 `TypeError: this.#n.getOrInsertComputed is not a function`。新建 `src/compat.ts`，仅在 `typeof` 为 undefined 时用 `Object.defineProperty`（writable/configurable 为 true、enumerable 为 false）补上两个方法，原生存在时不动；`src/main.tsx` 首行 import，早于 pdf.js 的动态 import；`tests/compat.test.ts` 四条。CDP 注入删除两个方法模拟 Chrome 141：线上 R114 报错、canvas 未绘制（截图 175,995 B）；换新构建同样注入后第 22 页 canvas 444×633、dark 6.5%、零错误（318,369 B）；不注入的 Edge 157 同样是 6.5%（323,533 B）。测试 405 条（新增 4 条，`check:docs` 口径同步 401→405、37→38 个文件）、构建 432.65 kB / gzip 144.02 kB。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。
