@@ -84,8 +84,23 @@ export default function SolvePage() {
   // 进度态：模型这一趟可以走十几秒，界面得一直说话，不能只转圈
   const [phase, setPhase] = useState('')
   const [waited, setWaited] = useState(0)
+  // 右栏 iframe 的高度由课程视图自报：一屏五段比 560px 高得多，钉死高度就只能内滚
+  const [frameHeight, setFrameHeight] = useState(0)
   const objectUrl = useRef('')
   const alive = useRef(true)
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: unknown; height?: unknown } | null
+      if (!data || data.type !== 'comm-lab:embed-height') return
+      if (typeof data.height !== 'number' || !Number.isFinite(data.height)) return
+      const next = Math.round(data.height)
+      if (next < 260 || next > 4000) return
+      setFrameHeight(next)
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
   useEffect(() => {
     alive.current = true
@@ -432,6 +447,7 @@ export default function SolvePage() {
               key={`${chapter}:${preset ? encodePreset(preset) : ''}`}
               className="solve-frame"
               src={courseUrl(chapter, preset)}
+              style={frameHeight > 0 ? { height: `${frameHeight}px` } : undefined}
               title={`第 ${chapter} 章课程视图`}
             />
           ) : (

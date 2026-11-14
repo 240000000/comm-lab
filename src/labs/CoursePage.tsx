@@ -856,6 +856,20 @@ export function CoursePage() {
 
   const embed = isEmbed()
 
+  // 嵌入形态（答题模式右栏的 iframe）要把内容高度报给父页面：课程视图一屏五段比
+  // 560px 高得多，父页面不给够高度，右栏就只能在 iframe 里内滚，「能拖的图」要翻半天才露头。
+  useEffect(() => {
+    if (!embed) return
+    const report = () => {
+      const height = Math.ceil(document.documentElement.scrollHeight)
+      if (height > 0) window.parent?.postMessage({ type: 'comm-lab:embed-height', height }, '*')
+    }
+    report()
+    const observer = new ResizeObserver(report)
+    observer.observe(document.documentElement)
+    return () => observer.disconnect()
+  }, [embed])
+
   return (
     <main className={`lab course${embed ? ' is-embed' : ''}`}>
       {embed ? null : (
