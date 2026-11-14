@@ -5,6 +5,7 @@ import {
   ANSWER_BANK,
   MODEL_ERROR_TAIL,
   NO_CHAPTER_HINT,
+  DEFAULT_FRAME_HINT,
   OFFLINE_ONLY_HINT,
   chapterTitle,
   noSampleHint,
@@ -369,6 +370,9 @@ export default function SolvePage() {
               {wired === null ? '' : wired ? ' · 模型已接' : ' · 离线模式'}
             </span>
           </div>
+          {chapter > 0 && !preset ? (
+            <p className="solve-note solve-default-frame">{DEFAULT_FRAME_HINT}</p>
+          ) : null}
           {chapter > 0 ? (
             <iframe
               key={`${chapter}:${preset ? encodePreset(preset) : ''}`}

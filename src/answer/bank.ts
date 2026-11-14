@@ -187,6 +187,10 @@ export function noSampleHint(wired: boolean): string {
 /** C 态：模型调用失败时的收尾建议。 */
 export const MODEL_ERROR_TAIL = '可以先用内置三道示例题。'
 
+/** 右栏没有 preset 时的那行小字：说清右栏只是默认档，不是这道题的答案。 */
+export const DEFAULT_FRAME_HINT =
+  '右栏是默认档示例，不是这道题的答案。内置示例题会带着题设跳过去。'
+
 /** 章节标题，给左栏与 iframe 上方的小标题用。 */
 export function chapterTitle(chapter: number): string {
   return chapterByNo(chapter)?.title ?? `第 ${chapter} 章`

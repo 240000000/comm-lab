@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import {
   ANSWER_BANK,
   noSampleHint,
+  DEFAULT_FRAME_HINT,
   pickProblem,
   problemByChapter,
   problemById,
@@ -74,4 +75,10 @@ test('题面带宽与 S/N 都对得上时仍然命中对应那道', () => {
 test('无端点说「不在内置的三道示例里」，有端点时不出现这句', () => {
   assert.match(noSampleHint(false), /不在内置的三道示例里/)
   assert.doesNotMatch(noSampleHint(true), /不在内置的三道示例里/)
+})
+
+test('右栏默认档提示只描述默认档，不冒充答案', () => {
+  assert.match(DEFAULT_FRAME_HINT, /默认档示例/)
+  assert.match(DEFAULT_FRAME_HINT, /不是这道题的答案/)
+  assert.doesNotMatch(DEFAULT_FRAME_HINT, /\d+(?:\.\d+)?\s*kbit/)
 })
