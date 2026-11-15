@@ -3248,3 +3248,11 @@ video::-webkit-media-controls-overlay-play-button {
   font-size: 12px;
   line-height: 1.6;
 }
+
+/* 模型失败时给两个按钮：重试这一张图 / 检查端点配置——不让人重新选文件 */
+.solve-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}

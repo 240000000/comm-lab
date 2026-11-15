@@ -12,10 +12,10 @@
  * 没有配置端点时返回 `{ status: 'offline' }`，界面走离线三题。
  */
 
-import { parseDiagram, type PskTimeDiagram } from './diagram.ts'
+import { parseDiagram, type TimeDiagram } from './diagram.ts'
 
 /** 等模型的上限：超过这个时间就明说「这次没答上来」，不让人对着转圈猜。 */
-export const MODEL_TIMEOUT_MS = 20_000
+export const MODEL_TIMEOUT_MS = 30_000
 
 /** 答案里可被滑块复用的参数，值一定是数字，单位/含义放在 label 里。 */
 export type AnswerParam = { key: string; label: string; value: number }
@@ -50,14 +50,16 @@ export type AnswerMeta = {
    * 模型给的课本图规格。只认 `diagram.ts` 白名单里那一种；
    * 模型没给或给的字段不合规都是 `undefined`，界面据此写「没有配图」。
    */
-  diagram?: PskTimeDiagram
+  diagram?: TimeDiagram
 }
 
 export type AnswerOk = AnswerResult & { status: 'ok'; meta: AnswerMeta }
 /** 没接模型时的返回：调用方据此切到内置题库，并且必须显示「演示模式」。 */
 export type AnswerOffline = { status: 'offline' }
 /** 接了模型但这次失败：调用方必须报错，不许拿内置答案冒充。 */
-export type AnswerError = { status: 'error'; message: string }
+/** 失败分三类：超时 / 端点返回了非 2xx / 回复里没有可解析的 JSON。 */
+export type AnswerErrorKind = 'timeout' | 'http' | 'parse'
+export type AnswerError = { status: 'error'; message: string; errorKind?: AnswerErrorKind }
 export type AnswerReply = AnswerOk | AnswerOffline | AnswerError
 
 export type AnswerRequest = {
@@ -126,10 +128,15 @@ const SYSTEM_PROMPT = [
   '  chapter: 这道题对应的《通信原理》章节号（整数 1–13）；',
   '  confidence: 你对答案的置信度（0 到 1 的小数）；',
   '  caveat: 可选，口径说明或容易踩的坑（字符串，没有就省略）；',
-  '  diagram: 可选，只有题目让你画波形/原理图时才给，否则省略。形状固定为：',
+  '  diagram: 可选，只有题目让你画波形/原理图时才给，否则省略。两种形状，只能二选一：',
+  '    A. 2ASK / 2PSK / 2DPSK 的时间波形：',
   '    { "kind": "psk-time", "bits": "010110", "bitRate": 1200, "carrierHz": 2400, "showBlock": true }；',
-  '    bits 只写 0 和 1、长度 4–16；bitRate 100–10000 的波特率；carrierHz 100–20000 的载波频率；',
-  '    showBlock 表示要不要画「数字信息→极性变换→乘法器→带通滤波器」的原理框图。',
+  '       bits 只写 0 和 1、长度 4–16；bitRate 100–10000 的波特率；carrierHz 100–20000 的载波频率；',
+  '       showBlock 表示要不要画「数字信息→极性变换→乘法器→带通滤波器」的原理框图；',
+  '    B. 2FSK 的时间波形（两个独立振荡器切换，码元边界相位跳变）：',
+  '    { "kind": "fsk-time", "bits": "010110", "bitRate": 1000, "carrierHzLow": 1000, "carrierHzHigh": 2000 }；',
+  '       carrierHzLow / carrierHzHigh 分别对应比特 0 与比特 1 的频率，100–20000，且 high 必须大于 low；',
+  '       题目要画星座图、眼图、频谱图或别的图形时不要编，直接省略 diagram 字段。',
   '    别自己造别的图形类型，也别把波形写成坐标数组——画图交给前端。',
   '数值必须自己算，写清代入过程；单位与量纲要保留在 label 里。',
 ].join('\n')
@@ -251,6 +258,46 @@ type ChatReply = {
   model?: string
 }
 
+/** 一次请求的字段：单独成函数，测试直接断言（不碰网络）。 */
+export type AnswerBodyOptions = {
+  model: string
+  instruction: string
+  imageUrl: string
+  /** 关掉思考链（deepseek 这类端点认这个字段），默认开。 */
+  thinking?: boolean
+}
+
+export function answerRequestBody(options: AnswerBodyOptions): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: options.model,
+    temperature: 0.2,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: options.instruction },
+          { type: 'image_url', image_url: { url: options.imageUrl } },
+        ],
+      },
+    ],
+  }
+  if (options.thinking !== false) body.thinking = { type: 'disabled' }
+  return body
+}
+
+/** 端点返回非 2xx：带上响应体前 120 字，别只说一个状态码。 */
+async function httpFailure(response: Response): Promise<AnswerError> {
+  const raw = await response.text().catch(() => '')
+  const excerpt = raw.replace(/\s+/g, ' ').trim().slice(0, 120)
+  return {
+    status: 'error',
+    errorKind: 'http',
+    message: `模型端点返回 ${response.status}${excerpt ? `：${excerpt}` : ''}`,
+  }
+}
+
 /**
  * 真模型作答：图片直传，OpenAI 兼容的 chat/completions。
  * 任何一步失败都返回 `{ status: 'error' }`，绝不拿内置答案冒充模型作答。
@@ -270,38 +317,32 @@ export const defaultProvider: AnswerProvider = async (request) => {
       .filter(Boolean)
       .join('\n')
 
+    const model = resolved.model ?? 'deepseek-flash'
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS)
-    const response = await fetch(resolved.endpoint, {
-      signal: controller.signal,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: resolved.model ?? 'deepseek-flash',
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: instruction },
-              { type: 'image_url', image_url: { url: imageUrl } },
-            ],
-          },
-        ],
-      }),
-    }).finally(() => clearTimeout(timer))
+    const send = (thinking: boolean) =>
+      fetch(resolved.endpoint, {
+        signal: controller.signal,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(answerRequestBody({ model, instruction, imageUrl, thinking })),
+      })
 
-    if (!response.ok) {
-      return { status: 'error', message: `模型端点返回 ${response.status}` }
+    let response = await send(true)
+    // 有的转发层不认 thinking 字段：400 且报错里提到 thinking，就去掉它重发一次。
+    if (response.status === 400) {
+      const probe = await response.clone().text().catch(() => '')
+      if (/thinking/i.test(probe)) {
+        response = await send(false)
+      }
     }
-
+    if (!response.ok) return httpFailure(response)
+    clearTimeout(timer)
     const body = (await response.json()) as ChatReply
     const content = contentText(body.choices?.[0]?.message?.content)
     const payload = extractJson(content)
     if (!payload) {
-      return { status: 'error', message: '模型回复里没有可解析的 JSON' }
+      return { status: 'error', errorKind: 'parse', message: '模型回复里没有可解析的 JSON' }
     }
     return parseModelAnswer(payload, {
       model: body.model ?? resolved.model,
@@ -311,7 +352,11 @@ export const defaultProvider: AnswerProvider = async (request) => {
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      return { status: 'error', message: `等了 ${MODEL_TIMEOUT_MS / 1000} s 还没有回复，这次没答上来` }
+      return {
+        status: 'error',
+        errorKind: 'timeout',
+        message: `等了 ${MODEL_TIMEOUT_MS / 1000} s 还没有回复（端点太慢或网络卡住），这次没答上来`,
+      }
     }
     return {
       status: 'error',

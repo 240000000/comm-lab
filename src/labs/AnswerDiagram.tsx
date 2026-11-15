@@ -3,9 +3,12 @@ import {
   bitBoundariesMs,
   diagramFootnote,
   diagramSeconds,
+  fskFootnote,
   parseDiagram,
   symbolSeconds,
+  type FskTimeDiagram,
   type PskTimeDiagram,
+  type TimeDiagram,
 } from '../answer/diagram.ts'
 import { basebandLevel, carrierSample, differentialBits } from '../core/course.ts'
 
@@ -166,7 +169,140 @@ function blockDiagram(pane: Pane, spec: PskTimeDiagram, scheme: DiagramScheme) {
   vArrow(ctx, xs[2] + w / 2, carrierY, rowY + h)
 }
 
-function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramScheme) {
+/**
+ * 2FSK 的时间波形：两个独立振荡器按比特切换，每个码元都从相位 0 重新起振，
+ * 所以码元边界上相位是跳的——教材习题的默认画法。只画一段波形，不画框图。
+ */
+function drawFsk(canvas: HTMLCanvasElement, spec: FskTimeDiagram) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  const bits = spec.bits.split('').map(Number)
+  const stepSeconds = symbolSeconds(spec)
+  const totalSeconds = diagramSeconds(spec)
+
+  const labelTop = 30
+  const waveTop = labelTop + 22
+  const waveHeight = 196
+  const waveBottom = waveTop + waveHeight
+  const midY = waveTop + waveHeight / 2
+  const amp = waveHeight / 2 - 12
+  const height = waveBottom + 46
+
+  canvas.width = Math.round(WIDTH * dpr)
+  canvas.height = Math.round(height * dpr)
+  canvas.style.width = '100%'
+  canvas.style.height = 'auto'
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, WIDTH, height)
+  ctx.fillStyle = '#0c1424'
+  ctx.fillRect(0, 0, WIDTH, height)
+
+  const plotW = WIDTH - PAD_LEFT - PAD_RIGHT
+  const scaleX = (seconds: number) => PAD_LEFT + (seconds / totalSeconds) * plotW
+
+  ctx.save()
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.font = '13px "Microsoft YaHei", "PingFang SC", sans-serif'
+  ctx.fillStyle = INK
+  ctx.fillText(`1 → f1 = ${Math.round(spec.carrierHzHigh)} Hz`, PAD_LEFT, 14)
+  ctx.fillStyle = DIM
+  ctx.fillText(`0 → f0 = ${Math.round(spec.carrierHzLow)} Hz`, PAD_LEFT + 168, 14)
+  ctx.restore()
+
+  // ±1 包络与零轴。
+  ctx.save()
+  ctx.strokeStyle = GRID
+  ctx.setLineDash([5, 6])
+  ctx.lineWidth = 1
+  for (const y of [midY - amp, midY + amp]) {
+    ctx.beginPath()
+    ctx.moveTo(PAD_LEFT, y)
+    ctx.lineTo(WIDTH - PAD_RIGHT, y)
+    ctx.stroke()
+  }
+  ctx.setLineDash([])
+  ctx.strokeStyle = 'rgba(142,162,198,0.28)'
+  ctx.beginPath()
+  ctx.moveTo(PAD_LEFT, midY)
+  ctx.lineTo(WIDTH - PAD_RIGHT, midY)
+  ctx.stroke()
+  ctx.restore()
+
+  // 码元边界：竖虚线 + 上方 0 / 1。
+  for (const [index, ms] of bitBoundariesMs(spec).entries()) {
+    const x = scaleX(ms / 1000)
+    ctx.save()
+    ctx.strokeStyle = GRID
+    ctx.setLineDash([4, 5])
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(x, labelTop)
+    ctx.lineTo(x, waveBottom + 6)
+    ctx.stroke()
+    ctx.restore()
+    if (index < bits.length) {
+      const center = scaleX((index + 0.5) * stepSeconds)
+      ctx.save()
+      ctx.fillStyle = ACCENT
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'alphabetic'
+      ctx.font = '600 13px "Consolas", "Microsoft YaHei", monospace'
+      ctx.fillText(spec.bits[index], center, labelTop + 14)
+      ctx.restore()
+    }
+  }
+
+  // 每个码元从相位 0 起振：f 取这一位的频率，时间是码元内的相对时间。
+  const cyclesMax = Math.max(1, Math.ceil(spec.carrierHzHigh / spec.bitRate))
+  const samplesPerSymbol = SAMPLES_PER_CYCLE * cyclesMax
+  const totalPoints = bits.length * samplesPerSymbol
+  const stride = Math.max(1, Math.ceil(totalPoints / MAX_DRAW_POINTS))
+  ctx.save()
+  ctx.strokeStyle = ACCENT2
+  ctx.lineWidth = 1.6
+  ctx.beginPath()
+  for (let k = 0; k <= totalPoints; k += stride) {
+    const seconds = (k / samplesPerSymbol) * stepSeconds
+    const index = Math.min(bits.length - 1, Math.floor(seconds / stepSeconds))
+    const offset = seconds - index * stepSeconds
+    const carrierHz = bits[index] === 1 ? spec.carrierHzHigh : spec.carrierHzLow
+    const y = midY - carrierSample(carrierHz, offset) * amp
+    const x = scaleX(seconds)
+    if (k === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.stroke()
+  ctx.restore()
+
+  // 横轴：t / ms。
+  const axisY = waveBottom + 20
+  ctx.save()
+  ctx.strokeStyle = DIM
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(PAD_LEFT, axisY)
+  ctx.lineTo(WIDTH - PAD_RIGHT, axisY)
+  ctx.stroke()
+  ctx.fillStyle = DIM
+  ctx.font = '12px "Consolas", "Microsoft YaHei", monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  for (const ms of bitBoundariesMs(spec)) {
+    ctx.fillText(`${Math.round(ms * 10) / 10}`, scaleX(ms / 1000), axisY + 6)
+  }
+  ctx.textAlign = 'left'
+  ctx.fillText('t / ms', PAD_LEFT - 10, axisY + 6)
+  ctx.restore()
+}
+
+function draw(canvas: HTMLCanvasElement, spec: TimeDiagram, scheme: DiagramScheme) {
+  if (spec.kind === 'fsk-time') {
+    drawFsk(canvas, spec)
+    return
+  }
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const showBlock = spec.showBlock
   const bits = spec.bits.split('').map(Number)
@@ -368,16 +504,24 @@ function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramSc
 }
 
 /** 相位映射的说明：取决于这一题按哪种调制讲。 */
-function schemeNote(scheme: DiagramScheme): string {
+function schemeNote(scheme: DiagramScheme, fsk = false): string {
+  if (fsk) return '2FSK：比特 1 发 f1、比特 0 发 f0，码元边界相位跳变'
   if (scheme === '2ASK') return '2ASK：比特 1 有载波，比特 0 无载波'
   if (scheme === '2DPSK') return '2DPSK：差分编码后 1 记 0 相位，0 记 π 相位'
   return '2PSK：比特 1 记 0 相位，比特 0 记 π 相位'
+}
+
+/** 底注：两种图各说各的物理量。 */
+function footnoteOf(diagram: TimeDiagram): string {
+  return diagram.kind === 'fsk-time' ? fskFootnote(diagram) : diagramFootnote(diagram)
 }
 
 export function AnswerDiagram({ spec, scheme = '2PSK' }: { spec: unknown; scheme?: DiagramScheme }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const diagram = parseDiagram(spec)
   const key = diagram ? JSON.stringify(diagram) : ''
+  const isFsk = diagram?.kind === 'fsk-time'
+  const label = diagram ? `${isFsk ? '2FSK' : scheme} 波形：比特 ${diagram.bits}` : '波形'
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -393,12 +537,15 @@ export function AnswerDiagram({ spec, scheme = '2PSK' }: { spec: unknown; scheme
   if (!diagram) return null
   return (
     <figure className="answer-diagram">
-      <canvas ref={canvasRef} role="img" aria-label={`${scheme} 波形：比特 ${diagram.bits}`} />
+      <canvas ref={canvasRef} role="img" aria-label={label} />
       <figcaption>
-        <span>{diagramFootnote(diagram)}</span>
-        <span>{schemeNote(scheme)}</span>
+        <span>{footnoteOf(diagram)}</span>
+        <span>{schemeNote(scheme, isFsk)}</span>
         <span>
-          {diagram.bits.length} 个码元，{diagram.bitRate} Baud，载波 {diagram.carrierHz} Hz
+          {diagram.bits.length} 个码元，{diagram.bitRate} Baud
+          {diagram.kind === 'fsk-time'
+            ? `，f1 ${Math.round(diagram.carrierHzHigh)} Hz / f0 ${Math.round(diagram.carrierHzLow)} Hz`
+            : `，载波 ${diagram.carrierHz} Hz`}
         </span>
       </figcaption>
     </figure>

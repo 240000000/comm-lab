@@ -238,4 +238,9 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - `figcaption` 拆成三行：`f_c·T_b` 底注、相位映射、码元数与波特率；两句话各 ≤34 字。
 - 判据：`report.json` 里 `blockLowestY = 178`、`labelTopY = 197.5`，178 < 185.5 → `gapOk true`；439 pass、oxlint 0/0、build 473.69 kB / gzip 159.84 kB；图 `D:/harness/tmp/r130shots/{b-2psk-010110-block,a-2psk-1011001}.png`。
 
+### R131 · 2FSK 波形、三分支图形文案、超时分类重试
+
+- 改动：`src/answer/diagram.ts`（`fsk-time` 第二白名单）、`src/labs/AnswerDiagram.tsx`（`drawFsk`）、`src/answer/provider.ts`（30 s、`thinking.disabled`、`errorKind` 三分类）、`src/labs/SolvePage.tsx`（本机优先定位、图形区三分支、错误重试按钮）、`src/App.css`、`tests/answerRequest.test.ts`（5 条）。
+- 判据：444 条测试全过、`index-CdTNbQud.js` 479.52 kB / gzip 161.75 kB；7-2 定位第 7 章 + 2FSK 波形 3/2 周期 + 底注 6 kHz、6.3 s；7-4(2) 打印「画不了」、6.1 s；netlify 函数 deploy `6af981c134cca872195b68bd`、直连 200 / 2.3 s；`check:docs` 182 断言 0 不符、131 tag = 轮次表 131 行。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。

@@ -13,12 +13,13 @@ import {
   problemByChapter,
   type BankProblem,
 } from '../answer/bank.ts'
-import { locateProblem, type LocateOutcome } from '../answer/locate.ts'
+import { locateProblem, MIN_SCORE, type LocateOutcome } from '../answer/locate.ts'
 import { bandMissNote, channelPreset, encodePreset, type PresetSpec } from '../answer/presets.ts'
 import { AnswerDiagram, type DiagramScheme } from './AnswerDiagram.tsx'
 import {
   defaultProvider,
   hasModelEndpoint,
+  type AnswerErrorKind,
   type AnswerOk,
   type AnswerReply,
 } from '../answer/provider.ts'
@@ -32,13 +33,45 @@ type ModelState =
   | { kind: 'pending' }
   | { kind: 'ok'; answer: AnswerOk }
   | { kind: 'offline' }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; errorKind?: AnswerErrorKind }
 
 /** 计时起点。
  * 放到模块级是为了让 react(purity) 规则别把「读时钟」当成渲染期调用——
  * 本文件里所有取时间戳的地方都只在事件回调或异步流程里执行。
  */
 const nowMs = () => performance.now()
+
+/**
+ * 题面是不是要求画图：只认题面里的动词/名词，不听模型点头。
+ * 「画出 / 试画」后面跟的十来个字当作要画的图名，写进「画不了」那句里。
+ */
+const DIAGRAM_ASK = /画出|试画|示意图|波形|星座图|眼图|频谱/
+
+function asksDiagram(text: string): boolean {
+  return DIAGRAM_ASK.test(text)
+}
+
+function askedSubject(text: string): string {
+  if (/2DPSK/.test(text)) return '2DPSK 两种相位规则'
+  if (/星座图/.test(text)) return '星座图'
+  if (/眼图/.test(text)) return '眼图'
+  if (/频谱图|功率谱/.test(text)) return '频谱图'
+  const hit = text.match(/(?:画出|试画|作出|画)[^，。；\n]{0,12}/)
+  return (hit?.[0] ?? '波形').replace(/^画出?/, '').trim() || '波形'
+}
+
+/**
+ * 题面要的图，白名单画不出来的那些。
+ *
+ * 模型有时候会硬塞一个 psk-time 过来——2DPSK 的两种相位规则最能骗过它，
+ * 画出来其实是 2PSK，读起来像对、其实不对。这里按题面盖掉模型的图，
+ * 老实写「画不了」，而不是把 2DPSK 偷偷画成 2PSK。
+ */
+const DIAGRAM_OFF_LIMITS = /星座图|眼图|频谱图|功率谱|误码率曲线|2DPSK|DPSK/
+
+function beyondWhitelist(text: string): boolean {
+  return DIAGRAM_OFF_LIMITS.test(text)
+}
 
 const IDLE_NOTE = '上传一张题目截图，或者直接点下面的内置样本——接了模型就让模型看图答，没接就走离线三题。'
 
@@ -77,6 +110,8 @@ export default function SolvePage() {
   const [preview, setPreview] = useState('')
   const [text, setText] = useState('')
   const [located, setLocated] = useState<LocateOutcome | null>(null)
+  // 模型自报的章节：只作参考，和本机关键词不一致时在卡 2 下面说明
+  const [modelChapter, setModelChapter] = useState<number | null>(null)
   const [problem, setProblem] = useState<BankProblem | null>(null)
   const [model, setModel] = useState<ModelState>({ kind: 'idle' })
   const [note, setNote] = useState(IDLE_NOTE)
@@ -88,6 +123,8 @@ export default function SolvePage() {
   // 右栏 iframe 的高度由课程视图自报：一屏五段比 560px 高得多，钉死高度就只能内滚
   const [frameHeight, setFrameHeight] = useState(0)
   const objectUrl = useRef('')
+  // 上一次上传的图：重试时直接复用，不让人重新选文件。
+  const lastBlob = useRef<{ blob: Blob; label: string } | null>(null)
   const alive = useRef(true)
 
   useEffect(() => {
@@ -139,7 +176,7 @@ export default function SolvePage() {
     if (reply.status === 'error') {
       // 模型失败就只报错，绝不拿内置答案顶上。
       setPhase('')
-      setModel({ kind: 'error', message: reply.message })
+      setModel({ kind: 'error', message: reply.message, errorKind: reply.errorKind })
       setNote(`${label}：模型这次没答上来（${seconds(nowMs() - started)}）。`)
       return true
     }
@@ -152,10 +189,16 @@ export default function SolvePage() {
 
     setPhase('解析中')
     const transcript = reply.meta.transcript ?? ''
-    // 题面与章节都来自模型那段 JSON：不再本机认字、不再本机打分定位。
-    const placed: LocateOutcome | null = reply.meta.chapter
-      ? { chapter: reply.meta.chapter, hits: [], score: 0, top: [], ambiguous: false }
-      : null
+    // 定位以本机为准：本机关键词分数够格就用本机结果，模型的章节只当参考。
+    const local = locateProblem(transcript)
+    const said = reply.meta.chapter && reply.meta.chapter >= 1 ? reply.meta.chapter : null
+    const placed: LocateOutcome | null =
+      local && local.score >= MIN_SCORE
+        ? local
+        : said
+          ? { chapter: said, hits: [], score: local?.score ?? 0, top: [], ambiguous: false }
+          : (local ?? null)
+    setModelChapter(said)
     setText(transcript)
     setLocated(placed)
     setProblem(placed ? (pickProblem(transcript, placed.chapter) ?? null) : null)
@@ -166,6 +209,7 @@ export default function SolvePage() {
 
   /** 拿到图之后：接上端点就直接看图作答，没端点才走本机识别链路。 */
   const readImage = async (blob: Blob, label: string) => {
+    lastBlob.current = { blob, label }
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current)
     objectUrl.current = URL.createObjectURL(blob)
     setPreview(objectUrl.current)
@@ -213,7 +257,14 @@ export default function SolvePage() {
     setPhase('解析中')
     if (reply.status === 'ok') setModel({ kind: 'ok', answer: reply })
     else if (reply.status === 'offline') setModel({ kind: 'offline' })
-    else setModel({ kind: 'error', message: reply.message })
+    else setModel({ kind: 'error', message: reply.message, errorKind: reply.errorKind })
+  }
+
+  /** 重试：直接用上一张图再走一遍，不让人重新选文件。 */
+  const retryModel = () => {
+    const last = lastBlob.current
+    if (!last) return
+    void readImage(last.blob, last.label)
   }
 
   const onPick = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -255,6 +306,8 @@ export default function SolvePage() {
   })()
   const formula = problem?.formula ?? ''
   const transcript = model.kind === 'ok' ? model.answer.meta.transcript : undefined
+  // 「题目是否要求画图」只看题面本身：模型转写优先，其次本机 OCR
+  const questionText = `${transcript ?? ''} ${text}`.trim()
   // 图上标相位得跟着题目问的调制走；题面里没提就按 2PSK（课本 7-4 那种问法）。
   const diagramScheme: DiagramScheme = /2DPSK|差分/i.test(transcript ?? text)
     ? '2DPSK'
@@ -324,6 +377,19 @@ export default function SolvePage() {
                 {located.hits.length > 0 ? ` · 命中词：${located.hits.join('、')}` : ''}
               </p>
             ) : null}
+            {located && modelChapter && modelChapter !== located.chapter ? (
+              <p className="solve-locate">
+                模型说第 {modelChapter} 章，本机按关键词命中第 {located.chapter} 章
+                {located.hits.length > 0 ? `（${located.hits.join(' / ')}）` : ''}
+                <button
+                  type="button"
+                  className="solve-sample"
+                  onClick={() => pickChapter(modelChapter)}
+                >
+                  改按模型说的第 {modelChapter} 章看
+                </button>
+              </p>
+            ) : null}
             {bandMiss ? <p className="solve-locate solve-error">{bandMiss}</p> : null}
             {located?.ambiguous ? (
               <div className="solve-top3">
@@ -351,10 +417,15 @@ export default function SolvePage() {
                 <span className="solve-badge ok">模型作答</span>
                 <p className="solve-headline">{model.answer.headline}</p>
                 <p className="solve-note">{metaLine(model.answer)}</p>
-                {model.answer.meta.diagram ? (
+                {model.answer.meta.diagram && !beyondWhitelist(questionText) ? (
                   <AnswerDiagram spec={model.answer.meta.diagram} scheme={diagramScheme} />
+                ) : asksDiagram(questionText) ? (
+                  <p className="solve-note">
+                    这道题要求画「{askedSubject(questionText)}」的图，当前只支持 2ASK / 2PSK / 2FSK
+                    的时间波形，画不了{chapter > 0 ? `，可去第 ${chapter} 章看` : ''}。
+                  </p>
                 ) : (
-                  <p className="solve-note">这道题的文字答案里没有配图。</p>
+                  <p className="solve-note">这道题不需要画图。</p>
                 )}
               </>
             ) : null}
@@ -364,9 +435,28 @@ export default function SolvePage() {
               </p>
             ) : null}
             {model.kind === 'error' ? (
-              <p className="solve-locate solve-error">
-                模型这次没答上来：{model.message}。没有回退成演示答案，可以重传一次或检查端点配置。{MODEL_ERROR_TAIL}
-              </p>
+              <>
+                <p className="solve-locate solve-error">
+                  模型这次没答上来（
+                  {model.errorKind === 'timeout'
+                    ? '超时'
+                    : model.errorKind === 'http'
+                      ? '端点报错'
+                      : model.errorKind === 'parse'
+                        ? '回复解析失败'
+                        : '失败'}
+                  ）：{model.message}
+                </p>
+                <p className="solve-note">没有回退成演示答案。{MODEL_ERROR_TAIL}</p>
+                <div className="solve-error-actions">
+                  <button type="button" className="solve-sample" onClick={retryModel}>
+                    重试这一张图
+                  </button>
+                  <button type="button" className="solve-sample" onClick={() => setShowConfig(true)}>
+                    检查端点配置
+                  </button>
+                </div>
+              </>
             ) : null}
             {demoAnswer ? (
               <>
