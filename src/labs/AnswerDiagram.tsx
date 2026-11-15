@@ -25,7 +25,14 @@ const SCHEME_INDEX: Record<DiagramScheme, number> = { '2ASK': 0, '2PSK': 2, '2DP
 const WIDTH = 980
 const PAD_LEFT = 92
 const PAD_RIGHT = 28
-const BLOCK_HEIGHT = 176
+/** 方框高、行距、上下留白；框图区高度由内容算出来，不写死。 */
+const BOX_HEIGHT = 56
+const BLOCK_PAD = 16
+const CARRIER_GAP = 36
+const BLOCK_HEIGHT = BLOCK_PAD * 2 + BOX_HEIGHT + CARRIER_GAP + BOX_HEIGHT
+/** 位标签行高与它与载波源盒之间至少留的空隙。 */
+const LABEL_ROW_HEIGHT = 18
+const BLOCK_LABEL_GAP = 12
 const BASE_HEIGHT = 96
 const BAND_HEIGHT = 156
 /** 每个载波周期至少取这么多点，再按像素抽稀画。 */
@@ -130,8 +137,8 @@ function vArrow(ctx: CanvasRenderingContext2D, x: number, fromY: number, toY: nu
 function blockDiagram(pane: Pane, spec: PskTimeDiagram, scheme: DiagramScheme) {
   const { ctx } = pane
   const top = pane.blockTop
-  const rowY = top + 44
-  const h = 56
+  const rowY = top + BLOCK_PAD
+  const h = BOX_HEIGHT
   const w = 132
   const gap = 44
   const left = PAD_LEFT + 20
@@ -154,7 +161,7 @@ function blockDiagram(pane: Pane, spec: PskTimeDiagram, scheme: DiagramScheme) {
   ctx.restore()
 
   // 载波源从下面用一根短竖箭头进乘法器，画面里不许出现贯穿式长横箭头。
-  const carrierY = rowY + h + 36
+  const carrierY = rowY + h + CARRIER_GAP
   box(ctx, xs[2], carrierY, w, h, '载波源', 'cos ω_c t')
   vArrow(ctx, xs[2] + w / 2, carrierY, rowY + h)
 }
@@ -167,7 +174,10 @@ function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramSc
   const stepSeconds = symbolSeconds(spec)
 
   const blockTop = 14
-  const baseTop = blockTop + (showBlock ? BLOCK_HEIGHT : 0) + 28
+  // 波形段必须落在「载波源盒底 + 位标签行高 + 12 px」之下，位标签行本身也留 12 px。
+  const blockBottom = blockTop + (showBlock ? BLOCK_HEIGHT : 0)
+  const labelTop = blockBottom + BLOCK_LABEL_GAP + 4
+  const baseTop = showBlock ? labelTop + LABEL_ROW_HEIGHT + 12 : blockTop + 28
   const bandTop = baseTop + BASE_HEIGHT + 42
   const height = bandTop + BAND_HEIGHT + 42
 
@@ -213,7 +223,7 @@ function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramSc
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = ACCENT
   ctx.font = '600 13px "Microsoft YaHei", "PingFang SC", sans-serif'
-  ctx.fillText(scheme === '2ASK' ? '基带（单极性）' : '双极性基带 s(t)', 12, baseTop - 2)
+  ctx.fillText(scheme === '2ASK' ? '基带（单极性）' : '双极性基带 s(t)', 12, labelTop - 2)
   ctx.fillText('带通信号', 12, bandTop - 24)
   ctx.restore()
 
@@ -259,7 +269,7 @@ function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramSc
     ctx.lineWidth = 1.2
     ctx.beginPath()
     // 竖虚线只在基带段与带通段之间贯穿，不许穿进上面的框图区。
-    ctx.moveTo(x, baseTop - 26)
+    ctx.moveTo(x, labelTop)
     ctx.lineTo(x, bandTop + BAND_HEIGHT + 6)
     ctx.stroke()
     ctx.restore()
@@ -359,11 +369,9 @@ function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramSc
 
 /** 相位映射的说明：取决于这一题按哪种调制讲。 */
 function schemeNote(scheme: DiagramScheme): string {
-  if (scheme === '2ASK') return '2ASK：比特 1 有载波、0 无载波（幅度键控），图上标「有载波 / 无」'
-  if (scheme === '2DPSK') {
-    return '2DPSK：先按 a_n ⊕ b_{n-1} 差分编码（初值 0），再按 1→0 相位、0→π 相位映射'
-  }
-  return '2PSK：比特 1 记 0 相位、比特 0 记 π 相位（与 2ASK 的「有/无载波」不同）'
+  if (scheme === '2ASK') return '2ASK：比特 1 有载波，比特 0 无载波'
+  if (scheme === '2DPSK') return '2DPSK：差分编码后 1 记 0 相位，0 记 π 相位'
+  return '2PSK：比特 1 记 0 相位，比特 0 记 π 相位'
 }
 
 export function AnswerDiagram({ spec, scheme = '2PSK' }: { spec: unknown; scheme?: DiagramScheme }) {
@@ -387,9 +395,8 @@ export function AnswerDiagram({ spec, scheme = '2PSK' }: { spec: unknown; scheme
     <figure className="answer-diagram">
       <canvas ref={canvasRef} role="img" aria-label={`${scheme} 波形：比特 ${diagram.bits}`} />
       <figcaption>
-        <span>
-          {diagramFootnote(diagram)}；{schemeNote(scheme)}
-        </span>
+        <span>{diagramFootnote(diagram)}</span>
+        <span>{schemeNote(scheme)}</span>
         <span>
           {diagram.bits.length} 个码元，{diagram.bitRate} Baud，载波 {diagram.carrierHz} Hz
         </span>

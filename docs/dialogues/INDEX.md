@@ -232,4 +232,10 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 几何校验（逐像素扫描）：带框图那张 980×554，框图区（y 20–184）在边界列只命中 2 个孤立像素、波形区命中 131 个（虚线不穿框图）；载波列命中 33 px、两盒之间横向 0 px（短竖箭头，无长横线）；六个纵轴刻度位置全部命中。
 - 门禁：439 pass / 0 fail、oxlint 0/0（123 files）、build `index-DGBGIyzx.js` 473,756 B、css 48,111 B。截图 `D:/harness/tmp/r129shots/{b-2psk-010110-block,a-2psk-1011001}.png`。
 
+### R130 · 框图高度按内容算，波形段让开载波盒
+
+- `src/labs/AnswerDiagram.tsx`：`BLOCK_HEIGHT` 不再写死 176，改为 `BLOCK_PAD*2 + BOX_HEIGHT + CARRIER_GAP + BOX_HEIGHT`（180）；波形段起点 `baseTop = labelTop + LABEL_ROW_HEIGHT + 12`，`labelTop = blockBottom + 12 + 4`，位标签与码元边界虚线都从 `labelTop` 起算。
+- `figcaption` 拆成三行：`f_c·T_b` 底注、相位映射、码元数与波特率；两句话各 ≤34 字。
+- 判据：`report.json` 里 `blockLowestY = 178`、`labelTopY = 197.5`，178 < 185.5 → `gapOk true`；439 pass、oxlint 0/0、build 473.69 kB / gzip 159.84 kB；图 `D:/harness/tmp/r130shots/{b-2psk-010110-block,a-2psk-1011001}.png`。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。
