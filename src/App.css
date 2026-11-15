@@ -2431,6 +2431,22 @@ a.card {
   color: var(--dim);
 }
 
+/* R136：示例教材按钮与导入按钮同款外形，它走的是同一条导入链路。 */
+.shelf-sample {
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shelf-sample:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .shelf-import {
   position: relative;
   display: inline-flex;

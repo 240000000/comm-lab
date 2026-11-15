@@ -4,7 +4,7 @@
  * 这一层只吃 props、不自己持状态：读盘、落盘、导入都在 shelfStore / shelfDb 里，
  * 面板负责的是把它看见的东西照实说——包括失败那一行原话。
  */
-import type { ChangeEvent } from 'react'
+import { useState, type ChangeEvent } from 'react'
 
 import { DEFAULT_BOOK_ID, billOf, type ShelfBook } from '../course/shelf.ts'
 import { shelfStatusOf } from '../course/shelfStore.ts'
@@ -43,6 +43,24 @@ export function ShelfPanel({
   onImport,
   onToggleKeepPdf,
 }: ShelfPanelProps) {
+  // R136：示例教材走同一条导入链路——先取回随包发出去的 PDF，再当成用户选的文件交出去。
+  // 这样「载入示例教材」不会绕过任何解析步骤，跑出来的覆盖报告与真书导入完全同源。
+  const [sampleNote, setSampleNote] = useState<string | null>(null)
+  const loadSample = async () => {
+    if (sampleNote === '正在取回示例教材…') return
+    setSampleNote('正在取回示例教材…')
+    try {
+      const url = `${import.meta.env.BASE_URL}sample-textbook.pdf`
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`${response.status}`)
+      const blob = await response.blob()
+      setSampleNote(null)
+      onImport(new File([blob], '通信原理示例教材.pdf', { type: 'application/pdf' }))
+    } catch (error) {
+      setSampleNote(`示例教材取不回来：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   const pickFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -57,6 +75,9 @@ export function ShelfPanel({
           <input className="shelf-file" type="file" accept="application/pdf" onChange={pickFile} />
           导入 PDF 教材
         </label>
+        <button className="shelf-sample" type="button" onClick={loadSample}>
+          载入示例教材
+        </button>
       </header>
 
       <label className="shelf-toggle">
@@ -139,6 +160,7 @@ export function ShelfPanel({
         </p>
       ) : null}
 
+      {sampleNote ? <p className="shelf-note">{sampleNote}</p> : null}
       <p className="shelf-memory">
         书架存在这台机器的浏览器里（IndexedDB）：目录随时读，原文件按上面的开关决定存不存；都不上传。
       </p>
