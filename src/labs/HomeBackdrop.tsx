@@ -3,9 +3,9 @@ import { useEffect, useRef } from 'react'
 // 首页背景：16QAM 的 4×4 星座在三维里绕 Y 轴转，周期性地被噪声推散、再收回。
 // 只画在首页；其他页面根本不挂载，所以离开路由时 canvas 与动画循环一起消失。
 const CYCLE_MS = 14000
-const TEAL: [number, number, number] = [60, 227, 198]
-const AMBER: [number, number, number] = [240, 163, 94]
-const BG = 'rgba(11, 15, 20, '
+const TEAL: [number, number, number] = [15, 118, 110]
+const AMBER: [number, number, number] = [180, 83, 9]
+const BG = 'rgba(250, 250, 249, '
 
 type Particle = {
   ox: number
@@ -139,7 +139,7 @@ export function HomeBackdrop() {
       const cy = height * 0.24
 
       ctx.globalAlpha = 1
-      ctx.fillStyle = '#0b0f14'
+      ctx.fillStyle = '#fafaf9'
       ctx.fillRect(0, 0, width, height)
 
       const project = (x: number, y: number, z: number) => {
@@ -155,7 +155,7 @@ export function HomeBackdrop() {
 
       // 网格期给相邻点连一层很淡的线，4×4 的骨架才立得住；散开时线淡出。
       if (s < 0.25) {
-        const lineAlpha = 0.11 * (1 - s / 0.25)
+        const lineAlpha = 0.16 * (1 - s / 0.25)
         ctx.strokeStyle = `${cloudColor}${lineAlpha.toFixed(3)})`
         ctx.lineWidth = 1
         for (let row = 0; row < 4; row++) {

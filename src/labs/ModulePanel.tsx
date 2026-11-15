@@ -68,12 +68,14 @@ export function ModulePanel({ book }: { book: ShelfBook | null }) {
                       title={`${tier.label} · ${DOT_LABEL[row?.basis ?? 'none']}`}
                     >
                       <span className="course-preset-id">{tier.id}</span>
-                      {tier.label}
+                      {tier.id === 'a' ? '默认' : '对照'}
                     </a>
                   )
                 })}
               </span>
-              <span className={`module-badge ${basis}`}>{DOT_LABEL[basis]}</span>
+              {basis === 'body' ? null : (
+                <span className={`module-badge ${basis}`}>{DOT_LABEL[basis]}</span>
+              )}
             </li>
           )
         })}
