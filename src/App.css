@@ -66,6 +66,89 @@ h1 {
   margin-top: clamp(36px, 6vh, 56px);
 }
 
+/* R136 第一步：四张卡上面加一条「三分钟路径」，三个入口一句话一张小图。 */
+.path-band {
+  margin-top: clamp(14px, 2.6vh, 22px);
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(16, 24, 34, 0.62);
+}
+
+.path-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.path-head span {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.path-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.path-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(12, 19, 27, 0.6);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.path-art {
+  flex: none;
+  color: var(--accent);
+}
+
+.path-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.path-no {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.path-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #dce8f4;
+}
+
+.path-line {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--dim);
+}
+
+@media (max-width: 900px) {
+  .path-steps {
+    grid-template-columns: 1fr;
+  }
+}
+
 .card {
   display: flex;
   flex-direction: column;

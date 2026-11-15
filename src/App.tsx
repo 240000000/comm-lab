@@ -27,7 +27,56 @@ import { saveOriginalPdf } from './labs/bookStorage'
 import { ShelfPanel } from './labs/ShelfPanel'
 import { ModulePanel } from './labs/ModulePanel'
 
+type StepArtKind = 'book' | 'camera' | 'slider'
+
+// 三分钟路径的小图：纯内联 SVG，跟着页面走，不额外请求资源。
+function StepArt({ kind }: { kind: StepArtKind }) {
+  const common = { width: 56, height: 44, viewBox: '0 0 56 44', 'aria-hidden': true as const }
+  if (kind === 'book') {
+    return (
+      <svg {...common} className="path-art">
+        <rect x="8" y="6" width="34" height="32" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M25 6v32" stroke="currentColor" strokeWidth="1.2" opacity="0.55" />
+        <path d="M13 14h8M13 20h8M30 14h8M30 20h8" stroke="currentColor" strokeWidth="1.2" opacity="0.75" />
+        <path d="M42 30l7 5-7 5z" fill="currentColor" opacity="0.8" />
+      </svg>
+    )
+  }
+  if (kind === 'camera') {
+    return (
+      <svg {...common} className="path-art">
+        <rect x="7" y="12" width="34" height="24" rx="4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="24" cy="24" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M17 12l3-4h8l3 4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M44 20v10" stroke="currentColor" strokeWidth="1.4" opacity="0.7" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...common} className="path-art">
+      <path d="M6 26c6-14 12 14 18 0s12 10 18-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6 34h44" stroke="currentColor" strokeWidth="1.2" opacity="0.5" />
+      <circle cx="36" cy="22" r="3.2" fill="currentColor" />
+      <path d="M36 8v9" stroke="currentColor" strokeWidth="1.4" opacity="0.7" />
+    </svg>
+  )
+}
+
 const modules = [
+  {
+    id: 'course',
+    index: '05',
+    name: '课程视图（13 章）',
+    desc: '13 章逐章可交互，每章两个命名档位共 26 个入口；导入课本后左右同屏看书，目录与正文都对得回原页',
+    href: '#/course',
+  },
+  {
+    id: 'solve',
+    index: '06',
+    name: '答题模式',
+    desc: '上传题目截图，接了模型就把原图交给模型作答，没接模型时本机识别、内置题库演示',
+    href: '#/solve',
+  },
   {
     id: 'qam',
     index: '01',
@@ -152,7 +201,7 @@ export default function App() {
           最后用五道小题把这三页串起来，答案都要回实验台上自己读出来。
         </p>
         <div className="cta">
-          <span className="badge">v0.11 · 三个实验台、任务模式与课程视图</span>
+          <span className="badge">v0.11 · 13 章课程视图 · 26 个入口 · 教材导入 · 答题模式</span>
           <a href="https://github.com/240000000/comm-lab" target="_blank" rel="noreferrer">
             源码仓库
           </a>
@@ -177,6 +226,45 @@ export default function App() {
           扩展模式
         </button>
       </div>
+
+      <section className="path-band" aria-label="三分钟路径">
+        <p className="path-head">
+          三分钟路径
+          <span>按顺序点三下，就知道这个页面能干什么</span>
+        </p>
+        <ol className="path-steps">
+          <li>
+            <button type="button" className="path-step" onClick={() => setHomeMode('extra')}>
+              <StepArt kind="book" />
+              <span className="path-body">
+                <span className="path-no">①</span>
+                <span className="path-title">把课本拖进来</span>
+                <span className="path-line">打开扩展模式的书架面板，拖一份 PDF 进去，13 章自动对上目录。</span>
+              </span>
+            </button>
+          </li>
+          <li>
+            <a className="path-step" href="#/solve">
+              <StepArt kind="camera" />
+              <span className="path-body">
+                <span className="path-no">②</span>
+                <span className="path-title">拍一道题</span>
+                <span className="path-line">上传题目截图，看它落到第几章、要不要跳回实验台读一个数。</span>
+              </span>
+            </a>
+          </li>
+          <li>
+            <a className="path-step" href="#/course?no=6">
+              <StepArt kind="slider" />
+              <span className="path-body">
+                <span className="path-no">③</span>
+                <span className="path-title">拖滑块看它失效</span>
+                <span className="path-line">第 6 章把滚降系数拉大、采样点拖偏，黄色警示会告诉你眼图闭了。</span>
+              </span>
+            </a>
+          </li>
+        </ol>
+      </section>
 
       {homeMode === 'default' ? (
       <section className="grid home-grid" aria-label="实验模块">
