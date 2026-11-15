@@ -2,21 +2,20 @@
  * R126：把「正文」送到每一章手里。
  *
  * 两条来源，都标在数据里，界面照实写：
- * - 数字版：文字层按书签的章页码切片，每章留前 3000 字（`SECTION_TEXT_LIMIT`），
- *   整章不进 IndexedDB——算词频用不了那么多。
- * - 扫描版：逐章首页那段 OCR 文本（612–1019 字）直接用；不足 300 字的，
- *   由调用方再 OCR 该章后两页补上，补过的页码写进 `pages`。
+ * - 数字版：文字层按书签的章页码切片，每章最多留 30000 字（R127 以前只留前
+ *   3000 字，词频样本太小、证据行只能报个位数），整章仍不进 IndexedDB。
+ * - 扫描版：R127 起每章取「首页 + 正文中段两页」三段 OCR，拼成一段正文；
+ *   首页不足 300 字的旧路径保留（中段那两页还没补上时先记下来）。
  *
  * 纯函数，不碰 pdf.js、不碰 OCR：读文件的活在上层，这里只做切与拼。
  */
 
-import { SECTION_TEXT_LIMIT } from './pdfText.ts'
 import type { ChapterBody, ShelfBook, ShelfChapter } from './shelf.ts'
 
-/** 每章最多留这么多字；整章不落盘，算词频够用。 */
-export const BODY_TEXT_LIMIT = SECTION_TEXT_LIMIT
+/** 每章最多留这么多字；整章不落盘，够算词频又不撑爆 IndexedDB。 */
+export const BODY_TEXT_LIMIT = 30000
 
-/** 扫描版一章首页 OCR 少于这么多字，就算「不够判」，要补后面两页。 */
+/** 扫描版一章首页 OCR 少于这么多字，就算「不够判」，要补中段两页。 */
 export const BODY_MIN_OCR_CHARS = 300
 
 function tidy(text: string): string {

@@ -186,6 +186,28 @@ export function scoreChapterTexts(chapters: ShelfChapter[], texts: Map<number, s
  * 对每个有页码的章 OCR 它的首页，最多 13 页。
  * 失败返回 `{ ok:false, message }`，调用方保留标题级匹配即可。
  */
+/** 本章末页：下一章起始页减一，末章到全书最后。 */
+function chapterEnd(candidates: ShelfChapter[], index: number, numPages: number): number {
+  const nextPage = candidates[index + 1]?.page
+  const end = typeof nextPage === 'number' ? nextPage - 1 : numPages
+  return Math.max(candidates[index].page as number, Math.min(end, numPages))
+}
+
+/** 一章的取样页：首页 + 中段两页（按章长比例取，去重、不越界）。 */
+function samplePages(from: number, to: number): number[] {
+  const width = Math.max(0, to - from)
+  const mids = [from + Math.round(width * 0.4), from + Math.round(width * 0.7)].filter(
+    (page) => page > from && page <= to,
+  )
+  return [from, ...Array.from(new Set(mids))].slice(0, 3)
+}
+
+/** 目录页与习题页不收进正文：这两类页面上概念词扎堆，收进来会把章认歪。 */
+function isNoisyPage(text: string): boolean {
+  const head = text.slice(0, 200)
+  return /(目\s*录|习\s*题|练习题|思考题|本章小结|习题与思考)/.test(head)
+}
+
 export async function recognizeChapterHeads(
   bookId: string,
   blob: Blob | null,
@@ -215,32 +237,42 @@ export async function recognizeChapterHeads(
       const page = chapter.page as number
       onProgress?.({ done: index, total: candidates.length, chapterNo: no })
       const started = performance.now()
-      const outcome = await recognizePages(null, [page], undefined, {
+      const lastPage = chapterEnd(candidates, index, doc.numPages)
+      // R127：一章的正文不再只看首页。首页 + 正文中段两页（40%、70% 处），
+      // 目录页与习题页跳过——那两种页面上概念词也很多，收进来只会把章认歪。
+      const sample = samplePages(page, lastPage)
+      const outcome = await recognizePages(null, sample, undefined, {
         bookId,
         signal: options.signal,
         worker,
         doc,
       })
       if (!outcome.ok) return { ok: false, message: outcome.message }
-      let text = outcome.pages[0]?.text ?? ''
-      let span = 1
-      // R126：章首页只认到几百字时，正文不够判覆盖，往下再读两页凑分量。
-      // 只在「薄」的时候补，13 章全补会多花一分多钟。
-      if (text.replace(/\s+/g, '').length < BODY_MIN_OCR_CHARS && page + 2 <= doc.numPages) {
-        const more = await recognizePages(null, [page + 1, page + 2], undefined, {
-          bookId,
-          signal: options.signal,
-          worker,
-          doc,
-        })
-        if (more.ok) {
-          const extra = more.pages.map((item) => item.text).join('\n')
-          if (extra.trim().length > 0) {
-            text = `${text}\n${extra}`
-            span = 3
+      const kept = outcome.pages.filter((item) => !isNoisyPage(item.text)).map((item) => item.text)
+      let text = kept.join('\n')
+      // 中段页可能是整页图表，认出来是空的：不够 300 字就顺着首页往下再补两页，
+      // 保证「取样不足」只出现在真的薄章上，而不是取样运气不好。
+      if (text.replace(/\s+/g, '').length < BODY_MIN_OCR_CHARS) {
+        const extraPages = [page + 1, page + 2].filter(
+          (item) => item <= lastPage && !sample.includes(item),
+        )
+        if (extraPages.length > 0) {
+          const more = await recognizePages(null, extraPages, undefined, {
+            bookId,
+            signal: options.signal,
+            worker,
+            doc,
+          })
+          if (more.ok) {
+            const extra = more.pages
+              .filter((item) => !isNoisyPage(item.text))
+              .map((item) => item.text)
+              .join('\n')
+            if (extra.trim().length > 0) text = `${text}\n${extra}`
           }
         }
       }
+      const span = text.trim().length > 0 ? Math.min(sample.length + 2, lastPage - page + 1) : 0
       const ms = Math.round(performance.now() - started)
       scans.push({ ...scanFromText(no, page, text, ms), span })
       texts.set(no, text)

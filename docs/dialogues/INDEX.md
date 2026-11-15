@@ -212,4 +212,11 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 两个真 bug：`parsePdfOutline` 会转移 ArrayBuffer 导致 `new Uint8Array` 抛错（改 `slice(0)`）；扫描 effect 的「扫过了」标记从 `hasPdf` 之前挪到之后。
 - 实测：樊昌信 13/13 body；`Chapter N` 章名的书 13/13 body；无关教材覆盖 0、13 行「本书未涉及」。`npm test` 435 pass、build 463.38 kB / gzip 155.67、`check:docs` 182 断言 0 不符、126 tag = 轮次表 126 行。
 
+### R127 · 取样加深，判定加词频下限
+
+- 扫描版每章认「首页 + 章长 40%/70% 两页」，目录页与习题页跳过，三段不足 300 字才顺首页补两页；数字版每章上限 3000 → 30000 字。
+- `BodyScore` 加 `total`、新增 `MIN_BODY_HITS = 10`：Top1 ≥ 3 分、领先 ≥ 2、命中总次数 ≥ 10 三条同时满足才判 body，否则降级标题并写「正文取样不足，仅按标题」。
+- 实测默认书 13 行证据词频到两位数（首行「引言」21 次、「绪论」18 次、「通信系统」11 次），每章抽到 1890–3275 字；反例书仍 13 行全 0；`Chapter N` 书仍 13/13 body。
+- 门禁：`npm test` 436 pass、oxlint 0/0、build 465.94 kB / gzip 156.77 kB；截图 `D:/harness/tmp/r127shots/{a-default-body,b-unrelated-zero,c-odd-titles,d-go-button}.png`。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。

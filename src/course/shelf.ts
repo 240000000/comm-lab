@@ -9,7 +9,7 @@
 
 import { chapterByNo } from '../core/course.ts'
 import { MIN_MARGIN, MIN_SCORE } from '../answer/locate.ts'
-import { bodyHitsLine, scoreBody, scoreTopic, type BodyScore } from './concepts.ts'
+import { MIN_BODY_HITS, bodyHitsLine, scoreBody, scoreTopic, type BodyScore } from './concepts.ts'
 import type { OutlinedBook, OutlineEntry } from './pdfOutline.ts'
 import { assignTopics, groupSections } from './sections.ts'
 import { BOOK_COMMUNICATION } from './syllabus.ts'
@@ -319,7 +319,8 @@ export function coverageOf(book: ShelfBook): Coverage {
           entry.body !== null &&
           topicNo(entry.body.topicId) === item.no &&
           entry.body.score >= MIN_SCORE &&
-          entry.body.margin >= MIN_MARGIN,
+          entry.body.margin >= MIN_MARGIN &&
+          entry.body.total >= MIN_BODY_HITS,
       ) ?? null
     // 扫描版没有整页文字层可用，只有章首页那一段 OCR；单靠词频容易让「绪论」抢走
     // 每一章（信道/带宽/噪声这些词每章都提）。所以扫描版另走一条：章号已经由
@@ -329,8 +330,8 @@ export function coverageOf(book: ShelfBook): Coverage {
         (entry) =>
           entry.chapter.body?.source === 'ocr' &&
           entry.chapter.topicId === String(item.no) &&
-          scoreTopic(entry.chapter.body.text, `ch${String(item.no).padStart(2, '0')}`).score >=
-            MIN_SCORE,
+          scoreTopic(entry.chapter.body.text, `ch${String(item.no).padStart(2, '0')}`).total >=
+            MIN_BODY_HITS,
       ) ?? null
     if (!hit && hinted && hinted.chapter.body) {
       const scored = scoreTopic(hinted.chapter.body.text, `ch${String(item.no).padStart(2, '0')}`)
@@ -339,10 +340,8 @@ export function coverageOf(book: ShelfBook): Coverage {
         score: scored.score,
         runnerUp: 0,
         margin: scored.score,
-        hits: scored.hits.slice(0, 5).map((term) => ({
-          term,
-          count: scored.hits.filter((each) => each === term).length,
-        })),
+        total: scored.total,
+        hits: scored.hits.slice(0, 5),
       }
       return {
         no: item.no,
@@ -375,8 +374,14 @@ export function coverageOf(book: ShelfBook): Coverage {
           (trusted || (entry.hits?.length ?? 0) > 0 || (entry.sectionHits?.length ?? 0) > 0),
       ) ?? null
     if (chapter) {
-      const readThis = chapter.body !== undefined
-      const lead = readThis ? '正文没认到本功能，按标题兜底：' : '仅按标题，未读正文：'
+      // R127：正文读过但取样太薄（命中总次数不到 10）时，话要说准——不是「没认到」，
+      // 是「取样不足」，别把抽样不够说成书上没讲。
+      const thin = chapter.body !== undefined && (scoreBody(chapter.body.text)?.total ?? 0) < MIN_BODY_HITS
+      const lead = thin
+        ? '正文取样不足，仅按标题：'
+        : chapter.body !== undefined
+          ? '正文没认到本功能，按标题兜底：'
+          : '仅按标题，未读正文：'
       return {
         no: item.no,
         name: item.name,

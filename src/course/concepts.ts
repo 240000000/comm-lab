@@ -248,6 +248,8 @@ export type BodyScore = {
   score: number
   runnerUp: number
   margin: number
+  /** R127：Top1 那一章词表里所有命中词的出现次数之和，判断「取样够不够」用。 */
+  total: number
   hits: BodyHit[]
 }
 
@@ -309,11 +311,13 @@ export function scoreBody(text: string): BodyScore | null {
     .filter((hit) => hit.count > 0)
     .sort((a, b) => b.count - a.count || a.term.localeCompare(b.term))
     .slice(0, 5)
+  const total = top.hits.reduce((sum, term) => sum + countTerm(haystack, term), 0)
   return {
     topicId: top.topicId,
     score: top.score,
     runnerUp,
     margin: top.score - runnerUp,
+    total,
     hits,
   }
 }
@@ -326,19 +330,30 @@ export function bodyHitsLine(hits: BodyHit[], limit = 3): string {
     .join('、')
 }
 
+/**
+ * R127：正文要「够厚」才算数。Top1 那一章词表里所有命中词的出现次数加起来不到
+ * 10 次，说明这一章只被取样到薄薄一段（目录页、整页图、扫描件糊了），这时
+ * 分数再高也只是偶然撞上两个词——降级成「仅按标题」，并在界面上照实写。
+ */
+export const MIN_BODY_HITS = 10
+
 /** 只看某一章的词表在这段正文里得几分：扫描版靠「第 N 章」锁定章号后，用它判断正文够不够。 */
-export function scoreTopic(text: string, topicId: string): { score: number; hits: string[] } {
+export function scoreTopic(
+  text: string,
+  topicId: string,
+): { score: number; total: number; hits: BodyHit[] } {
   const topic = TOPICS.find((item) => item.topicId === topicId)
   const trimmed = text.trim()
-  if (!topic || trimmed === '') return { score: 0, hits: [] }
+  if (!topic || trimmed === '') return { score: 0, total: 0, hits: [] }
   const haystack = normalize(trimmed)
   let score = 0
-  const hits: string[] = []
+  const hits: BodyHit[] = []
   for (const term of topic.terms) {
     const count = countTerm(haystack, term)
     if (count === 0) continue
     score += count
-    hits.push(term)
+    hits.push({ term, count })
   }
-  return { score, hits }
+  hits.sort((a, b) => b.count - a.count || a.term.localeCompare(b.term))
+  return { score, total: score, hits }
 }

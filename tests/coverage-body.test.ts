@@ -10,7 +10,7 @@ import test from 'node:test'
 
 import { TOPICS, scoreBody } from '../src/course/concepts.ts'
 import { attachTextLayer } from '../src/course/chapterBody.ts'
-import { bookFromSections, coverageOf, type ShelfBook } from '../src/course/shelf.ts'
+import { DEFAULT_BOOK_ID, bookFromSections, coverageOf, type ShelfBook } from '../src/course/shelf.ts'
 
 type Section = { rawTitle: string; page: number; depth: number; chapterNo: number }
 
@@ -92,4 +92,36 @@ test('R126 两个功能分数接近：margin 不够就判未涉及，不硬挑',
   assert.ok(row2 && row3)
   assert.equal(row2.basis, 'none')
   assert.equal(row3.basis, 'none')
+})
+
+test('R127 正文取样太薄：命中总次数不到 10 就降级成标题，并写明取样不足', () => {
+  const topic = TOPICS[0]
+  // 只放 6 个词、每个一次：分数够 3 分，但总次数 6 < 10 —— 这正是「目录页/整页图」
+  // 那种薄样本长出来的假象，必须降级而不是认下。
+  const thinText = topic.terms.slice(0, 6).join('，')
+  const score = scoreBody(thinText)
+  assert.ok(score)
+  assert.ok(score.score >= 3, '分数本身要够，才验得到总次数这道闸')
+  assert.ok(score.total < 10, '总次数必须低于 10')
+
+  // 用内置书的 id：标题兜底只对「本来就有目录证据」的书开口，这里要验的是
+  // 「正文太薄就降级」，不是「标题像不像」。
+  const base = bookFromSections('测试教材', CHAPTERS, DEFAULT_BOOK_ID)
+  const book: ShelfBook = {
+    ...base,
+    chapters: base.chapters.map((chapter) =>
+      chapter.no === 1
+        ? {
+            ...chapter,
+            topicId: '1',
+            hits: [topic.terms[0]],
+            body: { text: thinText, source: 'text-layer' as const, pages: 'p.1–1' },
+          }
+        : chapter,
+    ),
+  }
+  const row = coverageOf(book).rows.find((item) => item.no === 1)
+  assert.ok(row)
+  assert.equal(row.basis, 'title', '总次数不够时不许按正文认下')
+  assert.ok(row.title.startsWith('正文取样不足，仅按标题'), row.title)
 })
