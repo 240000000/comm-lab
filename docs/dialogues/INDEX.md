@@ -273,4 +273,11 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 产物：报告 30 页 / 1,297,858 B / `361d904438d3ee96`；介绍 9 页 / 493,151 B / `e23550fdaf5f7008`；包 319 条目（文件 296 个）/ 17,793,970 B / `7bd960f4f2127d9d`。
 - 提交 `cce43c4`（amend 0）+ annotated tag R136，先推 tag 再推 main。
 
-下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。
+### R137 · 全站换肤：浅底深绿、首屏重排、深色图表卡
+
+- 改动：`src/index.css` 重写 token 并留旧名别名；`App.css`/`book-pane.css`/`motion.css` 538 处硬编码色收回 `var()`；hero 改两栏（大标题 + 一句副标 + 一枚主 CTA + 边界说明框）；三分钟路径去框、六卡等高 208px、编号改灰标签；图表与 PDF 舞台套 `--scope` 深色卡；动效去发光。
+- 证据：CSS 侧七个旧色值 grep 0 命中（TS 的 canvas 绘制按禁区保留）；副标 5 行 → 2 行；第 6 章「眼高 1.70 / 峰值 ISI 0.000」与第 4 章 1000 kHz「137.50 kbit/s」逐字不变；对比度全部达 AA。
+- 门禁：`npm test` 453 pass / 0 fail；`build` `index-CgDupTkc.js` 494.75 kB / gzip 166.74 kB、`index-GlVH0A0P.css` 58,779 B；`check:docs` 182/0；137 tag = 轮次表 137 行。
+- 提交 `TBD`（amend 0）+ annotated tag R137，先推 tag 再推 main。
+
+下一步：主视频重录（新脚本、旧 BV1Xrxq6FEhp 作废）；网盘上传 R136 包替换旧包（等用户给平台 / 链接 / 旧包名）；11/18 省赛提交截止。

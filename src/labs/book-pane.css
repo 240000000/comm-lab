@@ -10,7 +10,7 @@
 }
 
 .course-book-toggle-note {
-  color: #f0b464;
+  color: var(--warn);
   font-size: 12.5px;
   line-height: 1.6;
 }
@@ -18,7 +18,7 @@
 .course-book-toggle-btn {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(16, 24, 34, 0.72);
+  background: rgba(250, 250, 249, 0.88);
   color: var(--ink);
   padding: 7px 12px;
   font: inherit;
@@ -155,6 +155,10 @@
   align-items: center;
   gap: 8px;
   min-height: 240px;
+  padding: 16px;
+  border-radius: var(--r-md);
+  background: var(--scope);
+  box-shadow: var(--shadow-2);
 }
 
 .pdf-canvas {
@@ -173,7 +177,7 @@
   position: absolute;
   inset: 0;
   border-radius: 8px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  background: linear-gradient(90deg, rgba(26, 26, 26, 0.04), rgba(255, 255, 255, 0.14), rgba(26, 26, 26, 0.04));
   background-size: 200% 100%;
   animation: motion-skeleton-breathe calc(var(--motion-enter) * 6) var(--motion-ease) infinite;
 }
@@ -226,7 +230,7 @@
     width: min(520px, 92vw);
     max-height: none;
     border-radius: 0;
-    background: #0b1219;
+    background: var(--bg);
     box-shadow: -18px 0 44px rgba(0, 0, 0, 0.45);
   }
 
@@ -252,7 +256,7 @@
 .shelf-clear {
   border: 1px solid rgba(240, 180, 90, 0.35);
   background: transparent;
-  color: #e8c58c;
+  color: var(--warn);
   border-radius: 6px;
   padding: 2px 8px;
   font-size: 12px;
@@ -278,7 +282,7 @@
 .pdf-fallback .pdf-hint {
   margin: 0;
   font-size: 14px;
-  color: #e8eef5;
+  color: var(--text);
   max-width: 34em;
 }
 
@@ -304,7 +308,7 @@
   border: 1px solid rgba(126, 214, 255, 0.22);
   border-radius: 10px;
   background: rgba(12, 22, 32, 0.72);
-  color: #cfe8f5;
+  color: var(--text);
   font-size: 13px;
 }
 
@@ -343,7 +347,7 @@
   border: 1px solid rgba(126, 214, 255, 0.3);
   border-radius: 6px;
   background: rgba(8, 16, 24, 0.9);
-  color: #e8f6ff;
+  color: var(--text);
 }
 
 .course-ocr-offset {
@@ -360,7 +364,7 @@
   border: 1px solid rgba(126, 214, 255, 0.3);
   border-radius: 8px;
   background: rgba(8, 16, 24, 0.9);
-  color: #e8f6ff;
+  color: var(--text);
   font: inherit;
   resize: vertical;
 }

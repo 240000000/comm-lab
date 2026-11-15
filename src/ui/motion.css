@@ -37,24 +37,25 @@ summary {
 
 /* ---------- 悬停：边框亮一档、上移 1px、外发光 12px ---------- */
 
+/* R137：悬停不再发光——边框加深一档、上移 2px、落一层静态阴影。 */
 .card:hover,
 .module-row:hover,
 .course-item:hover,
 .solve-entry:hover,
 .routes a:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-color: color-mix(in srgb, var(--text) 26%, var(--border));
 }
 
 .card:hover,
 .module-row:hover,
 .solve-entry:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 22%, transparent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
 }
 
 button:hover:not(:disabled),
 a:hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-color: color-mix(in srgb, var(--text) 20%, var(--border));
 }
 
 button:disabled,
@@ -72,7 +73,6 @@ a:active,
 .course-item:active,
 .solve-entry:active {
   transform: scale(0.98);
-  filter: brightness(0.92);
   transition-duration: var(--motion-press);
 }
 
@@ -105,7 +105,7 @@ input[type='range']::-webkit-slider-thumb {
 
 input[type='range']:active::-webkit-slider-thumb {
   transform: scale(1.15);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: var(--shadow-2);
 }
 
 input[type='range']::-moz-range-thumb {
@@ -222,7 +222,7 @@ input[type='range']:active {
   display: block;
   height: 12px;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--line) 60%, #1b2733);
+  background: color-mix(in srgb, var(--line) 60%, var(--border));
   animation: motion-skeleton-breathe calc(var(--motion-enter) * 6) var(--motion-ease) infinite;
 }
 

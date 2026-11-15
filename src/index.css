@@ -1,14 +1,36 @@
 :root {
-  --bg: #0b0f14;
-  --panel: #101822;
-  --line: #1d2a37;
-  --text: #c6d4e3;
-  --dim: #6f8399;
-  --accent: #3ce3c6;
-  --sans: system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  /* 底色与卡面：白纸一张，卡面纯白，靠边框与阴影分层 */
+  --bg: #fafaf9;
+  --surface: #ffffff;
+  --border: #e8e8e4;
+  --text: #1a1a1a;
+  --dim: #6b6b66;
 
-  color-scheme: dark;
-  font: 16px/1.65 var(--sans);
+  /* 主色：全站只给主按钮、图标底、状态点、选中态 */
+  --brand: #0f766e;
+  --brand-deep: #0b5c56;
+  --brand-tint: #e7f2f0;
+  --warn: #b45309;
+
+  /* 图表卡：深色示波器屏，嵌在白纸上 */
+  --scope: #0b1220;
+
+  --r-sm: 10px;
+  --r-md: 16px;
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-2: 0 8px 24px rgba(16, 24, 40, 0.06);
+
+  --font-ui: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, 'Cascadia Mono', ui-monospace, monospace;
+
+  /* 旧名字留作别名，避免一次改不完 */
+  --panel: var(--surface);
+  --line: var(--border);
+  --accent: var(--brand);
+  --sans: var(--font-ui);
+
+  color-scheme: light;
+  font: 15px/1.7 var(--font-ui);
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -21,9 +43,7 @@
 body {
   margin: 0;
   min-height: 100svh;
-  background:
-    radial-gradient(900px 520px at 50% -12%, #16283a 0%, transparent 70%),
-    var(--bg);
+  background: var(--bg);
 }
 
 #root {
