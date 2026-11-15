@@ -243,6 +243,13 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 改动：`src/answer/diagram.ts`（`fsk-time` 第二白名单）、`src/labs/AnswerDiagram.tsx`（`drawFsk`）、`src/answer/provider.ts`（30 s、`thinking.disabled`、`errorKind` 三分类）、`src/labs/SolvePage.tsx`（本机优先定位、图形区三分支、错误重试按钮）、`src/App.css`、`tests/answerRequest.test.ts`（5 条）。
 - 判据：444 条测试全过、`index-CdTNbQud.js` 479.52 kB / gzip 161.75 kB；7-2 定位第 7 章 + 2FSK 波形 3/2 周期 + 底注 6 kHz、6.3 s；7-4(2) 打印「画不了」、6.1 s；netlify 函数 deploy `6af981c134cca872195b68bd`、直连 200 / 2.3 s；`check:docs` 182 断言 0 不符、131 tag = 轮次表 131 行。
 
+### R133 · 每章两个命名档位，功能面板 13 行变 26 档
+
+- 改动：新增 `src/course/presets.ts`（13 章 × a/b 两档，a 档等于 defaults）；`CoursePage` 支持 `#/course?no=N&preset=a|b`、参数条上方两颗档位按钮、切章回 a 档；`MODULE_FUNCTIONS` 13→26，行标题「章名 · 档名」直达该档。
+- 证据：13 章实测 a 档 == defaults、b 档 != failPreset、两档 series 全不同；第 8 章 b 档 `4.44 bit/s/Hz / 9.72e-3 / 1.37e-2`，默认档 `2.96 / 1.39e-4 / 1.50e-4`；不带 preset 时活动档仍为 `A默认档`。
+- 门禁：`npm test` 450 pass / 0 fail；`oxlint` 0/0（126 files）；`build` `index-Bsp903qQ.js` 482,318 B；`check:docs` 182/0；133 tag = 轮次表 133 行。
+- 提交 `ff525b3`（amend 1 次）+ annotated tag R133，先推 tag 再推 main。
+
 ### R132 · WeakMap 版 getOrInsert 补齐，报告压回 30 页
 
 - 改动：`src/compat.ts` 的 `defineMethod` + `patch` 同时补 `Map.prototype` 与 `WeakMap.prototype`；`tests/compat.test.ts` 加两条（WeakMap 上是函数 / 回调只调一次），测试 444 → 446。
