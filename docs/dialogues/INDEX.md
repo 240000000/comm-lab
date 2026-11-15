@@ -243,6 +243,14 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 改动：`src/answer/diagram.ts`（`fsk-time` 第二白名单）、`src/labs/AnswerDiagram.tsx`（`drawFsk`）、`src/answer/provider.ts`（30 s、`thinking.disabled`、`errorKind` 三分类）、`src/labs/SolvePage.tsx`（本机优先定位、图形区三分支、错误重试按钮）、`src/App.css`、`tests/answerRequest.test.ts`（5 条）。
 - 判据：444 条测试全过、`index-CdTNbQud.js` 479.52 kB / gzip 161.75 kB；7-2 定位第 7 章 + 2FSK 波形 3/2 周期 + 底注 6 kHz、6.3 s；7-4(2) 打印「画不了」、6.1 s；netlify 函数 deploy `6af981c134cca872195b68bd`、直连 200 / 2.3 s；`check:docs` 182 断言 0 不符、131 tag = 轮次表 131 行。
 
+### R134 · 第 6 章对照档偏 0.2T，两 PDF 与作品包重出
+
+- 改动：`src/course/presets.ts` 第 6 章 b 档 `timing: 0 → 0.2`、label「大滚降 + 偏 0.2T」；`tests/presets.test.ts` 第 6 章期望值跟改并新增「b 档一律不等于 failPreset（13 章全查）」，测试 450 → 451；`docs/tech-report.md` §1.6 加一句 26 个入口、轮次表补 R134 行；`README.md`/`preview.md`/`works-intro.md` 数字同步，介绍锚点 R133 → R134。
+- 证据：默认档眼高 1.70、峰值 ISI 0.000；b 档眼高 1.24、峰值 ISI 0.193（采样偏 0.20Ts），两档 `failed=false`，failPreset 仍 `failed=true`（ISI 1.695、误码率 1.74e-1）。
+- 门禁：`npm test` 451 pass / 0 fail；`oxlint` 0/0（126 files）；`build` `index-Dj0Qkyb6.js` 482.33 kB / gzip 162.54 kB；`check:docs` 182/0；134 tag = 轮次表 134 行。
+- 产物：报告 30 页 / 1,307,270 B / `8a352cfb7a685340`；介绍 9 页 / 849,544 B / `2ee3e29b07a3e2d3`；包 313 条目 / 17,837,624 B / `62b240eb1effca62`。
+- 提交 `4a5d2c3`（amend 2 次）+ annotated tag R134，先推 tag 再推 main。
+
 ### R133 · 每章两个命名档位，功能面板 13 行变 26 档
 
 - 改动：新增 `src/course/presets.ts`（13 章 × a/b 两档，a 档等于 defaults）；`CoursePage` 支持 `#/course?no=N&preset=a|b`、参数条上方两颗档位按钮、切章回 a 档；`MODULE_FUNCTIONS` 13→26，行标题「章名 · 档名」直达该档。
