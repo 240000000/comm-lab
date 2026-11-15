@@ -19,13 +19,13 @@ import { basebandLevel, carrierSample, differentialBits } from '../core/course.t
 
 export type DiagramScheme = '2ASK' | '2PSK' | '2DPSK'
 
-export const SCHEME_INDEX: Record<DiagramScheme, number> = { '2ASK': 0, '2PSK': 2, '2DPSK': 3 }
+const SCHEME_INDEX: Record<DiagramScheme, number> = { '2ASK': 0, '2PSK': 2, '2DPSK': 3 }
 
 /** 画布逻辑宽度；高度随 showBlock 变。 */
 const WIDTH = 980
 const PAD_LEFT = 92
 const PAD_RIGHT = 28
-const BLOCK_HEIGHT = 208
+const BLOCK_HEIGHT = 176
 const BASE_HEIGHT = 96
 const BAND_HEIGHT = 156
 /** 每个载波周期至少取这么多点，再按像素抽稀画。 */
@@ -108,6 +108,25 @@ function arrow(ctx: CanvasRenderingContext2D, from: number, to: number, y: numbe
   ctx.restore()
 }
 
+/** 短竖箭头：从下面的盒子顶往上指，长度不许超过 40 px。 */
+function vArrow(ctx: CanvasRenderingContext2D, x: number, fromY: number, toY: number) {
+  ctx.save()
+  ctx.strokeStyle = DIM
+  ctx.fillStyle = DIM
+  ctx.lineWidth = 1.4
+  ctx.beginPath()
+  ctx.moveTo(x, fromY)
+  ctx.lineTo(x, toY + 7)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x, toY)
+  ctx.lineTo(x - 4.5, toY + 8)
+  ctx.lineTo(x + 4.5, toY + 8)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
 function blockDiagram(pane: Pane, spec: PskTimeDiagram, scheme: DiagramScheme) {
   const { ctx } = pane
   const top = pane.blockTop
@@ -121,25 +140,23 @@ function blockDiagram(pane: Pane, spec: PskTimeDiagram, scheme: DiagramScheme) {
   const bitsPreview = spec.bits.split('').slice(0, 6).join(' ')
   box(ctx, xs[0], rowY, w, h, '数字信息', bitsPreview)
   box(ctx, xs[1], rowY, w, h, '极性变换', scheme === '2ASK' ? '单极性 NRZ' : '单极性→双极性')
-  box(ctx, xs[2], rowY, w, h, '乘法器', '×')
+  box(ctx, xs[2], rowY, w, h, '乘法器')
   box(ctx, xs[3], rowY, w, h, '带通滤波器', 'BPF')
   for (let i = 0; i < 3; i += 1) arrow(ctx, xs[i] + w, xs[i + 1], rowY + h / 2)
 
-  // 载波源从下面进乘法器。
-  const carrierY = rowY + h + 46
-  box(ctx, xs[2], carrierY, w, h, '载波源', 'cos ω_c t')
-  arrow(ctx, xs[2] + w / 2, rowY + h, carrierY)
-
+  // 乘号与其它方框正文同字号，别缩成小点。
   ctx.save()
   ctx.fillStyle = DIM
-  ctx.font = '12px "Microsoft YaHei", "PingFang SC", sans-serif'
-  ctx.textAlign = 'left'
-  ctx.fillText(
-    scheme === '2ASK' ? '2ASK：载波的通断跟着比特走' : scheme === '2DPSK' ? '2DPSK：先差分编码，再相位键控' : '2PSK：相位跟着比特翻 0 / π',
-    PAD_LEFT,
-    carrierY + h / 2 + 4,
-  )
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = '600 15px "Microsoft YaHei", "PingFang SC", sans-serif'
+  ctx.fillText('×', xs[2] + w / 2, rowY + h / 2 + 11)
   ctx.restore()
+
+  // 载波源从下面用一根短竖箭头进乘法器，画面里不许出现贯穿式长横箭头。
+  const carrierY = rowY + h + 36
+  box(ctx, xs[2], carrierY, w, h, '载波源', 'cos ω_c t')
+  vArrow(ctx, xs[2] + w / 2, carrierY, rowY + h)
 }
 
 function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramScheme) {
@@ -217,6 +234,20 @@ function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramSc
   dashed(bandMid - bandAmp)
   dashed(bandMid + bandAmp)
 
+  // 纵轴刻度：基带段与带通段左侧各标 1 / 0 / −1，字号与横轴刻度一致。
+  ctx.save()
+  ctx.fillStyle = DIM
+  ctx.font = '12px "Consolas", "Microsoft YaHei", monospace'
+  ctx.textAlign = 'right'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('1', PAD_LEFT - 10, baseMid - baseAmp)
+  ctx.fillText('0', PAD_LEFT - 10, baseMid)
+  ctx.fillText('−1', PAD_LEFT - 10, baseMid + baseAmp)
+  ctx.fillText('1', PAD_LEFT - 10, bandMid - bandAmp)
+  ctx.fillText('0', PAD_LEFT - 10, bandMid)
+  ctx.fillText('−1', PAD_LEFT - 10, bandMid + bandAmp)
+  ctx.restore()
+
   // 码元边界：竖虚线从上贯到底。
   const boundariesMs = bitBoundariesMs(spec)
   boundariesMs.forEach((ms, index) => {
@@ -227,7 +258,8 @@ function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramSc
     ctx.strokeStyle = index === 0 || index === boundariesMs.length - 1 ? GRID : 'rgba(142,162,198,0.72)'
     ctx.lineWidth = 1.2
     ctx.beginPath()
-    ctx.moveTo(x, (showBlock ? blockTop + 8 : baseTop - 26))
+    // 竖虚线只在基带段与带通段之间贯穿，不许穿进上面的框图区。
+    ctx.moveTo(x, baseTop - 26)
     ctx.lineTo(x, bandTop + BAND_HEIGHT + 6)
     ctx.stroke()
     ctx.restore()
@@ -326,7 +358,7 @@ function draw(canvas: HTMLCanvasElement, spec: PskTimeDiagram, scheme: DiagramSc
 }
 
 /** 相位映射的说明：取决于这一题按哪种调制讲。 */
-export function schemeNote(scheme: DiagramScheme): string {
+function schemeNote(scheme: DiagramScheme): string {
   if (scheme === '2ASK') return '2ASK：比特 1 有载波、0 无载波（幅度键控），图上标「有载波 / 无」'
   if (scheme === '2DPSK') {
     return '2DPSK：先按 a_n ⊕ b_{n-1} 差分编码（初值 0），再按 1→0 相位、0→π 相位映射'
@@ -355,8 +387,9 @@ export function AnswerDiagram({ spec, scheme = '2PSK' }: { spec: unknown; scheme
     <figure className="answer-diagram">
       <canvas ref={canvasRef} role="img" aria-label={`${scheme} 波形：比特 ${diagram.bits}`} />
       <figcaption>
-        <span>{diagramFootnote(diagram)}</span>
-        <span>{schemeNote(scheme)}</span>
+        <span>
+          {diagramFootnote(diagram)}；{schemeNote(scheme)}
+        </span>
         <span>
           {diagram.bits.length} 个码元，{diagram.bitRate} Baud，载波 {diagram.carrierHz} Hz
         </span>

@@ -226,4 +226,10 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 答题模式：模型 JSON 增 `diagram`，有图就画，没有就写「这道题的文字答案里没有配图」；不做 SVG、不接外部生图。
 - 门禁：`npm test` 439 pass / 0 fail（44 文件）、oxlint 0/0、build `473.55 kB / gzip 159.93 kB`；截图 `D:/harness/tmp/r128shots/{a-2ask,a-2psk,a-2dpsk,b}.png`。
 
+### R129 · 图形排版收口：框图独立、短箭头、补纵轴刻度
+
+- `src/labs/AnswerDiagram.tsx`：`BLOCK_HEIGHT` 208→176，框图独占顶部；码元边界竖虚线起点恒为 `baseTop - 26`，不再从 `blockTop + 8` 起（原来会穿进框图区）；载波源到乘法器由贯穿长横箭头改为 36 px 短竖箭头（新增 `vArrow`）；图内那句相位映射文字挪到 `figcaption`，与 `f_c·T_b` 并排；乘法器的「×」由 12 px 副标题改为 600 15 px；两段左侧新增 1 / 0 / −1 纵轴刻度（`12px Consolas`）。
+- 几何校验（逐像素扫描）：带框图那张 980×554，框图区（y 20–184）在边界列只命中 2 个孤立像素、波形区命中 131 个（虚线不穿框图）；载波列命中 33 px、两盒之间横向 0 px（短竖箭头，无长横线）；六个纵轴刻度位置全部命中。
+- 门禁：439 pass / 0 fail、oxlint 0/0（123 files）、build `index-DGBGIyzx.js` 473,756 B、css 48,111 B。截图 `D:/harness/tmp/r129shots/{b-2psk-010110-block,a-2psk-1011001}.png`。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。
