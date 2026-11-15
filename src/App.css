@@ -3224,3 +3224,27 @@ video::-webkit-media-controls-overlay-play-button {
 .course.is-embed .course-book-pane {
   display: none;
 }
+
+/* R128：答题模式里的课本级图形（框图 + 基带 + 带通，三段共用时间轴）。 */
+.answer-diagram {
+  margin: 12px 0 0;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0c1424;
+}
+.answer-diagram canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.answer-diagram figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.6;
+}

@@ -947,6 +947,32 @@ const compandParam: CourseParam = { key: 'compand', label: 'A 律压扩', min: 0
 
 const BAND_SCHEMES = ['2ASK', '2FSK', '2PSK', '2DPSK'] as const
 const BAND_COLORS = ['#7fb3d5', '#e0a45c', '#5ad1a5', '#c58bf0']
+
+/**
+ * 基带极性：2ASK（下标 0）是单极性 0/1，其余是双极性 ±1。
+ * 答题模式的波形图也走这里，不在组件里另写一份波形生成。
+ */
+export function basebandLevel(scheme: number, bit: number): number {
+  if (scheme === 0) return bit === 1 ? 1 : 0
+  return bit === 1 ? 1 : -1
+}
+
+/** 载波样值 cos(2π f_c t)，t 以秒为单位。 */
+export function carrierSample(carrierHz: number, seconds: number): number {
+  return Math.cos(2 * Math.PI * carrierHz * seconds)
+}
+
+/**
+ * 2DPSK 的差分编码：本码元送出的相位 = 前一码元相位 ⊕ 本码元，初值 0。
+ * 返回每个码元实际用到的相位比特（0 表示 0 相位，1 表示 π 相位）。
+ */
+export function differentialBits(bits: number[]): number[] {
+  let state = 0
+  return bits.map((bit) => {
+    state = bit ^ state
+    return state
+  })
+}
 /** 蒙特卡洛样本数；固定种子，所以同一档每次重跑结果逐位相同。 */
 const BAND_SAMPLES = 20000
 const BAND_SEED = 20261107

@@ -219,4 +219,11 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 实测默认书 13 行证据词频到两位数（首行「引言」21 次、「绪论」18 次、「通信系统」11 次），每章抽到 1890–3275 字；反例书仍 13 行全 0；`Chapter N` 书仍 13/13 body。
 - 门禁：`npm test` 436 pass、oxlint 0/0、build 465.94 kB / gzip 156.77 kB；截图 `D:/harness/tmp/r127shots/{a-default-body,b-unrelated-zero,c-odd-titles,d-go-button}.png`。
 
+### R128 · 答题模式按课本版式画图，白名单只认一种
+
+- 新增 `src/answer/diagram.ts`：只认 `kind: 'psk-time'` 一种规格（`bits` 4–16 位、`bitRate` 100–10000、`carrierHz` 100–20000、`showBlock` 布尔），任一项不合规整体返 `null`，不猜不补；底注按 `carrierHz / bitRate` 是否整数现算「相位翻转落在峰点 / 不在峰点」。
+- 新增 `src/labs/AnswerDiagram.tsx`：canvas 竖排三段——原理框图、双极性基带、带通波形，共用时间轴，码元边界竖虚线贯到底，位上标 0/1，第三段标相位，横轴 `t / ms`；物理复用 `basebandLevel` / `carrierSample` / `differentialBits`（补在 `src/core/course.ts`），组件里不另写波形。
+- 答题模式：模型 JSON 增 `diagram`，有图就画，没有就写「这道题的文字答案里没有配图」；不做 SVG、不接外部生图。
+- 门禁：`npm test` 439 pass / 0 fail（44 文件）、oxlint 0/0、build `473.55 kB / gzip 159.93 kB`；截图 `D:/harness/tmp/r128shots/{a-2ask,a-2psk,a-2dpsk,b}.png`。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。

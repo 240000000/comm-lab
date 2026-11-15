@@ -12,6 +12,8 @@
  * 没有配置端点时返回 `{ status: 'offline' }`，界面走离线三题。
  */
 
+import { parseDiagram, type PskTimeDiagram } from './diagram.ts'
+
 /** 等模型的上限：超过这个时间就明说「这次没答上来」，不让人对着转圈猜。 */
 export const MODEL_TIMEOUT_MS = 20_000
 
@@ -44,6 +46,11 @@ export type AnswerMeta = {
   chapter?: number
   /** 模型直接读图得到的题面 */
   transcript?: string
+  /**
+   * 模型给的课本图规格。只认 `diagram.ts` 白名单里那一种；
+   * 模型没给或给的字段不合规都是 `undefined`，界面据此写「没有配图」。
+   */
+  diagram?: PskTimeDiagram
 }
 
 export type AnswerOk = AnswerResult & { status: 'ok'; meta: AnswerMeta }
@@ -118,7 +125,12 @@ const SYSTEM_PROMPT = [
   '  params: 数值参数数组，元素为 { "key": "英文短名", "label": "中文名（单位）", "value": 数字 }；',
   '  chapter: 这道题对应的《通信原理》章节号（整数 1–13）；',
   '  confidence: 你对答案的置信度（0 到 1 的小数）；',
-  '  caveat: 可选，口径说明或容易踩的坑（字符串，没有就省略）。',
+  '  caveat: 可选，口径说明或容易踩的坑（字符串，没有就省略）；',
+  '  diagram: 可选，只有题目让你画波形/原理图时才给，否则省略。形状固定为：',
+  '    { "kind": "psk-time", "bits": "010110", "bitRate": 1200, "carrierHz": 2400, "showBlock": true }；',
+  '    bits 只写 0 和 1、长度 4–16；bitRate 100–10000 的波特率；carrierHz 100–20000 的载波频率；',
+  '    showBlock 表示要不要画「数字信息→极性变换→乘法器→带通滤波器」的原理框图。',
+  '    别自己造别的图形类型，也别把波形写成坐标数组——画图交给前端。',
   '数值必须自己算，写清代入过程；单位与量纲要保留在 label 里。',
 ].join('\n')
 
@@ -210,6 +222,7 @@ export function parseModelAnswer(payload: unknown, meta: AnswerMeta = {}): Answe
       confidence: asNumber(row.confidence),
       chapter: asNumber(row.chapter),
       transcript: asText(row.transcript) || undefined,
+      diagram: parseDiagram(row.diagram) ?? undefined,
     },
   }
 }

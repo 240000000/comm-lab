@@ -15,6 +15,7 @@ import {
 } from '../answer/bank.ts'
 import { locateProblem, type LocateOutcome } from '../answer/locate.ts'
 import { bandMissNote, channelPreset, encodePreset, type PresetSpec } from '../answer/presets.ts'
+import { AnswerDiagram, type DiagramScheme } from './AnswerDiagram.tsx'
 import {
   defaultProvider,
   hasModelEndpoint,
@@ -254,6 +255,12 @@ export default function SolvePage() {
   })()
   const formula = problem?.formula ?? ''
   const transcript = model.kind === 'ok' ? model.answer.meta.transcript : undefined
+  // 图上标相位得跟着题目问的调制走；题面里没提就按 2PSK（课本 7-4 那种问法）。
+  const diagramScheme: DiagramScheme = /2DPSK|差分/i.test(transcript ?? text)
+    ? '2DPSK'
+    : /2ASK|ASK|通断键控/i.test(transcript ?? text)
+      ? '2ASK'
+      : '2PSK'
 
   return (
     <main className="lab solve">
@@ -344,6 +351,11 @@ export default function SolvePage() {
                 <span className="solve-badge ok">模型作答</span>
                 <p className="solve-headline">{model.answer.headline}</p>
                 <p className="solve-note">{metaLine(model.answer)}</p>
+                {model.answer.meta.diagram ? (
+                  <AnswerDiagram spec={model.answer.meta.diagram} scheme={diagramScheme} />
+                ) : (
+                  <p className="solve-note">这道题的文字答案里没有配图。</p>
+                )}
               </>
             ) : null}
             {model.kind === 'pending' ? (
