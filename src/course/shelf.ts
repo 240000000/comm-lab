@@ -8,9 +8,21 @@
  */
 
 import { chapterByNo } from '../core/course.ts'
+import { MIN_MARGIN, MIN_SCORE } from '../answer/locate.ts'
+import { bodyHitsLine, scoreBody, scoreTopic, type BodyScore } from './concepts.ts'
 import type { OutlinedBook, OutlineEntry } from './pdfOutline.ts'
 import { assignTopics, groupSections } from './sections.ts'
 import { BOOK_COMMUNICATION } from './syllabus.ts'
+
+/** 一章的正文摘要：这一轮判定功能覆盖，看的就是它。 */
+export type ChapterBody = {
+  /** 最多 3000 字；整章不落盘，够算词频就行。 */
+  text: string
+  /** 正文从哪来——文字层还是 OCR，界面照实写，不把 OCR 说成文字层。 */
+  source: 'text-layer' | 'ocr'
+  /** 证据的页码：数字版写页码范围 p.79–84，扫描版写第 N 页 OCR。 */
+  pages: string
+}
 
 /** 书架上的一章：目录上长什么样，以及它认到了哪一章。 */
 export type ShelfChapter = {
@@ -26,6 +38,8 @@ export type ShelfChapter = {
   sectionHits?: string[]
   /** 这一章在 PDF 里的起始页；导入时从书签读，读不出来是 null。 */
   page?: number | null
+  /** R126：这一章的正文摘要，没读过正文的书没有这一项。 */
+  body?: ChapterBody
 }
 
 /** 书架上的一本书。 */
@@ -233,6 +247,9 @@ export const MISSING_FUNCTION = '本书未涉及'
 /** 未涉及的那一行还能点，鼠标停上去说清楚点进去看到的是什么。 */
 export const MISSING_FUNCTION_HINT = '本书未识别到这一章，仍可进入默认示例'
 
+/** 这一行是靠什么认下来的：正文、标题兜底，还是根本没认出来。 */
+export type CoverageBasis = 'body' | 'title' | 'none'
+
 /** 功能模块表的一行：一条功能 + 本书里承担它的那一章（没有就是 null）。 */
 export type CoverageRow = {
   /** 功能对应的课程视图章号。 */
@@ -241,14 +258,22 @@ export type CoverageRow = {
   name: string
   /** 本书里接住这条功能的章；没接住就是 null。 */
   chapter: ShelfChapter | null
-  /** 命中词或未涉及提示，直接进单元格的 title。 */
+  /** 凭什么是它：正文命中 / 仅标题兜底 / 本书未涉及。 */
+  basis: CoverageBasis
+  /** 正文命中时留底，界面拿它写「『香农』12 次」。 */
+  body: BodyScore | null
+  /** 依据全文（含来源与页码），进单元格的 title，也印在状态下面一行。 */
   title: string
 }
 
 /** 13 条功能里本书覆盖了几条、剩下几条，以及书里还有几章认不出来。 */
 export type Coverage = {
-  /** 覆盖的功能条数。 */
+  /** 覆盖的功能条数（正文命中 + 仅标题兜底）。 */
   covered: number
+  /** 其中真正读过正文、正文命中接住的条数。 */
+  fromBody: number
+  /** 其中只靠章名接住、正文没认到的条数。 */
+  fromTitle: number
   /** 未涉及的功能条数。 */
   missing: number
   /** 本书里认不出模型的章数（这些章不占功能行，但要在表底交代一句）。 */
@@ -256,27 +281,127 @@ export type Coverage = {
   rows: CoverageRow[]
 }
 
+/** 正文依据：命中词 + 来源 + 页码，一句能印在界面上、也能查证的话。 */
+export function bodyEvidence(chapter: ShelfChapter, body: BodyScore): string {
+  const from = chapter.body
+  const source = from?.source === 'ocr' ? 'OCR 文字' : '文字层'
+  const pages = from?.pages ?? ''
+  const tail = pages ? `（${source}，${pages}）` : `（${source}）`
+  const words = bodyHitsLine(body.hits)
+  if (!words) return `正文命中本功能${tail}`
+  return `正文命中${words}${tail}`
+}
+
 /**
  * 把一本书的章摊到 13 条固定功能上。
  *
- * 一章只接一条功能：`topicId` 就是课程视图的章号，所以「哪一章覆盖哪条功能」
- * 是同一张表的两面，不另造一套映射。认不出模型的章（`topicId` 为空或对不上）
- * 不算覆盖，但要在 `unknown` 里数出来——表底那句「本书另有 K 章未识别」就是它。
+ * R126 起判定顺序换成「先读正文、再看章名」：正文的 Top1 分数过 `MIN_SCORE`、
+ * 且领先第二名过 `MIN_MARGIN` 才算数（常数复用 `src/answer/locate.ts`，本轮没调）；
+ * 正文不够才退回章名/节名，并且明写「仅按标题，未读正文」——兜底可以，但不许装成读过。
+ * 反例守卫：与通信无关的书没有一章正文的词频能过这两条线，覆盖数就是 0。
  */
+/** 正文打分的主题标识是 `ch04` 这种写法，功能清单里只有 04 这个数。 */
+function topicNo(topicId: string | number): number {
+  if (typeof topicId === 'number') return topicId
+  const digits = topicId.replace(/\D/g, '')
+  return digits ? Number(digits) : -1
+}
+
 export function coverageOf(book: ShelfBook): Coverage {
+  const read = book.chapters
+    .map((chapter) => ({ chapter, body: chapter.body ? scoreBody(chapter.body.text) : null }))
+    .filter((item) => item.body !== null)
+
   const rows: CoverageRow[] = MODULE_FUNCTIONS.map((item) => {
-    const chapter = book.chapters.find((entry) => entry.topicId === String(item.no) && isPlayable(entry))
+    const hit =
+      read.find(
+        (entry) =>
+          entry.body !== null &&
+          topicNo(entry.body.topicId) === item.no &&
+          entry.body.score >= MIN_SCORE &&
+          entry.body.margin >= MIN_MARGIN,
+      ) ?? null
+    // 扫描版没有整页文字层可用，只有章首页那一段 OCR；单靠词频容易让「绪论」抢走
+    // 每一章（信道/带宽/噪声这些词每章都提）。所以扫描版另走一条：章号已经由
+    // 「第 N 页 · N.1」这类标题锁定，正文只要够 MIN_SCORE 分就认，不再要求领先。
+    const hinted =
+      read.find(
+        (entry) =>
+          entry.chapter.body?.source === 'ocr' &&
+          entry.chapter.topicId === String(item.no) &&
+          scoreTopic(entry.chapter.body.text, `ch${String(item.no).padStart(2, '0')}`).score >=
+            MIN_SCORE,
+      ) ?? null
+    if (!hit && hinted && hinted.chapter.body) {
+      const scored = scoreTopic(hinted.chapter.body.text, `ch${String(item.no).padStart(2, '0')}`)
+      const body: BodyScore = {
+        topicId: `ch${String(item.no).padStart(2, '0')}`,
+        score: scored.score,
+        runnerUp: 0,
+        margin: scored.score,
+        hits: scored.hits.slice(0, 5).map((term) => ({
+          term,
+          count: scored.hits.filter((each) => each === term).length,
+        })),
+      }
+      return {
+        no: item.no,
+        name: item.name,
+        chapter: hinted.chapter,
+        basis: 'body',
+        body,
+        title: bodyEvidence(hinted.chapter, body),
+      }
+    }
+    if (hit && hit.body) {
+      return {
+        no: item.no,
+        name: item.name,
+        chapter: hit.chapter,
+        basis: 'body',
+        body: hit.body,
+        title: bodyEvidence(hit.chapter, hit.body),
+      }
+    }
+    // 兜底也要有凭据：只有「章名/节名里真出现了这一章的概念词」才算按标题认下。
+    // 早先只看 topicId（= 章号），任何一本 13 章的书都会被认成全覆盖——与通信无关的
+    // 预算教材也能刷出 13/13，正是这轮要堵的反例。
+    const trusted = book.id === DEFAULT_BOOK_ID
+    const chapter =
+      book.chapters.find(
+        (entry) =>
+          entry.topicId === String(item.no) &&
+          isPlayable(entry) &&
+          (trusted || (entry.hits?.length ?? 0) > 0 || (entry.sectionHits?.length ?? 0) > 0),
+      ) ?? null
+    if (chapter) {
+      const readThis = chapter.body !== undefined
+      const lead = readThis ? '正文没认到本功能，按标题兜底：' : '仅按标题，未读正文：'
+      return {
+        no: item.no,
+        name: item.name,
+        chapter,
+        basis: 'title',
+        body: null,
+        title: `${lead}${evidenceOf(chapter)}`,
+      }
+    }
     return {
       no: item.no,
       name: item.name,
-      chapter: chapter ?? null,
-      title: chapter ? evidenceOf(chapter) : MISSING_FUNCTION_HINT,
+      chapter: null,
+      basis: 'none',
+      body: null,
+      title: MISSING_FUNCTION_HINT,
     }
   })
-  const covered = rows.filter((row) => row.chapter !== null).length
+  const fromBody = rows.filter((row) => row.basis === 'body').length
+  const fromTitle = rows.filter((row) => row.basis === 'title').length
   return {
-    covered,
-    missing: rows.length - covered,
+    covered: fromBody + fromTitle,
+    fromBody,
+    fromTitle,
+    missing: rows.length - fromBody - fromTitle,
     unknown: book.chapters.filter((chapter) => !isPlayable(chapter)).length,
     rows,
   }

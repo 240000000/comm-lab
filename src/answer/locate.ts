@@ -21,8 +21,8 @@ export function chapterFromTopic(topicId: string): number {
  * 分数太低、或第一名与第二名咬得太紧，都算「不够明显」：
  * 这类输入不硬猜章节，交给左栏的 Top3 让用户自己选。
  */
-const MIN_SCORE = 3
-const MIN_MARGIN = 2
+export const MIN_SCORE = 3
+export const MIN_MARGIN = 2
 
 /** 用 concepts 的 scoreSection 给题面定位章节。 */
 export function locateProblem(text: string): LocateOutcome | null {

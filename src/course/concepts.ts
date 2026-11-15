@@ -238,3 +238,107 @@ export function countTerms(text: string): Map<string, number> {
   }
   return counts
 }
+
+/** 正文里命中的概念词：词本身与它出现的次数。 */
+export type BodyHit = { term: string; count: number }
+
+/** 一段正文的看法：谁最高、领先多少、靠哪几个词。 */
+export type BodyScore = {
+  topicId: string
+  score: number
+  runnerUp: number
+  margin: number
+  hits: BodyHit[]
+}
+
+/**
+ * R126：给一段「章正文」打分，返回 Top1 是谁、领先第二名多少、靠哪五个词。
+ *
+ * 只数次数、不猜意思。分数低或领先不够由调用方（`coverageOf`）判「不够明显」，
+ * 阈值仍然用 `src/answer/locate.ts` 里那对老常数——这一轮改的是「读什么」，
+ * 不是「多严」，所以 3 与 2 一个字都没动。
+ */
+/**
+ * 同一个词出现在几章的词表里。像「信道」「带宽」「噪声」这种 13 章有 8 章都列的
+ * 通用词，出现在哪一章的正文里都正常，拿它打分只会把每章都判成绪论——所以
+ * `scoreBody` 只认「少于四章共用」的词，并按 1/共用章数 加权，越独有越算数。
+ */
+const TERM_CHAPTERS = (() => {
+  const counter = new Map<string, number>()
+  for (const topic of TOPICS) {
+    for (const term of topic.terms) {
+      const key = normalize(term)
+      counter.set(key, (counter.get(key) ?? 0) + 1)
+    }
+  }
+  return counter
+})()
+
+const SHARED_TERM_CEILING = 4
+
+/** 正文里只有「够独特」的词参与打分：先滤掉跨章通用词，再按稀有度加权。 */
+function scoreUniqueBody(haystack: string): TopicScore[] {
+  const ranked: TopicScore[] = []
+  for (const topic of TOPICS) {
+    let score = 0
+    const hits: string[] = []
+    for (const term of topic.terms) {
+      const key = normalize(term)
+      const share = TERM_CHAPTERS.get(key) ?? 1
+      if (share >= SHARED_TERM_CEILING) continue
+      const count = countTerm(haystack, term)
+      if (count === 0) continue
+      score += count / share
+      hits.push(term)
+    }
+    ranked.push({ topicId: topic.topicId, score: Math.round(score * 100) / 100, hits })
+  }
+  return ranked.sort((a, b) => b.score - a.score || a.topicId.localeCompare(b.topicId))
+}
+
+export function scoreBody(text: string): BodyScore | null {
+  const trimmed = text.trim()
+  if (trimmed === '') return null
+  const ranked = scoreUniqueBody(normalize(trimmed))
+  const top = ranked[0]
+  if (!top || top.score === 0) return null
+  const runnerUp = ranked[1]?.score ?? 0
+  const haystack = normalize(trimmed)
+  const hits: BodyHit[] = top.hits
+    .map((term) => ({ term, count: countTerm(haystack, term) }))
+    .filter((hit) => hit.count > 0)
+    .sort((a, b) => b.count - a.count || a.term.localeCompare(b.term))
+    .slice(0, 5)
+  return {
+    topicId: top.topicId,
+    score: top.score,
+    runnerUp,
+    margin: top.score - runnerUp,
+    hits,
+  }
+}
+
+/** 「『香农』12 次、『带宽』9 次」——依据行的一半，卷面用。 */
+export function bodyHitsLine(hits: BodyHit[], limit = 3): string {
+  return hits
+    .slice(0, limit)
+    .map((hit) => `「${hit.term}」${hit.count} 次`)
+    .join('、')
+}
+
+/** 只看某一章的词表在这段正文里得几分：扫描版靠「第 N 章」锁定章号后，用它判断正文够不够。 */
+export function scoreTopic(text: string, topicId: string): { score: number; hits: string[] } {
+  const topic = TOPICS.find((item) => item.topicId === topicId)
+  const trimmed = text.trim()
+  if (!topic || trimmed === '') return { score: 0, hits: [] }
+  const haystack = normalize(trimmed)
+  let score = 0
+  const hits: string[] = []
+  for (const term of topic.terms) {
+    const count = countTerm(haystack, term)
+    if (count === 0) continue
+    score += count
+    hits.push(term)
+  }
+  return { score, hits }
+}

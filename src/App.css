@@ -2559,6 +2559,56 @@ a.card {
   color: var(--dim);
 }
 
+/* R126：状态列要能自曝依据——三种来源一眼分开，依据另起一行，未覆盖的行给个仿真入口。 */
+.module-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.module-tag.body {
+  border-color: rgba(60, 227, 198, 0.5);
+  color: var(--accent);
+}
+
+.module-tag.title {
+  border-color: rgba(255, 206, 84, 0.5);
+  color: #ffce54;
+}
+
+.module-where {
+  white-space: nowrap;
+}
+
+.module-basis {
+  display: block;
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.module-go {
+  margin-top: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.module-go:hover {
+  border-color: var(--accent);
+}
+
 .module-state a {
   color: var(--accent);
   text-decoration: none;

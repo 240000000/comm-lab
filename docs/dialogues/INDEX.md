@@ -205,4 +205,11 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 门禁：`npm test` 432 pass / 43 文件、oxlint 0/0（118 files）、build `index-BLHuz06P.js` 459.58 kB / gzip 154.88 kB、`check:docs` 182 断言 0 不符、123 tag = 轮次表 123 行。
 - 2.8 改写为「默认离线；接端点后模型直接看图，不再等本机 OCR」，技术报告重导后仍 30 页。
 
+### R126 · 覆盖判定改读正文，标题只兜底并自曝
+
+- `src/course/chapterBody.ts` 把正文取到每章手上（文字层按书签切片、扫描版用首页 OCR 不足 300 字补后两页），`scoreBody`/`scoreTopic` 在 `src/course/concepts.ts` 打分，`coverageOf` 三段判定：扫描版直认 → 正文领先 → 标题兜底（必须自曝「仅按标题，未读正文」）。
+- 界面三态徽标 + 依据行（词频与页码）+ 未覆盖行的「直接看第 N 章的仿真」按钮；`plainChapter` 补落 `body`，刷新不再退化。
+- 两个真 bug：`parsePdfOutline` 会转移 ArrayBuffer 导致 `new Uint8Array` 抛错（改 `slice(0)`）；扫描 effect 的「扫过了」标记从 `hasPdf` 之前挪到之后。
+- 实测：樊昌信 13/13 body；`Chapter N` 章名的书 13/13 body；无关教材覆盖 0、13 行「本书未涉及」。`npm test` 435 pass、build 463.38 kB / gzip 155.67、`check:docs` 182 断言 0 不符、126 tag = 轮次表 126 行。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。

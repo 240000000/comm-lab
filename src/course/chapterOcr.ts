@@ -7,6 +7,7 @@
 import { TOPICS, countTerms } from './concepts.ts'
 import { createOcrWorker, recognizePages, type OcrWorker } from './ocr.ts'
 import { loadFromPdfjs, type PdfDocument } from './pdfSource.ts'
+import { BODY_MIN_OCR_CHARS } from './chapterBody.ts'
 import type { ShelfChapter } from './shelf.ts'
 
 export type ChapterScan = {
@@ -18,6 +19,10 @@ export type ChapterScan = {
   name: string
   hits: string[]
   score: number
+  /** R126：这一章首页认出来的原文，给覆盖判定当正文用；缓存里也别丢。 */
+  text?: string
+  /** R126：正文一共来自几页（首页不够三百字时补了后两页）。 */
+  span?: number
 }
 
 export type ChapterScanProgress = { done: number; total: number; chapterNo: number }
@@ -115,6 +120,7 @@ function scanWithWeights(
       name: hintTopic.title,
       hits: hits.slice(0, MAX_HITS),
       score: Math.round((scored.reduce((sum, item) => sum + item.value, 0) / Math.sqrt(hintTopic.terms.length)) * 100) / 100,
+      text,
     }
   }
   let bestTopic: { topicId: string; score: number; hits: string[] } | null = null
@@ -145,6 +151,7 @@ function scanWithWeights(
     name: bestTopic ? topicName(bestTopic.topicId) : '未命中',
     hits: bestTopic ? bestTopic.hits.slice(0, MAX_HITS) : [],
     score: bestTopic?.score ?? 0,
+    text,
   }
 }
 
@@ -215,9 +222,27 @@ export async function recognizeChapterHeads(
         doc,
       })
       if (!outcome.ok) return { ok: false, message: outcome.message }
-      const text = outcome.pages[0]?.text ?? ''
+      let text = outcome.pages[0]?.text ?? ''
+      let span = 1
+      // R126：章首页只认到几百字时，正文不够判覆盖，往下再读两页凑分量。
+      // 只在「薄」的时候补，13 章全补会多花一分多钟。
+      if (text.replace(/\s+/g, '').length < BODY_MIN_OCR_CHARS && page + 2 <= doc.numPages) {
+        const more = await recognizePages(null, [page + 1, page + 2], undefined, {
+          bookId,
+          signal: options.signal,
+          worker,
+          doc,
+        })
+        if (more.ok) {
+          const extra = more.pages.map((item) => item.text).join('\n')
+          if (extra.trim().length > 0) {
+            text = `${text}\n${extra}`
+            span = 3
+          }
+        }
+      }
       const ms = Math.round(performance.now() - started)
-      scans.push(scanFromText(no, page, text, ms))
+      scans.push({ ...scanFromText(no, page, text, ms), span })
       texts.set(no, text)
     }
     // 逐页扫完再统一定章：稀有度权重要知道「某个词出现在几页上」，单页扫的时候

@@ -465,8 +465,8 @@ export function CoursePage() {
   const scanStarted = useRef<string | null>(null)
   useEffect(() => {
     if (usingDefault) return
-    if (scanStarted.current === book.id) return
-    scanStarted.current = book.id
+    // R126：原件是否在内存里要等异步读索引，早到的这一轮先别记「扫过了」，
+    // 否则 hasPdf 还是 false 就 return，后面 blob 到位也不会再扫一次。
     let alive = true
     const cacheKey = scanCacheKey(book.id)
     // 卡在哪一步要看得见：大扫描件慢起来是几分钟，光看 0/13 分不清是在解析
@@ -478,8 +478,18 @@ export function CoursePage() {
       // 先看上次识别的结果：原件被清掉也要让证据行说出页码，只是翻不过去。
       const cached = parseScanCache(await readOcrText(cacheKey))
       if (!alive) return
-      if (cached) setScanState({ key: book.id, scans: cached })
+      if (cached) {
+        setScanState({ key: book.id, scans: cached })
+        // 缓存里也带着每章那段文字（R126 起才有），同样挂回书上去。
+        if (book.chapters.some((chapter) => !chapter.body)) {
+          const { attachOcrBodies } = await import('../course/chapterBody.ts')
+          const withBodies = attachOcrBodies(book, cached)
+          if (withBodies.short.length < book.chapters.length) importBook(withBodies.book)
+        }
+      }
       if (!hasPdf) return
+      if (scanStarted.current === book.id) return
+      scanStarted.current = book.id
       const blob = await getBookPdf(book.id)
       if (!blob || !alive) return
       stage('blob', String(blob.size))
@@ -515,6 +525,10 @@ export function CoursePage() {
         document.documentElement.dataset.r108 = JSON.stringify(outcome.scans)
         setScanState({ key: book.id, scans: outcome.scans })
         void saveOcrText(cacheKey, JSON.stringify(outcome.scans))
+        // R126：把每章认到的正文挂回书上，覆盖判定才有东西可读。
+        const { attachOcrBodies } = await import('../course/chapterBody.ts')
+        const withBodies = attachOcrBodies(book, outcome.scans)
+        if (withBodies.short.length < book.chapters.length) importBook(withBodies.book)
       } else {
         setScanState({ key: book.id, note: outcome.message })
       }
@@ -751,7 +765,8 @@ export function CoursePage() {
           await tryOcrOutline(file, fileName, bookId)
           return
         }
-        const entries = await outline.parsePdfOutline(bytes)
+        // 同上：书签解析会转移 ArrayBuffer，文字层留原件。
+        const entries = await outline.parsePdfOutline(bytes.slice(0))
         if (entries.length === 0) {
           // 扫描件没有书签、文字层也抠不出章名：先试 OCR 读目录页，失败再退回手动输入。
           setImportState({ status: 'idle' })
@@ -759,7 +774,20 @@ export function CoursePage() {
           return
         }
         const title = fileName.replace(/\.pdf$/i, '')
-        const added = bookFromSections(title, entries, bookId)
+        let added = bookFromSections(title, entries, bookId)
+        // R126：数字版顺手把文字层按章切了；失败就只剩标题兜底，界面会写明。
+        try {
+          const { readPdfText } = await import('../course/pdfText.ts')
+          const { attachTextLayer } = await import('../course/chapterBody.ts')
+          const text = await readPdfText(new Uint8Array(bytes))
+          try {
+            added = attachTextLayer(added, text.text.pages)
+          } finally {
+            await text.destroy()
+          }
+        } catch (error) {
+          console.warn('[R126] 文字层没读成，这一本只能按标题认', error)
+        }
         importBook(added)
         setBill({ fileName, book: added })
         setImportState({ status: 'idle' })

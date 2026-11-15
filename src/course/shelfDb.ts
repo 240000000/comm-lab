@@ -12,6 +12,7 @@
  * 塞进来的函数、Map、类实例都在这一层被抹平成普通字段，读回来才不用猜。
  */
 
+import { BODY_TEXT_LIMIT } from './chapterBody.ts'
 import type { ShelfBook, ShelfChapter } from './shelf.ts'
 
 export const SHELF_DB_NAME = 'comm-lab-shelf'
@@ -64,6 +65,16 @@ export function plainChapter(chapter: ShelfChapter): ShelfChapter {
       if (typeof hit === 'string') sectionHits.push(hit)
     }
     plain.sectionHits = sectionHits
+  }
+  // R126：功能覆盖要看正文，所以每章那 3000 字也要落盘——不存这一笔，
+  // 刷新一次页面覆盖判定就全退回标题兜底。上限 3000 字，13 章约 40 KB。
+  const body = chapter.body
+  if (body && typeof body.text === 'string' && body.text) {
+    plain.body = {
+      text: body.text.slice(0, BODY_TEXT_LIMIT),
+      source: body.source === 'ocr' ? 'ocr' : 'text-layer',
+      pages: typeof body.pages === 'string' ? body.pages : '',
+    }
   }
   return plain
 }

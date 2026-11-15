@@ -7,6 +7,7 @@
  * 失败只说人话，不谈实现：三种情况各有各的说法，不合并成「导入失败」。
  */
 import { bookFromSections, type ShelfBook } from '../course/shelf.ts'
+import { attachTextLayer } from '../course/chapterBody.ts'
 
 export const MAX_PDF_BYTES = 250 * 1024 * 1024
 
@@ -31,10 +32,27 @@ export async function readBookFile(file: File, id: string): Promise<BookImportRe
 
   const outline = await import('../course/pdfOutline.ts')
   try {
-    const entries = await outline.parsePdfOutline(await file.arrayBuffer())
+    const bytes = await file.arrayBuffer()
+    // pdf.js 会把传进去的 ArrayBuffer 转移走（直接变 detached），所以书签用副本、
+    // 文字层留原件——否则第二步 `new Uint8Array(bytes)` 会当场抛 detached ArrayBuffer。
+    const entries = await outline.parsePdfOutline(bytes.slice(0))
     if (entries.length === 0) return { ok: false, message: NO_OUTLINE_MESSAGE }
     const title = file.name.replace(/\.pdf$/i, '')
-    return { ok: true, book: bookFromSections(title, entries, id) }
+    let book = bookFromSections(title, entries, id)
+    // R126：覆盖判据要看正文，所以这里顺手把文字层按章切片；读不到就退回只按标题，
+    // 界面会写明「仅按标题，未读正文」——兜底可以说，但不能装成读过。
+    try {
+      const { readPdfText } = await import('../course/pdfText.ts')
+      const { text, destroy } = await readPdfText(new Uint8Array(bytes))
+      try {
+        book = attachTextLayer(book, text.pages)
+      } finally {
+        await destroy()
+      }
+    } catch (error) {
+      console.warn('[R126] 文字层没读成，这一本只能按标题认', error)
+    }
+    return { ok: true, book }
   } catch (error) {
     return {
       ok: false,
