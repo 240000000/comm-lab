@@ -2678,6 +2678,31 @@ a.card {
   text-overflow: ellipsis;
 }
 
+.module-presets {
+  display: flex;
+  gap: 6px;
+}
+
+/* 面板里的档位药丸比课程视图窄一档，两档并排也不抢功能名的位置。 */
+.module-presets .course-preset {
+  padding: 2px 8px 2px 5px;
+  font-size: 12px;
+}
+
+.module-presets .course-preset-id {
+  min-width: 16px;
+  height: 16px;
+  font-size: 10px;
+}
+
+.module-badge.body {
+  color: var(--accent);
+}
+
+.module-badge.title {
+  color: #ffce54;
+}
+
 .module-tier {
   color: var(--dim);
   font-size: 11px;

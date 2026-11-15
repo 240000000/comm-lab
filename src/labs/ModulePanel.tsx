@@ -1,77 +1,87 @@
-// 扩展模式右侧「功能模块」面板（R135 重做信息密度）。
+// 扩展模式右侧「功能模块」面板（R136 第二步：每章一行、两档并排）。
 //
-// 行轴是功能轴：13 章 × 两档档位 = 26 个入口，表格行数不随书变，
-// 变的只有每一行对这本书的证据：正文命中、仅标题、还是根本没涉及。
-//
-// R135 改法：把原来每行都重复一遍的「仅按标题，未读正文：→ 第 N 章」收成
-// 面板标题下的一句总说明，行内只留功能名、章号、状态圆点。
-// 26 行按章分组：一章两档紧挨着，第一行带章号，两行共用一条左侧导轨，
-// 行高压到 44px，1440×900 一屏能看到 16 行以上——密度是为了让人一眼扫完，
-// 不是为了把信息删掉：依据（命中的词与页码）还在，挪进圆点的 title 里，
-// 鼠标停上去就能读到，行内不再重复。
+// 行轴是章：13 章各一行，行内两个档位按钮并排，26 个可点入口仍然一个不少，
+// 但不再出现同一个功能名连着写两遍（R135 那一版正是这样，看上去像渲染错位）。
+// 三色圆点按章聚合：任一档有正文依据就是绿点，只有标题依据是黄点，
+// 两档都没涉及才是灰点；依据（命中的词与页码）仍在圆点的 title 里。
+// 面板标题下那句「26 个入口里 N 个有正文依据」保留。
 import type { ShelfBook } from '../course/shelf.ts'
 import { coverageOf } from '../course/shelf.ts'
+import { COURSE_PRESETS } from '../course/presets.ts'
 
-const DOT_LABEL = {
-  body: '正文命中',
-  title: '仅标题',
-  none: '未涉及',
-} as const
-
-function courseHref(no: number, preset: string): string {
-  return `#/course?no=${no}&preset=${preset}`
-}
+const DOT_LABEL = { body: '正文命中', title: '仅标题', none: '未涉及' } as const
 
 export function ModulePanel({ book }: { book: ShelfBook | null }) {
   const coverage = coverageOf(book)
-  const rows = coverage.rows
   const hasBody = coverage.fromBody > 0
-
-  // 只读到目录时给黄点说明，读到正文后改成「N 个有正文依据（绿点）」。
   const summary = hasBody
-    ? `这本书读到正文：${rows.length} 个入口里 ${coverage.fromBody} 个有正文依据（绿点）`
-    : '这本书目前只读到目录：功能按章名匹配（黄点），读到正文后会变绿点并给出命中的词与页码'
+    ? `这本书读到正文：26 个入口里 ${coverage.fromBody} 个有正文依据（绿点）。`
+    : '这本书目前只读到目录：功能按章名匹配（黄点），读到正文后会变绿点并给出命中的词与页码。'
+
+  const chapters = COURSE_PRESETS
+  const numbers = Object.keys(chapters)
+    .map((key) => Number(key))
+    .sort((a, b) => a - b)
 
   return (
-    <section className="module-panel">
+    <section className="module-panel" aria-label="功能模块">
       <header className="module-head">
         <h2 className="module-title">功能模块</h2>
         <p className="module-sub">{book ? book.title : '还没导入教材'}</p>
         <p className="module-summary">{summary}</p>
       </header>
-
       <ol className="module-list">
-        {rows.map((row, index) => {
-          const off = row.chapter === null
-          const groupStart = index === 0 || rows[index - 1].no !== row.no
-          const title = off
-            ? `${DOT_LABEL[row.basis]}：这本书没有第 ${row.no} 章`
-            : [`第 ${row.no} 章「${row.chapter?.rawTitle ?? ''}」`, DOT_LABEL[row.basis], row.title]
-                .filter(Boolean)
-                .join(' · ')
+        {numbers.map((no) => {
+          const tiers = chapters[no]
+          const rowA = coverage.rows.find((row) => row.no === no && row.preset === 'a')
+          const rowB = coverage.rows.find((row) => row.no === no && row.preset === 'b')
+          const first = rowA ?? rowB
+          if (!first) return null
+          const basis =
+            rowA?.basis === 'body' || rowB?.basis === 'body'
+              ? 'body'
+              : rowA?.basis === 'title' || rowB?.basis === 'title'
+                ? 'title'
+                : 'none'
+          const off = !rowA?.chapter && !rowB?.chapter
+          const name = first.name
+          const chapterTitle = rowA?.chapter?.rawTitle ?? rowB?.chapter?.rawTitle ?? ''
+          const detail = [rowA?.title, rowB?.title].filter(Boolean).join(' ／ ')
+
           return (
-            <li
-              key={`${row.no}-${row.preset}`}
-              className={`module-row${off ? ' off' : ''}${groupStart ? ' group-start' : ''}`}
-              title={title}
-              onClick={() => {
-                window.location.hash = courseHref(row.no, row.preset)
-              }}
-            >
-              <span className="module-no">{groupStart ? String(row.no).padStart(2, '0') : ''}</span>
-              <span className={`module-dot ${row.basis}`} aria-hidden="true" />
-              <span className="module-name">{row.name}</span>
-              <span className="module-tier">{row.label}</span>
-              <span className="module-badge">{DOT_LABEL[row.basis]}</span>
+            <li key={no} className={off ? 'module-row off' : 'module-row'}>
+              <span className="module-no">{String(no).padStart(2, '0')}</span>
+              <span
+                className={`module-dot ${basis}`}
+                title={`${DOT_LABEL[basis]}${chapterTitle ? ` · 第 ${no} 章「${chapterTitle}」` : ''}${detail ? ` · ${detail}` : ''}`}
+              />
+              <span className="module-name">{name}</span>
+              <span className="module-presets">
+                {tiers.map((tier) => {
+                  const row = tier.id === 'a' ? rowA : rowB
+                  return (
+                    <a
+                      key={tier.id}
+                      className={row?.basis === 'body' ? 'course-preset is-active' : 'course-preset'}
+                      href={`#/course?no=${no}&preset=${tier.id}`}
+                      aria-pressed={row?.basis === 'body'}
+                      title={`${tier.label} · ${DOT_LABEL[row?.basis ?? 'none']}`}
+                    >
+                      <span className="course-preset-id">{tier.id}</span>
+                      {tier.label}
+                    </a>
+                  )
+                })}
+              </span>
+              <span className={`module-badge ${basis}`}>{DOT_LABEL[basis]}</span>
             </li>
           )
         })}
       </ol>
-
       <p className="module-foot">
         26 个档位（13 章 × 2 档）：本书对上 {coverage.covered} 个（正文 {coverage.fromBody} 个、仅标题{' '}
-        {coverage.covered - coverage.fromBody} 个）、未涉及 {coverage.missing} 个。
-        {coverage.unknown > 0 ? ` 本书另有 ${coverage.unknown} 章未识别。` : ''}
+        {coverage.fromTitle} 个）
+        {coverage.missing > 0 ? `、未涉及 ${coverage.missing} 个` : ''}。
       </p>
     </section>
   )
