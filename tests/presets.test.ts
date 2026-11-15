@@ -17,7 +17,7 @@ const EXPECTED_B: Record<number, { label: string; params: Record<string, number>
   3: { label: '一阶低通', params: { kind: 1, timeIndex: 3, k: 100 } },
   4: { label: '窄带对照', params: { snr0Db: 20, bandIndex: 0 } },
   5: { label: 'FM β=2', params: { mode: 3, m: 0.6, beta: 2, snrIn: 25 } },
-  6: { label: '大滚降', params: { alpha: 0.9, eyeSnrDb: 20, multipath: 0, timing: 0 } },
+  6: { label: '大滚降 + 偏 0.2T', params: { alpha: 0.9, eyeSnrDb: 20, multipath: 0, timing: 0.2 } },
   7: { label: '2ASK 对照', params: { scheme: 0, ebn0Db: 8, phaseDeg: 0 } },
   8: { label: '64QAM', params: { mod: 2, ebn0Db: 12, alpha: 0.35 } },
   9: { label: '半正弦', params: { wave: 2, dt: 0, ebn0Db: 8 } },
@@ -56,6 +56,20 @@ test('26 条的档名与 b 档参数逐条钉死', () => {
     }
   }
   assert.equal(rows, 26)
+})
+
+test('b 档一律不等于 failPreset（13 章全查）', () => {
+  // 档位是给人看的正常档，红色反例状态只留给「让它失效」按钮：
+  // 一旦某章 b 档和 failPreset 重合，点进去就是红的，档位就废了。
+  const same: number[] = []
+  for (const chapter of COURSE_CHAPTERS) {
+    const b = COURSE_PRESETS[chapter.no].find((preset) => preset.id === 'b')
+    assert.ok(b, `第 ${chapter.no} 章缺 b 档`)
+    const sameAsFail = Object.entries(chapter.failPreset).every(([key, value]) => b.params[key] === value)
+    if (sameAsFail) same.push(chapter.no)
+    assert.notDeepEqual(b.params, chapter.failPreset, `第 ${chapter.no} 章 b 档撞上了 failPreset`)
+  }
+  assert.deepEqual(same, [], `这些章的 b 档与 failPreset 重合：${same.join(',')}`)
 })
 
 test('每章两档跑出来的结果必须不同（读数或曲线至少一处不一样）', () => {

@@ -55,7 +55,7 @@ export const COURSE_PRESETS: Record<number, CoursePreset[]> = {
   ],
   6: [
     { id: 'a', label: DEFAULT_PRESET_LABEL, params: { alpha: 0.35, eyeSnrDb: 20, multipath: 0, timing: 0 } },
-    { id: 'b', label: '大滚降', params: { alpha: 0.9, eyeSnrDb: 20, multipath: 0, timing: 0 } },
+    { id: 'b', label: '大滚降 + 偏 0.2T', params: { alpha: 0.9, eyeSnrDb: 20, multipath: 0, timing: 0.2 } },
   ],
   7: [
     { id: 'a', label: DEFAULT_PRESET_LABEL, params: { scheme: 2, ebn0Db: 8, phaseDeg: 0 } },
