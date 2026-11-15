@@ -4,6 +4,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import './ui/motion.css'
+import { applyMotionTokens } from './ui/motion.ts'
+
+applyMotionTokens()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

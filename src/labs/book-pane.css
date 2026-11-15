@@ -41,7 +41,7 @@
   background: transparent;
   cursor: col-resize;
   touch-action: none;
-  transition: background 120ms ease;
+  transition: background var(--motion-swap) var(--motion-ease);
 }
 
 .course-book-resizer:hover,
@@ -175,7 +175,7 @@
   border-radius: 8px;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
   background-size: 200% 100%;
-  animation: pdf-skeleton-sweep 1.2s linear infinite;
+  animation: motion-skeleton-breathe calc(var(--motion-enter) * 6) var(--motion-ease) infinite;
 }
 
 .pdf-skeleton.tall {

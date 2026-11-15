@@ -179,7 +179,7 @@ export default function App() {
       </div>
 
       {homeMode === 'default' ? (
-      <section className="grid" aria-label="实验模块">
+      <section className="grid home-grid" aria-label="实验模块">
         {modules.map((m) => {
           return (
             <a key={m.id} className="card" href={m.href}>

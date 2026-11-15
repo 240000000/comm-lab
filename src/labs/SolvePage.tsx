@@ -430,9 +430,17 @@ export default function SolvePage() {
               </>
             ) : null}
             {model.kind === 'pending' ? (
-              <p className="solve-progress">
-                {phase || '正在准备'} · 已用时 {seconds(waited)}
-              </p>
+              <>
+                <p className="solve-progress">
+                  {phase || '正在准备'} · 已用时 {seconds(waited)}
+                </p>
+                {/* R135：等待一律用骨架呼吸条，不转圈。 */}
+                <div className="skeleton-block" aria-hidden="true">
+                  <span className="skeleton-bar wide" />
+                  <span className="skeleton-bar mid" />
+                  <span className="skeleton-bar short" />
+                </div>
+              </>
             ) : null}
             {model.kind === 'error' ? (
               <>
@@ -526,7 +534,13 @@ export default function SolvePage() {
                 ))}
               </ol>
             ) : model.kind === 'pending' ? (
-              <p className="solve-note">等答案回来。</p>
+              <>
+                <p className="solve-note">等答案回来。</p>
+                <div className="skeleton-block" aria-hidden="true">
+                  <span className="skeleton-bar wide" />
+                  <span className="skeleton-bar mid" />
+                </div>
+              </>
             ) : (
               <p className="solve-note">还没有答案。</p>
             )}

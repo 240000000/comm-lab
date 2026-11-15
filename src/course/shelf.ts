@@ -327,7 +327,31 @@ function topicNo(topicId: string | number): number {
   return digits ? Number(digits) : -1
 }
 
-export function coverageOf(book: ShelfBook): Coverage {
+export function coverageOf(book: ShelfBook | null): Coverage {
+  // 没导入书时面板照样是 26 行（行轴是功能，不是书），全部落成灰点。
+  // R135：面板改成常显 26 行的清单后，未导入书的空态也要有一份完整的行数据，
+  // 否则组件里到处 `coverage?.` 会散成一地可选链。
+  if (!book) {
+    const empty: CoverageRow[] = MODULE_FUNCTIONS.map((item) => ({
+      no: item.no,
+      preset: item.preset,
+      name: item.name,
+      label: item.label,
+      chapter: null,
+      basis: 'none',
+      body: null,
+      title: MISSING_FUNCTION_HINT,
+    }))
+    return {
+      covered: 0,
+      fromBody: 0,
+      fromTitle: 0,
+      missing: empty.length,
+      unknown: 0,
+      rows: empty,
+    }
+  }
+
   const read = book.chapters
     .map((chapter) => ({ chapter, body: chapter.body ? scoreBody(chapter.body.text) : null }))
     .filter((item) => item.body !== null)

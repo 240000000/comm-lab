@@ -1054,9 +1054,13 @@ export function CoursePage() {
 
       {usingDefault || !hasPdf ? null : (
         <p className="course-scan-note">
-          {scanState?.key === book.id && scanState.progress
-            ? `扫描版 · 正在识别正文 ${scanState.progress.done}/${scanState.progress.total} 章`
-            : null}
+          {scanState?.key === book.id && scanState.progress ? (
+            <>
+              {`扫描版 · 正在识别正文 ${scanState.progress.done}/${scanState.progress.total} 章`}
+              {/* R135：正文识别是几分钟的事，用骨架呼吸条表示还在动，不转圈。 */}
+              <span className="skeleton-bar wide" aria-hidden="true" />
+            </>
+          ) : null}
           {scanState?.key === book.id && scanState.scans
             ? `扫描版 · 正文已识别 ${scanState.scans.filter((scan) => scan.chars > 80).length}/${book.chapters.length} 章`
             : null}
@@ -1238,7 +1242,8 @@ export function CoursePage() {
         </div>
         )}
 
-        <section className="course-main">
+        {/* R135：切章时右栏整块重新进场（淡入 + 上移 8px），key 用章号触发重播。 */}
+        <section className="course-main pane-enter" key={chapter.no}>
           {view ? (
             <ChapterScreen
               chapter={chapter}

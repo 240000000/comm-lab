@@ -74,7 +74,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
-  transition: border-color 160ms ease, transform 160ms ease;
+  transition: border-color var(--motion-swap) var(--motion-ease), transform var(--motion-press) var(--motion-ease);
 }
 
 a.card:hover {
@@ -433,7 +433,7 @@ a.card {
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 12.5px;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: border-color var(--motion-swap) var(--motion-ease), color var(--motion-swap) var(--motion-ease), background var(--motion-swap) var(--motion-ease);
 }
 
 .order-btn:hover {
@@ -694,7 +694,7 @@ a.card {
   font-size: 12px;
   color: #9fb3c8;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--motion-swap) var(--motion-ease), color var(--motion-swap) var(--motion-ease);
 }
 
 .segmented button:hover {
@@ -2512,29 +2512,39 @@ a.card {
   color: var(--dim);
 }
 
-.module-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.module-table th {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
+/* R135：功能模块从「每行一段解释」改成一道密排清单。
+   逐行重复的「仅按标题，未读正文：→ 章名」搬到标题下一句总说明里，
+   行内只剩章号 / 状态点 / 功能名 / 档名 / 徽标；行高压到 44 上下，
+   1440×900 一屏要能看见 16 行以上（改前只有 10 行）。 */
+.module-summary {
+  margin: 8px 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--dim);
-  font-weight: 500;
-  text-align: left;
-  white-space: nowrap;
 }
 
-.module-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: top;
+.module-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
 }
 
 .module-row {
+  display: grid;
+  grid-template-columns: 30px 8px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
   cursor: pointer;
+}
+
+/* 同章两档：第二行缩进一档，配合章号只在首行出现，形成分组感 */
+.module-row:not(.group-start) {
+  padding-left: 22px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
 }
 
 .module-row:hover {
@@ -2546,81 +2556,66 @@ a.card {
   cursor: default;
 }
 
+.module-row.off .module-name {
+  color: var(--dim);
+}
+
 .module-row.off:hover {
   background: none;
 }
 
-.module-no,
-.module-state {
-  white-space: nowrap;
-}
-
-.module-evidence {
+.module-no {
   color: var(--dim);
-}
-
-/* R126：状态列要能自曝依据——三种来源一眼分开，依据另起一行，未覆盖的行给个仿真入口。 */
-.module-tag {
-  display: inline-block;
-  margin-right: 8px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
   font-size: 11px;
-  color: var(--dim);
-}
-
-.module-tag.body {
-  border-color: rgba(60, 227, 198, 0.5);
-  color: var(--accent);
-}
-
-.module-tag.title {
-  border-color: rgba(255, 206, 84, 0.5);
-  color: #ffce54;
-}
-
-.module-where {
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.module-basis {
-  display: block;
-  margin-top: 4px;
-  color: var(--dim);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: normal;
+.module-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
 }
 
-.module-go {
-  margin-top: 6px;
-  padding: 2px 10px;
+.module-dot.body {
+  background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.module-dot.title {
+  background: #ffce54;
+}
+
+.module-name {
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.module-tier {
+  color: var(--dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.module-badge {
+  padding: 1px 6px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
+  color: var(--dim);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
-.module-go:hover {
-  border-color: var(--accent);
-}
-
-.module-state a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.module-state a:hover {
-  text-decoration: underline;
+.module-row .module-badge {
+  border-color: transparent;
 }
 
 .module-foot {
-  padding-top: 10px;
-  border-bottom: 0;
+  margin: 10px 0 0;
   color: var(--dim);
   font-size: 12px;
 }
@@ -2694,10 +2689,39 @@ video::-webkit-media-controls-overlay-play-button {
   color: var(--text);
 }
 
+.course-item {
+  position: relative;
+  overflow: hidden;
+}
+
 .course-item.active {
   background: #17242f;
   color: var(--text);
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* R135：选中章的左侧竖条滑入（原来是一条死的 inset 阴影，点过去没有任何动静）。 */
+@keyframes course-bar-in {
+  from {
+    transform: scaleY(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.course-item.active::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: course-bar-in var(--motion-enter) var(--motion-ease) both;
 }
 
 .course-mark {

@@ -1,96 +1,78 @@
-/**
- * 扩展模式的功能模块：26 个档位（13 章 × 两档），一行一条，对着这本书看覆盖了哪些。
- *
- * 行轴是功能的，不是章的。理由写在这个文件外面：书可以换，功能清单不换，
- * 换一本只认得出两章的书，行数还是 13 行，变的是右列——覆盖的少了，一眼看出来。
- *
- * R126 起判定先读正文：右列不再是「哪个章名像」，而是「正文里哪些词出现了几次、
- * 在第几页」。标题只在正文不够时兜底，并且必须自己说出来——写「仅按标题，未读正文」，
- * 不能让人以为这行是读过正文才认的。
- *
- * 没接住的行给一个「直接看第 N 章的仿真」按钮：它进的是默认示例，不是这本书的内容，
- * 所以按钮上写明是仿真，行本身仍然灰着。
- */
-import { coverageOf, type ShelfBook } from '../course/shelf.ts'
+// 扩展模式右侧「功能模块」面板（R135 重做信息密度）。
+//
+// 行轴是功能轴：13 章 × 两档档位 = 26 个入口，表格行数不随书变，
+// 变的只有每一行对这本书的证据：正文命中、仅标题、还是根本没涉及。
+//
+// R135 改法：把原来每行都重复一遍的「仅按标题，未读正文：→ 第 N 章」收成
+// 面板标题下的一句总说明，行内只留功能名、章号、状态圆点。
+// 26 行按章分组：一章两档紧挨着，第一行带章号，两行共用一条左侧导轨，
+// 行高压到 44px，1440×900 一屏能看到 16 行以上——密度是为了让人一眼扫完，
+// 不是为了把信息删掉：依据（命中的词与页码）还在，挪进圆点的 title 里，
+// 鼠标停上去就能读到，行内不再重复。
+import type { ShelfBook } from '../course/shelf.ts'
+import { coverageOf } from '../course/shelf.ts'
 
-type ModulePanelProps = {
-  book: ShelfBook
-}
-
-const BASIS_TAG = {
+const DOT_LABEL = {
   body: '正文命中',
   title: '仅标题',
   none: '未涉及',
 } as const
 
-export function ModulePanel({ book }: ModulePanelProps) {
+function courseHref(no: number, preset: string): string {
+  return `#/course?no=${no}&preset=${preset}`
+}
+
+export function ModulePanel({ book }: { book: ShelfBook | null }) {
   const coverage = coverageOf(book)
+  const rows = coverage.rows
+  const hasBody = coverage.fromBody > 0
+
+  // 只读到目录时给黄点说明，读到正文后改成「N 个有正文依据（绿点）」。
+  const summary = hasBody
+    ? `这本书读到正文：${rows.length} 个入口里 ${coverage.fromBody} 个有正文依据（绿点）`
+    : '这本书目前只读到目录：功能按章名匹配（黄点），读到正文后会变绿点并给出命中的词与页码'
 
   return (
-    <section className="module-panel" aria-label="功能模块">
+    <section className="module-panel">
       <header className="module-head">
         <h2 className="module-title">功能模块</h2>
-        <p className="module-sub">{book.title}</p>
+        <p className="module-sub">{book ? book.title : '还没导入教材'}</p>
+        <p className="module-summary">{summary}</p>
       </header>
 
-      <table className="module-table">
-        <thead>
-          <tr>
-            <th scope="col">功能</th>
-            <th scope="col">状态</th>
-          </tr>
-        </thead>
-        <tbody>
-          {coverage.rows.map((row) => {
-            const href = `#/course?no=${row.no}&preset=${row.preset}`
-            const chapter = row.chapter
-            const state =
-              chapter === null
-                ? '本书未涉及'
-                : chapter.no === null
-                  ? `本书「${chapter.rawTitle}」`
-                  : `本书第 ${chapter.no} 章「${chapter.rawTitle}」`
-            const detail = row.basis === 'none' ? '正文里没认到这几个概念词，章名也对不上。' : row.title
-            return (
-              <tr
-                key={`${row.no}-${row.preset}`}
-                className={chapter === null ? 'module-row off' : 'module-row'}
-                onClick={() => {
-                  window.location.hash = href
-                }}
-              >
-                <td className="module-name">{row.name} · {row.label}</td>
-                <td className="module-state" title={detail}>
-                  <span className={`module-tag ${row.basis}`}>{BASIS_TAG[row.basis]}</span>
-                  <span className="module-where">{state}</span>
-                  <span className="module-basis">{detail}</span>
-                  {chapter === null ? (
-                    <button
-                      type="button"
-                      className="module-go"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        window.location.hash = href
-                      }}
-                    >
-                      直接看第 {row.no} 章的仿真
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colSpan={2} className="module-foot">
-              26 个档位（13 章 × 2 档）：本书对上 {coverage.covered} 个（正文 {coverage.fromBody}{' '}
-              个、仅标题 {coverage.fromTitle} 个）、未涉及 {coverage.missing} 个。
-              {coverage.unknown > 0 ? `本书另有 ${coverage.unknown} 章未识别。` : ''}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+      <ol className="module-list">
+        {rows.map((row, index) => {
+          const off = row.chapter === null
+          const groupStart = index === 0 || rows[index - 1].no !== row.no
+          const title = off
+            ? `${DOT_LABEL[row.basis]}：这本书没有第 ${row.no} 章`
+            : [`第 ${row.no} 章「${row.chapter?.rawTitle ?? ''}」`, DOT_LABEL[row.basis], row.title]
+                .filter(Boolean)
+                .join(' · ')
+          return (
+            <li
+              key={`${row.no}-${row.preset}`}
+              className={`module-row${off ? ' off' : ''}${groupStart ? ' group-start' : ''}`}
+              title={title}
+              onClick={() => {
+                window.location.hash = courseHref(row.no, row.preset)
+              }}
+            >
+              <span className="module-no">{groupStart ? String(row.no).padStart(2, '0') : ''}</span>
+              <span className={`module-dot ${row.basis}`} aria-hidden="true" />
+              <span className="module-name">{row.name}</span>
+              <span className="module-tier">{row.label}</span>
+              <span className="module-badge">{DOT_LABEL[row.basis]}</span>
+            </li>
+          )
+        })}
+      </ol>
+
+      <p className="module-foot">
+        26 个档位（13 章 × 2 档）：本书对上 {coverage.covered} 个（正文 {coverage.fromBody} 个、仅标题{' '}
+        {coverage.covered - coverage.fromBody} 个）、未涉及 {coverage.missing} 个。
+        {coverage.unknown > 0 ? ` 本书另有 ${coverage.unknown} 章未识别。` : ''}
+      </p>
     </section>
   )
 }

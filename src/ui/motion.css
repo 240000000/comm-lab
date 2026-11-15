@@ -1,0 +1,285 @@
+/*
+ * R135 全站触感：点触、悬停、焦点、滑块、滚动条、进场、骨架呼吸。
+ *
+ * 数值只有三档，全部来自 src/ui/motion.ts（由 applyMotionTokens() 写进 :root）：
+ * press 90ms（手上的反馈）、swap 160ms（同屏替换）、enter 220ms（整块进场），
+ * 缓动只有一条 cubic-bezier(.2,0,0,1)。这里不许出现 0.3s ease 这类自造值。
+ *
+ * 骨架的呼吸比三档慢，但也不是新常数：用 calc() 从 enter 档推出来
+ * （220ms × 6 ≈ 1.3s），仍然是「同一份数值」派生的。
+ *
+ * 这个文件在 src/App.css 之后导入（见 main.tsx），同权重时压过原件；
+ * 但不要靠层叠去抢已有的具体类，能在原件里改成变量的都回去改（R135 已改）。
+ */
+
+:root {
+  --motion-press: 90ms;
+  --motion-swap: 160ms;
+  --motion-enter: 220ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-stagger: 40ms;
+}
+
+/* ---------- 交互元素的基础过渡 ---------- */
+
+button,
+a,
+[role='button'],
+summary {
+  transition:
+    color var(--motion-swap) var(--motion-ease),
+    background-color var(--motion-swap) var(--motion-ease),
+    border-color var(--motion-swap) var(--motion-ease),
+    box-shadow var(--motion-swap) var(--motion-ease),
+    transform var(--motion-press) var(--motion-ease),
+    filter var(--motion-press) var(--motion-ease);
+}
+
+/* ---------- 悬停：边框亮一档、上移 1px、外发光 12px ---------- */
+
+.card:hover,
+.module-row:hover,
+.course-item:hover,
+.solve-entry:hover,
+.routes a:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.card:hover,
+.module-row:hover,
+.solve-entry:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+button:hover:not(:disabled),
+a:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+button:disabled,
+a[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+/* ---------- 按下：缩到 .98、压到 .92 亮度 ---------- */
+
+button:active:not(:disabled),
+a:active,
+[role='button']:active,
+.card:active,
+.module-row:active,
+.course-item:active,
+.solve-entry:active {
+  transform: scale(0.98);
+  filter: brightness(0.92);
+  transition-duration: var(--motion-press);
+}
+
+.course-item:active {
+  transform: scale(0.99);
+}
+
+/* ---------- 键盘焦点：2px 品牌色环，offset 2px ---------- */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ---------- 滑块：thumb 按下放大 1.15，轨道高亮 ---------- */
+
+input[type='range'] {
+  transition: background-color var(--motion-swap) var(--motion-ease);
+}
+
+input[type='range']::-webkit-slider-thumb {
+  transition:
+    transform var(--motion-press) var(--motion-ease),
+    box-shadow var(--motion-swap) var(--motion-ease);
+}
+
+input[type='range']:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+input[type='range']::-moz-range-thumb {
+  transition: transform var(--motion-press) var(--motion-ease);
+}
+
+input[type='range']:active::-moz-range-thumb {
+  transform: scale(1.15);
+}
+
+input[type='range']:active {
+  accent-color: color-mix(in srgb, var(--accent) 80%, white);
+}
+
+/* ---------- 滚动条 ---------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--line) 65%, var(--dim)) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 55%, var(--dim));
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--dim) 80%, var(--line));
+  background-clip: padding-box;
+}
+
+/* ---------- 进场：路由内容区淡入 + 上移 8px；课程右栏切章同理 ---------- */
+
+@keyframes motion-enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 首页与六个实验台/课程/答题页在路由切过去时是重新挂载的，
+   动画挂在它们自己的根类上就会自动重播，不必额外包一层 div（包了会破版面）。 */
+.home,
+.lab,
+.route-enter {
+  animation: motion-enter-up var(--motion-enter) var(--motion-ease) both;
+}
+
+.pane-enter {
+  animation: motion-enter-up var(--motion-enter) var(--motion-ease) both;
+}
+
+/* ---------- 首屏四卡错峰：每张晚 40ms ---------- */
+
+@keyframes motion-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.home-grid .card {
+  animation: motion-card-in var(--motion-enter) var(--motion-ease) both;
+}
+
+.home-grid .card:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.home-grid .card:nth-child(2) {
+  animation-delay: var(--motion-stagger);
+}
+
+.home-grid .card:nth-child(3) {
+  animation-delay: calc(var(--motion-stagger) * 2);
+}
+
+.home-grid .card:nth-child(4) {
+  animation-delay: calc(var(--motion-stagger) * 3);
+}
+
+/* ---------- 载入等待：骨架呼吸条（不转圈） ---------- */
+
+@keyframes motion-skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.skeleton-bar {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--line) 60%, #1b2733);
+  animation: motion-skeleton-breathe calc(var(--motion-enter) * 6) var(--motion-ease) infinite;
+}
+
+.skeleton-bar + .skeleton-bar {
+  margin-top: 8px;
+}
+
+.skeleton-bar.wide {
+  width: 100%;
+}
+
+.skeleton-bar.mid {
+  width: 72%;
+}
+
+.skeleton-bar.short {
+  width: 44%;
+}
+
+.skeleton-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- 系统要求减少动态：关掉位移与缩放，只留颜色 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--motion-swap) !important;
+    transition-property: color, background-color, border-color, box-shadow, filter, outline-color !important;
+  }
+
+  .route-enter,
+  .pane-enter,
+  .home-grid .card,
+  .skeleton-bar {
+    animation: none !important;
+  }
+
+  button:active:not(:disabled),
+  a:active,
+  [role='button']:active,
+  .card:active,
+  .module-row:active,
+  .course-item:active,
+  .solve-entry:active,
+  .card:hover,
+  .module-row:hover,
+  .solve-entry:hover,
+  input[type='range']:active::-webkit-slider-thumb,
+  input[type='range']:active::-moz-range-thumb {
+    transform: none !important;
+  }
+}
