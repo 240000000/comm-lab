@@ -7,6 +7,7 @@ import { OfdmPage } from './labs/OfdmPage'
 import { MissionPage } from './labs/MissionPage'
 import { CoursePage } from './labs/CoursePage'
 import SolvePage from './labs/SolvePage'
+import { LimitsPage } from './labs/LimitsPage'
 import { HomeBackdrop } from './labs/HomeBackdrop'
 import { HomeParticles } from './labs/HomeParticles'
 import { bookById, nextBookId } from './course/shelf'
@@ -186,6 +187,10 @@ export default function App() {
     return <SolvePage />
   }
 
+  if (route === 'limits') {
+    return <LimitsPage />
+  }
+
   return (
     <div className="home">
       <HomeBackdrop />
@@ -317,6 +322,9 @@ export default function App() {
 
         <footer className="foot">
           <p>纯前端实现 · 全部计算在浏览器内完成 · 不依赖后端服务</p>
+          <a className="foot-limits" href="#/limits">
+            已知限制 · 查看
+          </a>
         </footer>
       </main>
     </div>

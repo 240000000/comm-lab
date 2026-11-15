@@ -984,6 +984,9 @@ export function CoursePage() {
             ? ' 13 章全部能拖，另有实验台可以直接跳到对应的交互页。'
             : ' 现在用的是你导入的教材，目录存在这台机器的浏览器里，刷新后仍是这一本。'}
         </p>
+        <a className="limits-hint" href="#/limits?part=course">
+          已知限制 · 查看
+        </a>
       </header>
 
       <section className="textbook-bar">

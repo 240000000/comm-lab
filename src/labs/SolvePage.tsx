@@ -322,6 +322,9 @@ export default function SolvePage() {
         <p className="solve-sub">
           上传题目截图：接了模型就把原图直接交给模型作答；没接模型时本机识别、内置题库演示。
         </p>
+        <a className="limits-hint" href="#/limits?part=solve">
+          已知限制 · 查看
+        </a>
         <a className="solve-back" href="#/">
           返回首页
         </a>

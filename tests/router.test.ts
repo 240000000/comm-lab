@@ -46,3 +46,11 @@ test('带查询串的三条实验台路径仍认得出（任务模式回填用�
 test('查询串里出现斜杠也不会把路径判错', () => {
   assert.equal(parseHash('#/qam?order=16&note=a/b'), 'qam')
 })
+
+test('#/limits 回 limits（R136 已知限制页）', () => {
+  assert.equal(parseHash('#/limits'), 'limits')
+})
+
+test('#/limits?part=course 带定位参数仍回 limits', () => {
+  assert.equal(parseHash('#/limits?part=course'), 'limits')
+})

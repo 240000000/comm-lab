@@ -78,6 +78,9 @@ export function ShelfPanel({
         <button className="shelf-sample" type="button" onClick={loadSample}>
           载入示例教材
         </button>
+        <a className="limits-hint" href="#/limits?part=import">
+          已知限制 · 查看
+        </a>
       </header>
 
       <label className="shelf-toggle">
