@@ -38,17 +38,19 @@ function bookFromPages(pages: string[]): ShelfBook {
   return attachTextLayer(book, pages)
 }
 
-test('R126 正文对得上的书：13 条功能全部按正文认定', () => {
+test('R126 正文对得上的书：26 个档位全部按正文认定', () => {
   const pages = pagesFor((no) => {
     const topic = TOPICS.find((item) => item.topicId === `ch${String(no).padStart(2, '0')}`)
     assert.ok(topic)
     return `${topic.title}。${topic.terms.slice(0, 6).join('，')}。`
   })
   const coverage = coverageOf(bookFromPages(pages))
-  assert.equal(coverage.covered, 13)
-  assert.equal(coverage.fromBody, 13)
+  assert.equal(coverage.covered, 26)
+  assert.equal(coverage.fromBody, 26)
   assert.equal(coverage.fromTitle, 0)
-  for (const row of coverage.rows) assert.equal(row.basis, 'body', `第 ${row.no} 条应该由正文认定`)
+  for (const row of coverage.rows) {
+    assert.equal(row.basis, 'body', `第 ${row.no} 章 ${row.preset} 档应该由正文认定`)
+  }
 })
 
 test('R126 无关的书：一条都不认，覆盖数是 0', () => {
@@ -62,7 +64,7 @@ test('R126 无关的书：一条都不认，覆盖数是 0', () => {
   const coverage = coverageOf(bookFromPages(pages))
   assert.equal(coverage.covered, 0)
   assert.equal(coverage.fromBody, 0)
-  assert.equal(coverage.missing, 13)
+  assert.equal(coverage.missing, 26)
   for (const row of coverage.rows) assert.equal(row.basis, 'none')
 })
 

@@ -1,5 +1,5 @@
 /**
- * 扩展模式的功能模块：13 条固定功能，一行一条，对着这本书看覆盖了哪些。
+ * 扩展模式的功能模块：26 个档位（13 章 × 两档），一行一条，对着这本书看覆盖了哪些。
  *
  * 行轴是功能的，不是章的。理由写在这个文件外面：书可以换，功能清单不换，
  * 换一本只认得出两章的书，行数还是 13 行，变的是右列——覆盖的少了，一眼看出来。
@@ -42,7 +42,7 @@ export function ModulePanel({ book }: ModulePanelProps) {
         </thead>
         <tbody>
           {coverage.rows.map((row) => {
-            const href = `#/course?no=${row.no}`
+            const href = `#/course?no=${row.no}&preset=${row.preset}`
             const chapter = row.chapter
             const state =
               chapter === null
@@ -53,13 +53,13 @@ export function ModulePanel({ book }: ModulePanelProps) {
             const detail = row.basis === 'none' ? '正文里没认到这几个概念词，章名也对不上。' : row.title
             return (
               <tr
-                key={row.no}
+                key={`${row.no}-${row.preset}`}
                 className={chapter === null ? 'module-row off' : 'module-row'}
                 onClick={() => {
                   window.location.hash = href
                 }}
               >
-                <td className="module-name">{row.name}</td>
+                <td className="module-name">{row.name} · {row.label}</td>
                 <td className="module-state" title={detail}>
                   <span className={`module-tag ${row.basis}`}>{BASIS_TAG[row.basis]}</span>
                   <span className="module-where">{state}</span>
@@ -84,8 +84,8 @@ export function ModulePanel({ book }: ModulePanelProps) {
         <tfoot>
           <tr>
             <td colSpan={2} className="module-foot">
-              13 个功能：本书覆盖 {coverage.covered} 个（正文 {coverage.fromBody} 个、仅标题{' '}
-              {coverage.fromTitle} 个）、未涉及 {coverage.missing} 个。
+              26 个档位（13 章 × 2 档）：本书对上 {coverage.covered} 个（正文 {coverage.fromBody}{' '}
+              个、仅标题 {coverage.fromTitle} 个）、未涉及 {coverage.missing} 个。
               {coverage.unknown > 0 ? `本书另有 ${coverage.unknown} 章未识别。` : ''}
             </td>
           </tr>

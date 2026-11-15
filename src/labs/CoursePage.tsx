@@ -17,6 +17,12 @@ import {
   type CourseView,
 } from '../core/course.ts'
 import { applyPreset, decodePreset, type PresetSpec } from '../answer/presets.ts'
+import {
+  presetParams,
+  presetsForChapter,
+  readPresetId,
+  type CoursePresetId,
+} from '../course/presets.ts'
 import { chartLabel } from './chartLabel.ts'
 import { CourseChart } from './CourseChart.tsx'
 import { CourseLegend } from './CourseLegend.tsx'
@@ -91,6 +97,31 @@ function readPreset(): PresetSpec | null {
 /** 该章参数键表，applyPreset 只认这一章真有的键。 */
 function paramKeys(chapter: CourseChapter): string[] {
   return chapter.params.map((item) => item.key)
+}
+
+/**
+ * 地址里的 `preset=a` / `preset=b`：这一档的命名参数。
+ *
+ * 与上面那种 `preset=4:bandIndex=5` 共用同一个查询键，靠取值区分——只有 a / b
+ * 两个字母才当档位，其余一律交给 decodePreset。不带这个参数时是 a 档，行为与
+ * 只有 13 章默认参数的那一版逐字一致。
+ */
+function initialTier(): CoursePresetId {
+  const query = window.location.hash.split('?')[1] ?? ''
+  return readPresetId(new URLSearchParams(query).get('preset')) ?? 'a'
+}
+
+/** 某一档的完整参数：b 档用命名档位那组，a 档用该章 defaults，再叠上答题模式带来的那组。 */
+function tierParams(chapter: CourseChapter, tier: CoursePresetId, spec: PresetSpec | null): Record<string, number> {
+  const base = tier === 'b' ? presetParams(chapter.no, 'b') : chapter.defaults
+  return applyPreset(base, spec, chapter.no, paramKeys(chapter))
+}
+
+/** 点档位按钮时把地址里的 preset 换掉，但不触发 hashchange（页面已经自己改好参数了）。 */
+function writeTierToHash(no: number, tier: CoursePresetId) {
+  const next = `#/course?no=${no}&preset=${tier}`
+  if (window.location.hash === next) return
+  window.history.replaceState(null, '', next)
 }
 
 function isEmbed(): boolean {
@@ -221,6 +252,8 @@ const ChapterScreen = memo(function ChapterScreen({
   canJumpPage,
   onJump,
   onJumpPage,
+  tier,
+  onTier,
 }: {
   chapter: CourseChapter
   params: Record<string, number>
@@ -235,10 +268,30 @@ const ChapterScreen = memo(function ChapterScreen({
   canJumpPage: boolean
   onJump: (no: number) => void
   onJumpPage: (page: number) => void
+  /** 当前档位：参数条上方那两个小按钮里高亮的那个。 */
+  tier: CoursePresetId
+  onTier: (id: CoursePresetId) => void
 }) {
+  const presets = presetsForChapter(chapter.no)
   return (
     <>
       <p className="course-question">{chapter.question}</p>
+
+      <div className="course-presets" role="group" aria-label="本章档位">
+        {presets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={`course-preset${preset.id === tier ? ' is-active' : ''}`}
+            aria-pressed={preset.id === tier}
+            title={`第 ${chapter.no} 章 · ${preset.label}`}
+            onClick={() => onTier(preset.id)}
+          >
+            <span className="course-preset-id">{preset.id.toUpperCase()}</span>
+            {preset.label}
+          </button>
+        ))}
+      </div>
 
       <div className="course-params">
         {chapter.params.map((param) => (
@@ -352,8 +405,9 @@ export function CoursePage() {
   const chapter = chapterByNo(no) ?? chapterByNo(START_CHAPTER)!
   // preset 只读一次：之后用户拖滑杆就是用户自己的事，不再被地址栏覆盖。
   const [presetSpec] = useState<PresetSpec | null>(readPreset)
-  const initialParams = () =>
-    applyPreset(chapter.defaults, presetSpec, chapter.no, paramKeys(chapter))
+  // 档位同样只读一次；点档位按钮时这一份就是「当前高亮哪个」。
+  const [tier, setTier] = useState<CoursePresetId>(initialTier)
+  const initialParams = () => tierParams(chapter, tier, presetSpec)
   const [params, setParams] = useState<Record<string, number>>(initialParams)
   const [committed, setCommitted] = useState<Record<string, number>>(initialParams)
   const dragRef = useRef(createDragCoalescer<Record<string, number>>())
@@ -568,12 +622,24 @@ export function CoursePage() {
   const pick = useCallback((next: number) => {
     const target = chapterByNo(next)
     if (!target) return
-    const nextParams = applyPreset(target.defaults, presetSpec, target.no, paramKeys(target))
+    // 切章回该章的 a 档：b 档是「这一章的另一组参数」，跨章带着没意义。
+    const nextParams = tierParams(target, 'a', presetSpec)
+    setTier('a')
     setNo(next)
     setParams(nextParams)
     paramsRef.current = nextParams
     setCommitted(nextParams)
   }, [presetSpec])
+
+  /** 点参数条上方那两个档名按钮：换成本档的整组参数，地址栏也跟着改成 preset=a|b。 */
+  const chooseTier = useCallback((id: CoursePresetId) => {
+    const next = tierParams(chapter, id, presetSpec)
+    setTier(id)
+    setParams(next)
+    paramsRef.current = next
+    setCommitted(next)
+    writeTierToHash(chapter.no, id)
+  }, [chapter, presetSpec])
 
   const setParam = useCallback((key: string, value: number) => {
     const next = { ...paramsRef.current, [key]: value }
@@ -593,16 +659,20 @@ export function CoursePage() {
 
   const onFail = useCallback(() => {
     const preset = chapter.failPreset
+    // 演示失败的那组参数不属于任何一档：把高亮退回 a 档，别让按钮指着假的「当前档」。
+    setTier('a')
     paramsRef.current = preset
     setParams(preset)
     setCommitted(preset)
   }, [chapter])
 
   const onReset = useCallback(() => {
-    paramsRef.current = chapter.defaults
-    setParams(chapter.defaults)
-    setCommitted(chapter.defaults)
-  }, [chapter])
+    const base = tierParams(chapter, 'a', presetSpec)
+    setTier('a')
+    paramsRef.current = base
+    setParams(base)
+    setCommitted(base)
+  }, [chapter, presetSpec])
 
   const stopSlowTimer = useCallback(() => {
     if (slowTimer.current !== null) {
@@ -1187,6 +1257,8 @@ export function CoursePage() {
                 setShowBook(true)
                 changeBookPage(next)
               }}
+              tier={tier}
+              onTier={chooseTier}
             />
           ) : (
             <TodoScreen chapter={chapter} />

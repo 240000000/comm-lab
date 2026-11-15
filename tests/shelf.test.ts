@@ -168,12 +168,12 @@ test('从目录转成书架条目：保留 topicId、hits 与页码（R105 同�
   assert.equal(evidenceOf(second), MISSING_MATCH)
 })
 
-test('功能覆盖表：内置那本 13 个功能全命中，一行「未涉及」都没有', () => {
+test('功能覆盖表：内置那本 26 个档位全命中，一行「未涉及」都没有', () => {
   const coverage = coverageOf(defaultShelfBook())
 
-  assert.equal(MODULE_FUNCTIONS.length, 13, '功能轴固定 13 条，表格行数不随书变')
-  assert.equal(coverage.rows.length, 13)
-  assert.equal(coverage.covered, 13)
+  assert.equal(MODULE_FUNCTIONS.length, 26, '功能轴固定 26 个档位（13 章 × 两档），表格行数不随书变')
+  assert.equal(coverage.rows.length, 26)
+  assert.equal(coverage.covered, 26)
   assert.equal(coverage.missing, 0)
   assert.equal(coverage.unknown, 0)
 
@@ -186,31 +186,32 @@ test('功能覆盖表：内置那本 13 个功能全命中，一行「未涉及�
   assert.ok(!coverage.rows.some((row) => row.title === MISSING_FUNCTION))
 })
 
-test('功能覆盖表：只认得两章的书，剩下的十一行写「本书未涉及」', () => {
+test('功能覆盖表：只认得两章的书，剩下的二十二行写「本书未涉及」', () => {
   const book = bookFromOutline('靶子书', outlineOf(['抽样定理', '确知信号']), 'probe')
   const coverage = coverageOf(book)
 
-  assert.equal(coverage.covered, 2)
-  assert.equal(coverage.missing, 11)
-  assert.equal(coverage.rows.length, 13)
+  assert.equal(coverage.covered, 4)
+  assert.equal(coverage.missing, 22)
+  assert.equal(coverage.rows.length, 26)
 
   const missing = coverage.rows.filter((row) => !row.chapter)
-  assert.equal(missing.length, 11)
+  assert.equal(missing.length, 22)
   for (const row of missing) {
     assert.equal(row.title, '本书未识别到这一章，仍可进入默认示例')
   }
 
   // 命中过的那两行，状态格里带的是这本书目录里的原字，不是课程表里的标准章名。
   const hitTitles = coverage.rows.filter((row) => row.chapter).map((row) => row.chapter.rawTitle)
-  assert.deepEqual(hitTitles, ['确知信号', '抽样定理'])
+  // 两章 × 两档，同一章的两个档位指到同一章，所以章名各出现两遍。
+  assert.deepEqual(hitTitles, ['确知信号', '确知信号', '抽样定理', '抽样定理'])
 })
 
-test('功能覆盖表：一本章都没认出来的书，13 行全是「本书未涉及」', () => {
+test('功能覆盖表：一本章都没认出来的书，26 行全是「本书未涉及」', () => {
   const empty = { ...defaultShelfBook(), chapters: [] }
   const coverage = coverageOf(empty)
 
   assert.equal(coverage.covered, 0)
-  assert.equal(coverage.missing, 13)
+  assert.equal(coverage.missing, 26)
   assert.ok(coverage.rows.every((row) => row.chapter === null))
   assert.ok(coverage.rows.every((row) => row.title === '本书未识别到这一章，仍可进入默认示例'))
 })

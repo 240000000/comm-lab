@@ -10,6 +10,7 @@
 import { chapterByNo } from '../core/course.ts'
 import { MIN_MARGIN, MIN_SCORE } from '../answer/locate.ts'
 import { MIN_BODY_HITS, bodyHitsLine, scoreBody, scoreTopic, type BodyScore } from './concepts.ts'
+import { presetsForChapter, type CoursePresetId } from './presets.ts'
 import type { OutlinedBook, OutlineEntry } from './pdfOutline.ts'
 import { assignTopics, groupSections } from './sections.ts'
 import { BOOK_COMMUNICATION } from './syllabus.ts'
@@ -221,25 +222,40 @@ export function nextBookId(shelf: ShelfBook[]): string {
 export type ModuleFunction = {
   /** 对应课程视图的章号（1–13）。 */
   no: number
+  /** 这一行对应本章的哪个档位：a 是默认档，b 是对照档。 */
+  preset: CoursePresetId
   /** 功能名，一行一条。 */
   name: string
+  /** 档名（默认档 / 几乎必然 / 64QAM …）。 */
+  label: string
 }
 
-export const MODULE_FUNCTIONS: ModuleFunction[] = [
-  { no: 1, name: '信息量与熵' },
-  { no: 2, name: '确知信号的能量谱与功率谱' },
-  { no: 3, name: '各态历经与统计平均' },
-  { no: 4, name: '信道容量与香农公式' },
-  { no: 5, name: '模拟调制的噪声性能' },
-  { no: 6, name: '眼图与码间串扰' },
-  { no: 7, name: '2ASK·2FSK·2PSK 的误码率' },
-  { no: 8, name: 'QAM 与 OFDM 的谱效率' },
-  { no: 9, name: '最佳接收与匹配滤波' },
-  { no: 10, name: '抽样、量化与 PCM' },
-  { no: 11, name: '汉明码的纠错能力' },
-  { no: 12, name: 'm 序列与正交编码' },
-  { no: 13, name: '锁相环的锁定' },
-]
+/** 13 条功能名，行轴用；档位从 `COURSE_PRESETS` 取，两边不会写岔。 */
+const MODULE_NAMES: Record<number, string> = {
+  1: '信息量与熵',
+  2: '确知信号的能量谱与功率谱',
+  3: '各态历经与统计平均',
+  4: '信道容量与香农公式',
+  5: '模拟调制的噪声性能',
+  6: '眼图与码间串扰',
+  7: '2ASK·2FSK·2PSK 的误码率',
+  8: 'QAM 与 OFDM 的谱效率',
+  9: '最佳接收与匹配滤波',
+  10: '抽样、量化与 PCM',
+  11: '汉明码的纠错能力',
+  12: 'm 序列与正交编码',
+  13: '锁相环的锁定',
+}
+
+/** 26 行 = 13 章 × 两档。顺序按章号走，同章里 a 在前、b 在后。 */
+export const MODULE_FUNCTIONS: ModuleFunction[] = Object.entries(MODULE_NAMES).flatMap(([key, name]) =>
+  presetsForChapter(Number(key)).map((tier) => ({
+    no: Number(key),
+    preset: tier.id,
+    name,
+    label: tier.label,
+  })),
+)
 
 /** 本书没有识别到这一条功能时，状态格里给的那句话。 */
 export const MISSING_FUNCTION = '本书未涉及'
@@ -254,8 +270,12 @@ export type CoverageBasis = 'body' | 'title' | 'none'
 export type CoverageRow = {
   /** 功能对应的课程视图章号。 */
   no: number
+  /** 这一行是本章的哪一档。 */
+  preset: CoursePresetId
   /** 功能名。 */
   name: string
+  /** 档名。 */
+  label: string
   /** 本书里接住这条功能的章；没接住就是 null。 */
   chapter: ShelfChapter | null
   /** 凭什么是它：正文命中 / 仅标题兜底 / 本书未涉及。 */
@@ -293,7 +313,7 @@ export function bodyEvidence(chapter: ShelfChapter, body: BodyScore): string {
 }
 
 /**
- * 把一本书的章摊到 13 条固定功能上。
+ * 把一本书的章摊到 26 个档位（13 章 × 两档）上。
  *
  * R126 起判定顺序换成「先读正文、再看章名」：正文的 Top1 分数过 `MIN_SCORE`、
  * 且领先第二名过 `MIN_MARGIN` 才算数（常数复用 `src/answer/locate.ts`，本轮没调）；
@@ -345,7 +365,9 @@ export function coverageOf(book: ShelfBook): Coverage {
       }
       return {
         no: item.no,
+        preset: item.preset,
         name: item.name,
+        label: item.label,
         chapter: hinted.chapter,
         basis: 'body',
         body,
@@ -355,7 +377,9 @@ export function coverageOf(book: ShelfBook): Coverage {
     if (hit && hit.body) {
       return {
         no: item.no,
+        preset: item.preset,
         name: item.name,
+        label: item.label,
         chapter: hit.chapter,
         basis: 'body',
         body: hit.body,
@@ -384,7 +408,9 @@ export function coverageOf(book: ShelfBook): Coverage {
           : '仅按标题，未读正文：'
       return {
         no: item.no,
+        preset: item.preset,
         name: item.name,
+        label: item.label,
         chapter,
         basis: 'title',
         body: null,
@@ -393,7 +419,9 @@ export function coverageOf(book: ShelfBook): Coverage {
     }
     return {
       no: item.no,
+      preset: item.preset,
       name: item.name,
+      label: item.label,
       chapter: null,
       basis: 'none',
       body: null,
