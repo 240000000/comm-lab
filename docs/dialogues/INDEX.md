@@ -243,4 +243,11 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 改动：`src/answer/diagram.ts`（`fsk-time` 第二白名单）、`src/labs/AnswerDiagram.tsx`（`drawFsk`）、`src/answer/provider.ts`（30 s、`thinking.disabled`、`errorKind` 三分类）、`src/labs/SolvePage.tsx`（本机优先定位、图形区三分支、错误重试按钮）、`src/App.css`、`tests/answerRequest.test.ts`（5 条）。
 - 判据：444 条测试全过、`index-CdTNbQud.js` 479.52 kB / gzip 161.75 kB；7-2 定位第 7 章 + 2FSK 波形 3/2 周期 + 底注 6 kHz、6.3 s；7-4(2) 打印「画不了」、6.1 s；netlify 函数 deploy `6af981c134cca872195b68bd`、直连 200 / 2.3 s；`check:docs` 182 断言 0 不符、131 tag = 轮次表 131 行。
 
+### R132 · WeakMap 版 getOrInsert 补齐，报告压回 30 页
+
+- 改动：`src/compat.ts` 的 `defineMethod` + `patch` 同时补 `Map.prototype` 与 `WeakMap.prototype`；`tests/compat.test.ts` 加两条（WeakMap 上是函数 / 回调只调一次），测试 444 → 446。
+- 证据：headless Edge 运行期删方法 → 第 14 页 `TypeError：this[#methodPromises].getOrInsertComputed is not a function`、canvas 全白 227,031 px；加载前删、compat 补回 → 第 13 页 24,515 px（10.8%）无报错。
+- 压页：只动排版（行距 1.25、图 11cm / 8.5cm、标题与题注间距、表 9pt），33 → 30 页，未删字。
+- 提交 `88ae945`（amend 0）+ annotated tag R132；132 tag = 轮次表 132 行；`check:docs` 182/0。
+
 下一步：11/15 中午前主视频定稿（补课程视图 06 眼图 / 11 汉明码 / 13 锁相环三屏，B 站换视频但 BV 不变）；用户验收通过后 11/16 用 `node scripts/pack.mjs` 出正式包替换网盘 R26；11/18 省赛提交截止。
