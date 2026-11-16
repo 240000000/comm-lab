@@ -303,8 +303,8 @@ if (tagRun.status !== 0) {
     hint: '读不到 tag 列表：check-docs 要在 git 仓库里跑（CI 里 checkout 之后就满足）',
   });
 } else {
-  const reportLines = readFileSync(join(ROOT, 'docs/tech-report.md'), 'utf8').split('\n');
-  const headAt = reportLines.findIndex((line) => /^### .*轮次与 tag 对照/.test(line));
+  const reportLines = readFileSync(join(ROOT, 'docs/rounds.md'), 'utf8').split('\n');
+  const headAt = reportLines.findIndex((line) => /^# .*轮次与 tag 对照/.test(line));
   const tableAt = reportLines.findIndex((line, i) => i > headAt && /^\|\s*轮次\s*\|/.test(line));
   const tableLine = tableAt >= 0 ? tableAt + 1 : headAt + 1;
   const rows = [];
@@ -320,7 +320,7 @@ if (tagRun.status !== 0) {
 
   if (headAt < 0) {
     failures.push({
-      file: 'docs/tech-report.md',
+      file: 'docs/rounds.md',
       line: 0,
       label: '轮次与 tag 对照',
       missing: true,
@@ -329,7 +329,7 @@ if (tagRun.status !== 0) {
   } else {
     if (rows.length !== tagList.length) {
       failures.push({
-        file: 'docs/tech-report.md',
+        file: 'docs/rounds.md',
         line: tableLine,
         label: '轮次表行数与 git tag -l 不一致',
         written: `表里 ${rows.length} 行`,
@@ -339,7 +339,7 @@ if (tagRun.status !== 0) {
     for (const tag of tagList) {
       if (!rowTags.has(tag)) {
         failures.push({
-          file: 'docs/tech-report.md',
+          file: 'docs/rounds.md',
           line: tableLine,
           label: `轮次表缺 ${tag} 这一行`,
           written: '缺',
@@ -350,7 +350,7 @@ if (tagRun.status !== 0) {
     for (const row of rows) {
       if (!tagSet.has(row.tag)) {
         failures.push({
-          file: 'docs/tech-report.md',
+          file: 'docs/rounds.md',
           line: row.line,
           label: `轮次表写了 ${row.tag}，但它不是仓库里的 tag`,
           written: row.tag,
