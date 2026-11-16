@@ -296,4 +296,12 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 提交 `ebb8066`（amend 0）+ annotated tag R139，先推 tag 再推 main。
 - 截图：`D:/harness/tmp/r139shots/` 八页，`1-home` 344,594 B、`2-course` 84,054、`3-solve` 57,167、`4-limits` 128,461、`5-qam` 333,021、`6-conv` 91,258、`7-ofdm` 128,776、`8-mission` 99,757。
 
-下一步：主视频重录（新脚本、旧 `BV1Xrxq6FEhp` 作废）；网盘上传 R139 包替换旧包（等用户给平台 / 链接 / 旧包名）；11/18 省赛提交截止。
+### R140 · 文档重排：README 重写、轮次表搬 rounds.md、技术报告九节
+
+- 改动：`README.md` 整篇重写为八节（删「功能到这里冻结」）；`docs/rounds.md` 新建（表头 + 139 行旧数据原样 + 本轮一行）；`docs/tech-report.md` 重排九节并换成 12 条里程碑清单，新增 26 档设计 / 答题链路 / 对比度 42→0 三块；`docs/preview.md` 换 tag R140 口径并加「六件事」一节；`scripts/check-docs.mjs` 轮次表断言改读 `docs/rounds.md`（断言 182 → 183 条）；三张图重截。
+- 证据：`npm test` 453 pass / 0 fail；`check:docs` 183 条 0 不符；oxlint 0/0；`rounds.md` 140 行 = 140 tag；报告九节标题在目录里连续。
+- 两个坑：换成 `## 一、…` 标题后 `tests/pdfText.test.ts` 的只读夹具用例只切出 1 节（`isHeading` 只认「第N章」与「N.M」）→ 标题改回 `## 第一章 …`、子标题 `一.1`→`1.1`，没改 `src/`；章标题强制分页把报告撑到 33 页 → 改 `_report/post.py` 不再强制分页，回到 29 页，正文一字未删。
+- 产物：报告 29 页 / 1,218,969 B / `8953853dcd3fdf67`；介绍 10 页 / 857,542 B / `2c56ffd0fc028ee3`；包 322 条目（文件 299 个）/ 17,733,267 B / `d9e15b2319e31a1d`，包内含 `public/sample-textbook.pdf` 与 `src/course/` 19 个条目。
+- 提交 `d71d643`（amend 1 次）+ annotated tag R140，先推 tag 再推 main。
+
+下一步：主视频重录（新脚本、旧 `BV1Xrxq6FEhp` 作废）；网盘上传 R140 包替换旧包（等用户给平台 / 链接 / 旧包名）；11/18 省赛提交截止。
