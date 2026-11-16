@@ -597,7 +597,7 @@ a.card {
 .order-btn.active {
   border-color: var(--accent);
   background: rgba(15, 118, 110, 0.12);
-  color: var(--accent);
+  color: var(--brand-deep);
 }
 
 .params {
@@ -1141,7 +1141,7 @@ a.card {
   border: 1px solid var(--brand);
   border-radius: 8px;
   background: rgba(15, 118, 110, 0.12);
-  color: var(--brand);
+  color: var(--brand-deep);
   font-size: 15px;
   cursor: pointer;
 }
@@ -1213,7 +1213,7 @@ a.card {
 .custom-kinds button[aria-pressed='true'] {
   border-color: var(--brand);
   background: rgba(15, 118, 110, 0.1);
-  color: var(--brand);
+  color: var(--brand-deep);
 }
 
 /* 从题目跳过来时的那行小字，和实验台自己的参数控件分开摆。 */
@@ -2269,7 +2269,7 @@ a.card {
   border: 1px solid var(--border);
   border-top: 2px solid var(--border);
   border-radius: 12px;
-  background: var(--scope);
+  background: var(--surface);
 }
 
 .lab-mission .custom-eyebrow {
@@ -2312,7 +2312,7 @@ a.card {
 .lab-mission .custom-kinds button[aria-pressed='true'] {
   border-color: var(--brand);
   background: rgba(15, 118, 110, 0.16);
-  color: var(--brand);
+  color: var(--brand-deep);
   box-shadow: inset 0 -2px 0 var(--brand);
 }
 
@@ -3138,7 +3138,7 @@ video::-webkit-media-controls-overlay-play-button {
   padding: 0 2px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--dim);
+  color: var(--scope-text);
 }
 
 .legend-item {

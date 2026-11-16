@@ -22,7 +22,7 @@
 .solve-sub {
   margin: 0;
   max-width: 720px;
-  color: var(--ink-dim, #9fb0c3);
+  color: var(--dim);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -51,7 +51,7 @@
 .solve-card {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(16, 24, 34, 0.62);
+  background: var(--surface);
   padding: 14px 16px;
 }
 
@@ -76,7 +76,7 @@
 .solve-sample {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(24, 36, 50, 0.9);
+  background: #f4f4f1;
   color: var(--ink);
   padding: 6px 11px;
   font: inherit;
@@ -90,13 +90,13 @@
 }
 
 .solve-hint {
-  color: var(--ink-dim, #9fb0c3);
+  color: var(--dim);
   font-size: 12.5px;
 }
 
 .solve-note {
   margin: 10px 0 0;
-  color: #f0b464;
+  color: var(--warn);
   font-size: 12.5px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -118,7 +118,7 @@
   max-height: 200px;
   overflow: auto;
   border-radius: 8px;
-  background: rgba(10, 16, 24, 0.72);
+  background: var(--scope);
   color: var(--ink);
   font-size: 13px;
   line-height: 1.75;
@@ -129,7 +129,7 @@
 
 .solve-locate {
   margin: 10px 0 0;
-  color: #7fd6a0;
+  color: var(--brand);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -137,7 +137,7 @@
 .solve-top3 {
   margin-top: 8px;
   font-size: 12.5px;
-  color: var(--ink-dim, #9fb0c3);
+  color: var(--dim);
 }
 
 .solve-top3-list {
@@ -156,15 +156,15 @@
 }
 
 .solve-badge.demo {
-  border: 1px solid #7a5a25;
-  background: rgba(240, 180, 100, 0.12);
-  color: #f0b464;
+  border: 1px solid #e8d5b5;
+  background: rgba(180, 83, 9, 0.08);
+  color: var(--warn);
 }
 
 .solve-badge.ok {
-  border: 1px solid #2f6b4a;
-  background: rgba(127, 214, 160, 0.12);
-  color: #7fd6a0;
+  border: 1px solid #bcdcd6;
+  background: var(--brand-tint);
+  color: var(--brand);
 }
 
 .solve-headline {
@@ -185,7 +185,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px dashed rgba(120, 140, 160, 0.22);
+  border-bottom: 1px dashed var(--border);
   padding-bottom: 5px;
   font-size: 13px;
 }
@@ -196,7 +196,7 @@
 
 .solve-caveat {
   margin: 10px 0 0;
-  color: var(--ink-dim, #9fb0c3);
+  color: var(--dim);
   font-size: 12.5px;
   line-height: 1.65;
 }
@@ -233,7 +233,7 @@
   height: 100%;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #0b121a;
+  background: var(--scope);
 }
 
 .solve-frame-empty {
@@ -241,7 +241,7 @@
   place-items: center;
   border: 1px dashed var(--line);
   border-radius: 10px;
-  color: var(--ink-dim, #9fb0c3);
+  color: var(--dim);
   font-size: 13px;
 }
 
@@ -259,19 +259,19 @@
 .solve-formula {
   margin: 8px 0 10px;
   padding: 6px 10px;
-  border-left: 3px solid #e0b46a;
+  border-left: 3px solid var(--warn);
   border-radius: 0 6px 6px 0;
-  background: rgba(224, 180, 106, 0.09);
-  color: #f0d9b0;
+  background: rgba(180, 83, 9, 0.08);
+  color: var(--warn);
   font-size: 12.5px;
   line-height: 1.8;
 }
 
 /* 模型失败态：红一点，且必须明确写「没有回退成演示答案」。 */
 .solve-error {
-  border-left: 3px solid #e08578;
-  background: rgba(224, 133, 120, 0.1);
-  color: #f4b7ad;
+  border-left: 3px solid var(--warn);
+  background: rgba(180, 83, 9, 0.08);
+  color: var(--warn);
   padding: 8px 10px;
 }
 

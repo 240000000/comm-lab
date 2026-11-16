@@ -14,6 +14,7 @@
 
   /* 图表卡：深色示波器屏，嵌在白纸上 */
   --scope: #0b1220;
+  --scope-text: #8f9d97;
 
   --r-sm: 10px;
   --r-md: 16px;
@@ -28,6 +29,8 @@
   --line: var(--border);
   --accent: var(--brand);
   --sans: var(--font-ui);
+  --ink: var(--text);
+  --ink-dim: var(--dim);
 
   color-scheme: light;
   font: 15px/1.7 var(--font-ui);

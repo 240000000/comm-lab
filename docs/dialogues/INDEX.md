@@ -158,7 +158,9 @@
 来回确认的语气与重复解释；被否掉的实现细节（先用统一复增益归一 EVM、先把时域只传实部的那两版实现，只保留「为什么错、最后怎么改」）；命令的原始输出与中途报错（Actions 轮询、push 被 reset 两次、Edge headless 参数调试、`spawn EINVAL` 之类）；截图时临时改默认值的具体补丁。这些结果已经在提交、文档与三张图里。
 
 ### 下一轮接着做
-R108 之后：轮次表 108 行 = 108 个 tag，`check:docs` 0 处不符，测试 396 条、37 个测试文件；两份 PDF 仍是 R103 版（365 条 / 32 个文件），按指示未重导。扫描件链路：`stableBookId`（文件名+字节数+前 4KB 的 sha256 前 16 位）、`findTocPage` 上限 20 页且前 4 页早退、`parseTocChapters` 按 N.1 节号跨页定章（第 N 章 / 任意 N.M 兜底、页码单调守卫）、`chapterOcr.ts` 逐章首页 OCR 用节号一票定章 + 词频兜底，界面「扫描版 · 正文已识别 n/13 章」，证据行「翻到第 N 页」。验收 A 13/13 章、B `?noOutline=1` 认出 13 章（第 4 章页码留空可手填）。### R138 · 首页背景改浅底，面板去重复徽章
+R108 之后：轮次表 108 行 = 108 个 tag，`check:docs` 0 处不符，测试 396 条、37 个测试文件；两份 PDF 仍是 R103 版（365 条 / 32 个文件），按指示未重导。扫描件链路：`stableBookId`（文件名+字节数+前 4KB 的 sha256 前 16 位）、`findTocPage` 上限 20 页且前 4 页早退、`parseTocChapters` 按 N.1 节号跨页定章（第 N 章 / 任意 N.M 兜底、页码单调守卫）、`chapterOcr.ts` 逐章首页 OCR 用节号一票定章 + 词频兜底，界面「扫描版 · 正文已识别 n/13 章」，证据行「翻到第 N 页」。验收 A 13/13 章、B `?noOutline=1` 认出 13 章（第 4 章页码留空可手填）。
+
+### R138 · 首页背景改浅底，面板去重复徽章
 
 - `src/labs/HomeBackdrop.tsx` 五行：TEAL/AMBER/BG/fillStyle/lineAlpha 改浅底；`src/labs/ModulePanel.tsx`：body 不出徽章、档位按钮固定「默认 / 对照」。
 - 判据：grep `0b0f14\|11, 15, 20` = 0；首页 h1 `rgb(26,26,26)` 56px 压在 `rgb(250,250,249)` 上；面板 13 绿点、0 个「正文命中」；453 pass、check:docs 0 不符、138 行 = 138 tag。
@@ -283,6 +285,13 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 改动：`src/index.css` 重写 token 并留旧名别名；`App.css`/`book-pane.css`/`motion.css` 538 处硬编码色收回 `var()`；hero 改两栏（大标题 + 一句副标 + 一枚主 CTA + 边界说明框）；三分钟路径去框、六卡等高 208px、编号改灰标签；图表与 PDF 舞台套 `--scope` 深色卡；动效去发光。
 - 证据：CSS 侧七个旧色值 grep 0 命中（TS 的 canvas 绘制按禁区保留）；副标 5 行 → 2 行；第 6 章「眼高 1.70 / 峰值 ISI 0.000」与第 4 章 1000 kHz「137.50 kbit/s」逐字不变；对比度全部达 AA。
 - 门禁：`npm test` 453 pass / 0 fail；`build` `index-CgDupTkc.js` 494.75 kB / gzip 166.74 kB、`index-GlVH0A0P.css` 58,779 B；`check:docs` 182/0；137 tag = 轮次表 137 行。
-- 提交 `TBD`（amend 0）+ annotated tag R137，先推 tag 再推 main。
+- 提交 `dbeae25`（amend 0）+ annotated tag R137，先推 tag 再推 main。
 
-下一步：主视频重录（新脚本、旧 BV1Xrxq6FEhp 作废）；网盘上传 R136 包替换旧包（等用户给平台 / 链接 / 旧包名）；11/18 省赛提交截止。
+### R139 · 答题模式改浅底，全站对比度扫描归零
+
+- 改动：`src/index.css` 别名补 `--ink` / `--ink-dim`，新 token `--scope-text: #8f9d97`（只给深色图表卡用）；`src/labs/solve-page.css` 24 处深色卡与浅灰字收敛到 `var(--surface)` / `var(--dim)` / `var(--warn)` / `var(--brand)`，只有截图预览底与右栏 iframe 框保留 `var(--scope)`；`src/App.css` 六处（`.course-legend`→`--scope-text`，`.order-btn.active` / `.score-button` / 两处 `.custom-kinds button[aria-pressed='true']`→`--brand-deep`，`.lab-mission .custom-section` 背景→`--surface`）。
+- 证据：8 个路由共 513 个文本节点，正文低于 4.5 的从 **42** 条（`#/solve` 22、`#/mission` 17、`#/course` 2、`#/qam` 1）降到 **0**；6 条 10px 小字标注比值 5.13 单列（`#/ofdm` 的 `ofdm-ro-count` / `ofdm-ro-evm`）；`#/solve` 四卡背景 `rgb(255,255,255)`、标题 `rgb(26,26,26)`。
+- 门禁：`npm test` 453 pass / 0 fail；`build` `index-BdXZIAaS.js` 494,792 B、`index-kTpGL6A7.css` 58,864 B；`npx oxlint` 0 warnings / 0 errors（134 files / 116 rules）；`check:docs` 182/0，139 tag = 轮次表 139 行。
+- 截图：`D:/harness/tmp/r139shots/` 八页，`1-home` 344,594 B、`2-course` 84,054、`3-solve` 57,167、`4-limits` 128,461、`5-qam` 333,021、`6-conv` 91,258、`7-ofdm` 128,776、`8-mission` 99,757。
+
+下一步：主视频重录（新脚本、旧 `BV1Xrxq6FEhp` 作废）；网盘上传 R139 包替换旧包（等用户给平台 / 链接 / 旧包名）；11/18 省赛提交截止。
