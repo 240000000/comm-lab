@@ -292,6 +292,8 @@ R119：右栏跟着题设走。`src/answer/presets.ts` 新增纯函数（`channe
 - 改动：`src/index.css` 别名补 `--ink` / `--ink-dim`，新 token `--scope-text: #8f9d97`（只给深色图表卡用）；`src/labs/solve-page.css` 24 处深色卡与浅灰字收敛到 `var(--surface)` / `var(--dim)` / `var(--warn)` / `var(--brand)`，只有截图预览底与右栏 iframe 框保留 `var(--scope)`；`src/App.css` 六处（`.course-legend`→`--scope-text`，`.order-btn.active` / `.score-button` / 两处 `.custom-kinds button[aria-pressed='true']`→`--brand-deep`，`.lab-mission .custom-section` 背景→`--surface`）。
 - 证据：8 个路由共 513 个文本节点，正文低于 4.5 的从 **42** 条（`#/solve` 22、`#/mission` 17、`#/course` 2、`#/qam` 1）降到 **0**；6 条 10px 小字标注比值 5.13 单列（`#/ofdm` 的 `ofdm-ro-count` / `ofdm-ro-evm`）；`#/solve` 四卡背景 `rgb(255,255,255)`、标题 `rgb(26,26,26)`。
 - 门禁：`npm test` 453 pass / 0 fail；`build` `index-BdXZIAaS.js` 494,792 B、`index-kTpGL6A7.css` 58,864 B；`npx oxlint` 0 warnings / 0 errors（134 files / 116 rules）；`check:docs` 182/0，139 tag = 轮次表 139 行。
+- 产物：报告 30 页 / 1,302,538 B / `34ee31cfbf86acdb`；介绍 10 页 / 857,542 B / `faa98a7b8f41477b`；包 321 条目（文件 298 个）/ 17,790,052 B / `39b9a6fb1c23c2e7`。两份 PDF 拷 `E:\work\pdf\AI\` 逐字节相同，包内两份与之一致。
+- 提交 `ebb8066`（amend 0）+ annotated tag R139，先推 tag 再推 main。
 - 截图：`D:/harness/tmp/r139shots/` 八页，`1-home` 344,594 B、`2-course` 84,054、`3-solve` 57,167、`4-limits` 128,461、`5-qam` 333,021、`6-conv` 91,258、`7-ofdm` 128,776、`8-mission` 99,757。
 
 下一步：主视频重录（新脚本、旧 `BV1Xrxq6FEhp` 作废）；网盘上传 R139 包替换旧包（等用户给平台 / 链接 / 旧包名）；11/18 省赛提交截止。
