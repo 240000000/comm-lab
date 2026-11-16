@@ -61,8 +61,9 @@
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(16, 24, 34, 0.6);
+  background: var(--surface);
   max-height: calc(100vh - 36px);
+  box-shadow: var(--shadow-2);
   overflow: auto;
 }
 
@@ -74,8 +75,8 @@
   margin-bottom: 6px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(9, 15, 22, 0.72);
-  color: var(--ink);
+  background: var(--surface);
+  color: var(--text);
   padding: 4px 10px;
   font: inherit;
   font-size: 13px;
@@ -103,8 +104,8 @@
 .pdf-btn {
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(9, 15, 22, 0.72);
-  color: var(--ink);
+  background: var(--surface);
+  color: var(--text);
   padding: 4px 9px;
   font: inherit;
   font-size: 13px;
@@ -129,8 +130,8 @@
   width: 64px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(9, 15, 22, 0.72);
-  color: var(--ink);
+  background: var(--surface);
+  color: var(--text);
   padding: 4px 6px;
   font: inherit;
   font-size: 13px;
@@ -157,8 +158,9 @@
   min-height: 240px;
   padding: 16px;
   border-radius: var(--r-md);
-  background: var(--scope);
-  box-shadow: var(--shadow-2);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  box-shadow: none;
 }
 
 .pdf-canvas {
@@ -177,7 +179,7 @@
   position: absolute;
   inset: 0;
   border-radius: 8px;
-  background: linear-gradient(90deg, rgba(26, 26, 26, 0.04), rgba(255, 255, 255, 0.14), rgba(26, 26, 26, 0.04));
+  background: linear-gradient(90deg, rgba(26, 26, 26, 0.05), rgba(26, 26, 26, 0.12), rgba(26, 26, 26, 0.05));
   background-size: 200% 100%;
   animation: motion-skeleton-breathe calc(var(--motion-enter) * 6) var(--motion-ease) infinite;
 }
