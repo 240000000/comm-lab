@@ -604,6 +604,8 @@ let selfRefLine = '';
     { re: /\d+\s*个\s*tag\s*一一对应/, label: '「N 个 tag 一一对应」' },
     { re: /\d+\s*行\s*[，,]\s*与\s*\d+\s*个\s*tag/, label: '「N 行，与 N 个 tag」' },
     { re: /rev-list\s+--count\s+HEAD[^。\n]*?\d+\s*次提交/, label: '「数 HEAD 得 N 次提交」' },
+    { re: /全量\s*\d+\s*(?:行|个\s*tag)/, label: '「全量 N 行」' },
+    { re: /记录[^。\n]{0,40}?到\s*R\d+\s*的过程/, label: '「记到 R N 的过程」' },
   ];
   const reportFile = 'docs/tech-report.md';
   const lines = readFileSync(join(ROOT, reportFile), 'utf8').split(/\r?\n/);
